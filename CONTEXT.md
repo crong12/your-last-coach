@@ -24,6 +24,10 @@ _Avoid_: Dashboard, portal
 The mutable schedule of Planned Workouts organized to prepare the Athlete for the Target Race.
 _Avoid_: Programme, calendar
 
+**Training Phase**:
+The current period of the Training Plan characterized by a primary physiological emphasis, such as base building or aerobic development.
+_Avoid_: Macrocycle
+
 **Planned Workout**:
 A prescribed training session with a scheduled time, purpose, and workout structure.
 _Avoid_: Activity
@@ -36,6 +40,22 @@ _Avoid_: Completed workout, activity
 The Athlete's subjective report about their experience of training, including perceived effort, fatigue, pain, confidence, and relevant life context.
 _Avoid_: Notes, comments
 
+**Coach Recommendation**:
+The Coach Agent's prescriptive judgment about the best available course of action, accompanied by its rationale and uncertainty.
+_Avoid_: Suggestion, option
+
 **Plan Adaptation**:
 A proposed or approved change to the Training Plan in response to Workout Results, Athlete Feedback, or other shared context.
 _Avoid_: Edit, tweak
+
+**Workout Adaptation**:
+A Plan Adaptation that changes one Planned Workout or a small group of nearby Planned Workouts.
+_Avoid_: Workout edit
+
+**Phase Transition**:
+A Plan Adaptation that changes the Training Phase and the Training Plan's emphasis across a longer period.
+_Avoid_: Phase change
+
+**Plan Approval**:
+The Athlete's consent that authorizes a proposed Plan Adaptation to become part of the Training Plan.
+_Avoid_: Confirmation
