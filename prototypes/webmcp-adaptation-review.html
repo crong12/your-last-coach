@@ -213,14 +213,14 @@ function beginPendingReview(signal) {
 }
 
 async function registerWebMCP() {
-  if (!navigator.modelContext?.registerTool) return false;
-  await navigator.modelContext.registerTool({
+  if (typeof document.modelContext?.registerTool !== 'function') return false;
+  await document.modelContext.registerTool({
     name:'review_workout_adaptation',
     description:'Open one Athlete review and wait for explicit approval or discussion.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
     execute:async (_input, options={}) => beginPendingReview(options.signal)
   });
-  await navigator.modelContext.registerTool({
+  await document.modelContext.registerTool({
     name:'read_workout_adaptation_decision',
     description:'Read and clear a locally stored decision from the two-call fallback.',
     inputSchema:{type:'object',properties:{},additionalProperties:false},
