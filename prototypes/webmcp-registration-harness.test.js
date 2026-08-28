@@ -1,18 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {createToolDefinitions, register} = require('./webmcp-registration-harness.js');
+const {register} = require('./webmcp-registration-harness.js');
 
 const handlers = {review: () => {}, readFallback: () => {}};
 
-test('primary mode registers exactly the pending review tool', async () => {
+async function registeredNamesFor(mode) {
   const registered = [];
-  const names = await register('primary', definition => registered.push(definition), handlers);
-  assert.deepEqual(names, ['review_workout_adaptation']);
+  const names = await register(mode, definition => registered.push(definition), handlers);
   assert.deepEqual(registered.map(definition => definition.name), names);
+  return names;
+}
+
+test('primary mode registers exactly the pending review tool', async () => {
+  assert.deepEqual(await registeredNamesFor('primary'), ['review_workout_adaptation']);
 });
 
 test('fallback mode registers only the stored-decision reader', async () => {
-  const definitions = createToolDefinitions('fallback', handlers);
-  assert.deepEqual(definitions.map(definition => definition.name), ['read_workout_adaptation_decision']);
-  assert.equal(definitions.some(definition => definition.name === 'review_workout_adaptation'), false);
+  assert.deepEqual(await registeredNamesFor('fallback'), ['read_workout_adaptation_decision']);
 });
