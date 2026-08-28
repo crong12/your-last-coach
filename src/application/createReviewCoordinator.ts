@@ -1,4 +1,7 @@
-import type { WorkspaceApplication } from "./createWorkspaceApplication";
+import type {
+  PlanApprovalResult,
+  WorkspaceApplication,
+} from "./createWorkspaceApplication";
 import {
   buildReviewPreview,
   validateReviewProposal,
@@ -8,7 +11,8 @@ import {
 
 export type ReviewTerminalResult =
   | { status: "discuss_further"; reviewId: string }
-  | { status: "cancelled"; reviewId: string; reason: string };
+  | { status: "cancelled"; reviewId: string; reason: string }
+  | PlanApprovalResult;
 
 export type ReviewCoordinatorState =
   | { status: "idle" }
@@ -17,12 +21,14 @@ export type ReviewCoordinatorState =
       proposal: ReviewProposal;
       selectedOptionId: string | null;
       preview: ReviewPreviewRow[];
+      applying?: true;
     };
 
 export interface ReviewCoordinator {
   getState(): ReviewCoordinatorState;
   open(value: unknown): unknown;
   select(optionId: string): unknown;
+  approve(): Promise<unknown>;
   discussFurther():
     | ReviewTerminalResult
     | { status: "error"; code: "not_found"; message: string; retryable: false };
@@ -53,6 +59,7 @@ export function createReviewCoordinator({
 
   const publish = () => listeners.forEach((listener) => listener());
   const settle = (result: ReviewTerminalResult) => {
+    application.deactivatePlanReview(result.reviewId);
     state = { status: "idle" };
     publish();
     waiters.get(result.reviewId)?.forEach((resolve) => resolve(result));
@@ -69,6 +76,15 @@ export function createReviewCoordinator({
   return {
     getState: () => state,
     open(value) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "reviewId" in value &&
+        typeof value.reviewId === "string"
+      ) {
+        const replayed = application.getPlanApproval(value.reviewId);
+        if (replayed) return replayed;
+      }
       if (state.status === "reviewing") {
         return {
           status: "error",
@@ -118,11 +134,20 @@ export function createReviewCoordinator({
         selectedOptionId: null,
         preview: [],
       };
+      application.activatePlanReview(validated.proposal);
       publish();
       return { status: "review_opened", reviewId: validated.proposal.reviewId };
     },
     select(optionId) {
       if (state.status !== "reviewing") return missing();
+      if (state.applying) {
+        return {
+          status: "error",
+          code: "busy",
+          message: "Plan Approval is being applied.",
+          retryable: true,
+        };
+      }
       const option = [
         state.proposal.recommended,
         state.proposal.alternative,
@@ -144,8 +169,58 @@ export function createReviewCoordinator({
       publish();
       return { status: "preview_ready", optionId, preview };
     },
+    async approve() {
+      if (state.status !== "reviewing") return missing();
+      if (state.applying) {
+        return {
+          status: "error",
+          code: "busy",
+          message: "Plan Approval is being applied.",
+          retryable: true,
+        };
+      }
+      if (!state.selectedOptionId) {
+        return {
+          status: "error",
+          code: "invalid_input",
+          message: "Select a Workout Adaptation before approving it.",
+          retryable: false,
+        };
+      }
+      const selectedOptionId = state.selectedOptionId;
+      const selectedOption = [
+        state.proposal.recommended,
+        state.proposal.alternative,
+      ].find(({ optionId }) => optionId === selectedOptionId)!;
+      const proposal = state.proposal;
+      state = { ...state, applying: true };
+      publish();
+      const result = await application.command({
+        type: "apply_plan_approval",
+        reviewId: proposal.reviewId,
+        expectedPlanVersion: proposal.expectedPlanVersion,
+        selectedOption,
+      });
+      if (result.status === "approved") return settle(result);
+      if (
+        state.status === "reviewing" &&
+        state.proposal.reviewId === proposal.reviewId
+      ) {
+        const { applying: _applying, ...reviewing } = state;
+        state = reviewing;
+        publish();
+      }
+      return result;
+    },
     discussFurther() {
       if (state.status !== "reviewing") return missing();
+      if (state.applying)
+        return {
+          status: "error",
+          code: "busy",
+          message: "Plan Approval is being applied.",
+          retryable: true,
+        } as never;
       return settle({
         status: "discuss_further",
         reviewId: state.proposal.reviewId,
@@ -153,6 +228,13 @@ export function createReviewCoordinator({
     },
     dismiss(reason) {
       if (state.status !== "reviewing") return missing();
+      if (state.applying)
+        return {
+          status: "error",
+          code: "busy",
+          message: "Plan Approval is being applied.",
+          retryable: true,
+        } as never;
       return settle({
         status: "cancelled",
         reviewId: state.proposal.reviewId,

@@ -393,6 +393,18 @@ h1 {
   transform: translateY(-2px);
   box-shadow: 0 9px 24px rgba(27, 62, 57, 0.12);
 }
+
+.workout-card--adapted {
+  box-shadow: inset 3px 0 0 var(--sea);
+}
+
+.adapted-marker {
+  color: var(--deep-sea);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .workout-card__type {
   display: block;
   margin-bottom: 18px;

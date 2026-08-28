@@ -97,14 +97,16 @@ function WorkoutButton({
   workout,
   onSelect,
   compact = false,
+  adapted = false,
 }: {
   workout: PlannedWorkout;
   onSelect: (workout: PlannedWorkout) => void;
   compact?: boolean;
+  adapted?: boolean;
 }) {
   return (
     <button
-      className={`workout-card workout-card--${workoutTone(workout)} ${compact ? "workout-card--compact" : ""}`}
+      className={`workout-card workout-card--${workoutTone(workout)} ${compact ? "workout-card--compact" : ""} ${adapted ? "workout-card--adapted" : ""}`}
       onClick={() => onSelect(workout)}
       aria-label={`${workout.title}, ${workout.date}, ${workout.distanceKm} kilometres, open details`}
     >
@@ -114,6 +116,7 @@ function WorkoutButton({
           : workout.type.replace("_", " ")}
       </span>
       <strong>{workout.title}</strong>
+      {adapted && <small className="adapted-marker">Adapted</small>}
       {!compact && <span>{workout.purpose}</span>}
     </button>
   );
@@ -123,10 +126,12 @@ function WeekPlan({
   workouts,
   currentDate,
   onSelect,
+  adaptedWorkoutIds,
 }: {
   workouts: PlannedWorkout[];
   currentDate: string;
   onSelect: (workout: PlannedWorkout) => void;
+  adaptedWorkoutIds: Set<string>;
 }) {
   const remainingDistanceKm = workouts
     .filter((workout) => workout.date > currentDate)
@@ -158,7 +163,11 @@ function WeekPlan({
               </header>
               <span className="route-node" aria-hidden="true" />
               {workout ? (
-                <WorkoutButton workout={workout} onSelect={onSelect} />
+                <WorkoutButton
+                  workout={workout}
+                  onSelect={onSelect}
+                  adapted={adaptedWorkoutIds.has(workout.id)}
+                />
               ) : (
                 <div className="rest-day">
                   <span>Rest</span>
@@ -176,9 +185,11 @@ function WeekPlan({
 function MonthPlan({
   workouts,
   onSelect,
+  adaptedWorkoutIds,
 }: {
   workouts: PlannedWorkout[];
   onSelect: (workout: PlannedWorkout) => void;
+  adaptedWorkoutIds: Set<string>;
 }) {
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
   return (
@@ -217,6 +228,7 @@ function MonthPlan({
                     workout={workout}
                     onSelect={onSelect}
                     compact
+                    adapted={adaptedWorkoutIds.has(workout.id)}
                   />
                 )}
               </article>
@@ -527,9 +539,12 @@ function ContextRail({
 
 export function ReviewModal({
   coordinator,
+  onApproved,
 }: {
   coordinator: ReviewCoordinator;
+  onApproved?: (durability: Durability) => void;
 }) {
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const review = useSyncExternalStore(
     coordinator.subscribe,
     coordinator.getState,
@@ -547,6 +562,19 @@ export function ReviewModal({
 
   if (review.status !== "reviewing") return null;
   const { proposal } = review;
+  const approve = async () => {
+    setApprovalError(null);
+    const result = (await coordinator.approve()) as {
+      status: string;
+      durability?: Durability;
+      message?: string;
+    };
+    if (result.status === "approved" && result.durability) {
+      onApproved?.(result.durability);
+    } else if (result.status === "error") {
+      setApprovalError(result.message ?? "The Training Plan was not changed.");
+    }
+  };
   const optionButton = (
     option: typeof proposal.recommended,
     role: "recommendation" | "alternative",
@@ -626,11 +654,22 @@ export function ReviewModal({
         <div className="dialog-actions review-actions">
           <button
             className="button button--quiet"
+            disabled={review.applying}
             onClick={() => coordinator.discussFurther()}
           >
             None — discuss further
           </button>
+          {review.selectedOptionId && (
+            <button
+              className="button button--primary"
+              disabled={review.applying}
+              onClick={approve}
+            >
+              {review.applying ? "Adapting plan…" : "Adapt my plan"}
+            </button>
+          )}
         </div>
+        {approvalError && <p role="alert">{approvalError}</p>}
       </section>
     </div>
   );
@@ -656,6 +695,12 @@ export function WorkspaceApp({
   const [statusOpen, setStatusOpen] = useState(false);
   const [notice, setNotice] = useState(initialNotice);
   const [durability, setDurability] = useState(initialDurability);
+  const latestAdaptation = state.adaptationReceipts.at(-1);
+  const adaptedWorkoutIds = new Set(
+    latestAdaptation?.affectedWorkouts
+      .filter(({ after }) => after !== null)
+      .map(({ workoutId }) => workoutId) ?? [],
+  );
   const week = application.query({
     type: "get_week_training_plan",
     weekStart: "2026-08-24",
@@ -798,11 +843,13 @@ export function WorkspaceApp({
               workouts={week.plannedWorkouts}
               currentDate={state.clock.now.slice(0, 10)}
               onSelect={setSelectedWorkout}
+              adaptedWorkoutIds={adaptedWorkoutIds}
             />
           ) : (
             <MonthPlan
               workouts={month.plannedWorkouts}
               onSelect={setSelectedWorkout}
+              adaptedWorkoutIds={adaptedWorkoutIds}
             />
           )}
         </section>
@@ -823,7 +870,7 @@ export function WorkspaceApp({
       {resetOpen && (
         <ResetDialog onCancel={() => setResetOpen(false)} onReset={resetDemo} />
       )}
-      <ReviewModal coordinator={reviewCoordinator} />
+      <ReviewModal coordinator={reviewCoordinator} onApproved={setDurability} />
     </div>
   );
 }

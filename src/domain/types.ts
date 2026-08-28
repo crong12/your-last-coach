@@ -98,6 +98,19 @@ export interface WorkspaceMutation {
   occurredAt: string;
 }
 
+export interface AppliedPlanAdaptation {
+  reviewId: string;
+  selectedOption: { optionId: string; label: string };
+  affectedWorkouts: Array<{
+    workoutId: string;
+    before: PlannedWorkout | null;
+    after: PlannedWorkout | null;
+  }>;
+  appliedAt: string;
+  planVersionBefore: number;
+  planVersionAfter: number;
+}
+
 export interface WorkspaceState {
   seedVersion: "demo-athlete-v1";
   clock: { now: string; timeZone: "Europe/London" };
@@ -113,7 +126,7 @@ export interface WorkspaceState {
   athleteFeedback: AthleteFeedback[];
   processedRequestIds: string[];
   appliedReviewIds: string[];
-  adaptationReceipts: unknown[];
+  adaptationReceipts: AppliedPlanAdaptation[];
   mutationHistory: WorkspaceMutation[];
 }
 

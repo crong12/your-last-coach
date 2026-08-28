@@ -239,6 +239,76 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
   ).toBe(beforeEnvelope);
 });
 
+test("applies Recovery first atomically through Adapt my plan", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "primary");
+  await page.goto("/");
+  await page.evaluate((proposal) => {
+    const harness = window as unknown as {
+      __webMcpHarness: {
+        registrations: Array<{
+          tool: {
+            name: string;
+            execute: (
+              input: Record<string, unknown>,
+              options: { signal: AbortSignal },
+            ) => Promise<unknown>;
+          };
+        }>;
+      };
+      __reviewResult?: unknown;
+    };
+    const tool = harness.__webMcpHarness.registrations.find(
+      ({ tool }) => tool.name === "review_workout_adaptation",
+    )?.tool;
+    if (!tool) throw new Error("Primary review tool was not registered");
+    void tool
+      .execute(proposal, { signal: new AbortController().signal })
+      .then((result) => (harness.__reviewResult = result));
+  }, acceptedReviewProposal());
+
+  const dialog = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await dialog
+    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await dialog.getByRole("button", { name: "Adapt my plan" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Plan version 2")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /6 km easy, 2026-08-29, 6 kilometres/ }),
+  ).toContainText("Adapted");
+  await expect(
+    page.getByRole("button", {
+      name: /14 km easy long run, 2026-08-30, 14 kilometres/,
+    }),
+  ).toContainText("Adapted");
+  await expect(
+    page.getByRole("button", { name: /6 km recovery, 2026-08-27/ }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __reviewResult?: unknown }).__reviewResult,
+      ),
+    )
+    .toMatchObject({
+      status: "approved",
+      selectedOption: { optionId: "recovery-first" },
+      planVersionBefore: 1,
+      planVersionAfter: 2,
+      durability: "persistent",
+    });
+
+  await page.reload();
+  await expect(page.getByText("Plan version 2")).toBeVisible();
+  await expect(page.getByText("Adapted", { exact: true })).toHaveCount(2);
+});
+
 test("shows the deterministic Week first and the same workouts in Month", async ({
   page,
 }) => {

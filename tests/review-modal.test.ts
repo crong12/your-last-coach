@@ -95,7 +95,7 @@ function proposal(): ReviewProposal {
 }
 
 describe("ReviewModal", () => {
-  it("renders ranked content, previews selection, and settles without mutation", async () => {
+  it("previews without mutation and applies only through Adapt my plan", async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -126,8 +126,14 @@ describe("ReviewModal", () => {
     document.body.append(container);
     const root = createRoot(container);
 
+    const durabilities: string[] = [];
     await act(async () => {
-      root.render(createElement(ReviewModal, { coordinator }));
+      root.render(
+        createElement(ReviewModal, {
+          coordinator,
+          onApproved: (durability: string) => durabilities.push(durability),
+        }),
+      );
     });
     expect(container.textContent).toContain("Review Workout Adaptations");
     expect(container.textContent).toContain("Recovery first");
@@ -148,23 +154,21 @@ describe("ReviewModal", () => {
     expect(application.getState()).toEqual(before);
     expect(saveCount).toBe(0);
 
-    const discuss = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("None — discuss further"),
+    const approve = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Adapt my plan"),
     )!;
-    await act(async () => discuss.click());
+    await act(async () => approve.click());
     expect(container.textContent).toBe("");
-    expect(application.getState()).toEqual(before);
-    expect(saveCount).toBe(0);
-
-    coordinator.open(proposal());
-    await act(async () => {});
-    const close = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Close adaptation review"]',
-    )!;
-    await act(async () => close.click());
-    expect(container.textContent).toBe("");
-    expect(application.getState()).toEqual(before);
-    expect(saveCount).toBe(0);
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+    expect(
+      application
+        .getState()
+        .trainingPlan.plannedWorkouts.some(
+          ({ id }) => id === "planned-2026-08-27-recovery",
+        ),
+    ).toBe(false);
+    expect(saveCount).toBe(1);
+    expect(durabilities).toEqual(["persistent"]);
 
     await act(async () => root.unmount());
     container.remove();
