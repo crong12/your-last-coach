@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
+import type { CoachAgentConnection } from "../adapters/webmcp/types";
+import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
-import type {
-  PlannedWorkout,
-  WorkoutResult,
-  WorkspaceState,
-} from "../domain/types";
+import type { PlannedWorkout, WorkoutResult } from "../domain/types";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
   initialNotice: string | null;
   initialDurability: Durability;
+  coachAgentConnection: CoachAgentConnection;
 }
 
 type PlanView = "week" | "month";
@@ -39,6 +38,14 @@ function formatDate(date: string) {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatShortDate(date: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
     timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00Z`));
 }
@@ -253,6 +260,7 @@ function WorkoutDetails({
         <p className="detail-purpose">{workout.purpose}</p>
         <div className="detail-grid">
           <section>
+            <span className="source-label">App-owned plan</span>
             <h3>Planned prescription</h3>
             <ol className="prescription-list">
               {workout.prescription.blocks.map((block, index) => (
@@ -272,6 +280,7 @@ function WorkoutDetails({
             </ol>
           </section>
           <section className="result-panel">
+            <span className="source-label">Synthetic observation</span>
             <h3>Workout Result</h3>
             {result ? (
               <>
@@ -344,17 +353,31 @@ function ResetDialog({
   );
 }
 
-function ContextRail({ state }: { state: WorkspaceState }) {
-  const { observations } = state;
+function ContextRail({
+  context,
+  plannedWorkouts,
+}: {
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+}) {
+  const { observations } = context;
+  const priorWeekDistanceKm = context.recentTraining
+    .filter(({ startedAt }) => {
+      const date = startedAt.slice(0, 10);
+      return date >= "2026-08-18" && date <= "2026-08-23";
+    })
+    .reduce((total, result) => total + result.summary.distanceKm, 0);
   return (
     <aside className="context-rail" aria-label="Shared coaching context">
       <section className="race-card">
         <span className="eyebrow">Target Race</span>
-        <h2>{state.targetRace.name}</h2>
-        <p>{formatDate(state.targetRace.date)}</p>
+        <h2>{context.targetRace.name}</h2>
+        <p>{formatDate(context.targetRace.date)}</p>
         <div className="race-objective">
           <span>Objective</span>
-          <strong>{formatObjective(state.targetRace.objectiveSeconds)}</strong>
+          <strong>
+            {formatObjective(context.targetRace.objectiveSeconds)}
+          </strong>
         </div>
       </section>
       <section className="evidence-card">
@@ -393,11 +416,53 @@ function ContextRail({ state }: { state: WorkspaceState }) {
               {observations.sleepHrvMs.syntheticNormalRange[1]} ms
             </small>
           </div>
+          <div>
+            <dt>Resting heart rate</dt>
+            <dd>{observations.restingHeartRateBpm} bpm</dd>
+            <small>Within the seeded normal context</small>
+          </div>
+          <div>
+            <dt>Daily stress</dt>
+            <dd>{formatClassification(observations.dailyStress)}</dd>
+            <small>No broad stress signal</small>
+          </div>
         </dl>
         <p className="evidence-balance">
           Load and recovery support caution. Sleep, HRV, resting heart rate, and
           stress remain within the seeded normal context.
         </p>
+        <small className="provenance-label">
+          Seeded synthetic observations
+        </small>
+      </section>
+      <section className="recent-training-card">
+        <div className="section-heading section-heading--small">
+          <div>
+            <span className="eyebrow">Synthetic observation history</span>
+            <h2>Recent training</h2>
+          </div>
+        </div>
+        <p className="recent-training-summary">
+          {priorWeekDistanceKm} km from 18–23 August
+        </p>
+        <ol className="recent-training-list">
+          {context.recentTraining.map((result) => {
+            const date = result.startedAt.slice(0, 10);
+            const workout = plannedWorkouts.find(
+              ({ id }) => id === result.plannedWorkoutId,
+            );
+            return (
+              <li key={result.id}>
+                <time dateTime={date}>{formatShortDate(date)}</time>
+                <span>{workout?.title ?? "Recorded workout"}</span>
+                <strong>
+                  {result.summary.distanceKm} km
+                  {result.status === "partial" ? " · partial" : ""}
+                </strong>
+              </li>
+            );
+          })}
+        </ol>
       </section>
     </aside>
   );
@@ -407,6 +472,7 @@ export function WorkspaceApp({
   application,
   initialNotice,
   initialDurability,
+  coachAgentConnection,
 }: WorkspaceAppProps) {
   const state = useSyncExternalStore(
     application.subscribe,
@@ -429,13 +495,23 @@ export function WorkspaceApp({
     type: "get_month_training_plan",
     month: "2026-08",
   });
-  const selectedResult = useMemo(
-    () =>
-      state.workoutResults.find(
-        (result) => result.plannedWorkoutId === selectedWorkout?.id,
-      ),
-    [selectedWorkout, state.workoutResults],
-  );
+  const athleteContext = application.query({ type: "get_athlete_context" });
+  const selectedContext = selectedWorkout
+    ? application.query({
+        type: "get_workout_context",
+        workoutId: selectedWorkout.id,
+      })
+    : null;
+  const selectedResult =
+    selectedContext?.status === "ok"
+      ? (selectedContext.data.workoutResult ?? undefined)
+      : undefined;
+  const connectionLabel =
+    coachAgentConnection.status === "connected"
+      ? "connected"
+      : coachAgentConnection.status === "error"
+        ? "error"
+        : "unavailable";
 
   const resetDemo = async () => {
     const outcome = await application.command({ type: "reset_demo" });
@@ -463,20 +539,28 @@ export function WorkspaceApp({
           <div className="status-wrap">
             <button
               className="status-button"
-              aria-label="Coach Agent connection: unavailable"
+              aria-label={`Coach Agent connection: ${connectionLabel}`}
               aria-expanded={statusOpen}
               onClick={() => setStatusOpen((open) => !open)}
             >
-              <span className="status-dot" />
-              Coach Agent unavailable
+              <span
+                className={`status-dot status-dot--${coachAgentConnection.status}`}
+              />
+              Coach Agent {connectionLabel}
             </button>
             {statusOpen && (
               <section className="status-popover">
-                <strong>Human workspace ready</strong>
-                <p>
-                  Coach Agent tools are unavailable in this build. Every
-                  Training Plan view remains available.
-                </p>
+                <strong>
+                  {coachAgentConnection.status === "connected"
+                    ? "Shared context connected"
+                    : "Human workspace ready"}
+                </strong>
+                <p>{coachAgentConnection.message}</p>
+                {coachAgentConnection.toolNames.length > 0 && (
+                  <small className="registered-tools">
+                    {coachAgentConnection.toolNames.join(" · ")}
+                  </small>
+                )}
                 <small>
                   Seeded synthetic COROS-shaped observations; no authenticated
                   COROS sync.
@@ -552,7 +636,10 @@ export function WorkspaceApp({
             />
           )}
         </section>
-        <ContextRail state={state} />
+        <ContextRail
+          context={athleteContext.data}
+          plannedWorkouts={state.trainingPlan.plannedWorkouts}
+        />
       </main>
 
       {selectedWorkout && (

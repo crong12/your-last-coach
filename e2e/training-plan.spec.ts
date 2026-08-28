@@ -1,4 +1,38 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function installWebMcpHarness(page: Page) {
+  await page.addInitScript(() => {
+    const registrations: Array<{
+      tool: {
+        name: string;
+        title: string;
+        description: string;
+        inputSchema: Record<string, unknown>;
+        annotations: Record<string, unknown>;
+        execute: (
+          input: Record<string, unknown>,
+          options: { signal: AbortSignal },
+        ) => Promise<unknown>;
+      };
+      signal?: AbortSignal;
+    }> = [];
+    Object.defineProperty(window, "__webMcpHarness", {
+      configurable: true,
+      value: { registrations },
+    });
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        async registerTool(
+          tool: (typeof registrations)[number]["tool"],
+          options?: { signal?: AbortSignal },
+        ) {
+          registrations.push({ tool, signal: options?.signal });
+        },
+      },
+    });
+  });
+}
 
 test("shows the deterministic Week first and the same workouts in Month", async ({
   page,
@@ -13,7 +47,9 @@ test("shows the deterministic Week first and the same workouts in Month", async 
     "aria-pressed",
     "true",
   );
-  await expect(page.getByText("5 × 1 km threshold")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /5 × 1 km threshold, 2026-08-26/ }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /18 km long run, 2026-08-30/ }),
   ).toBeVisible();
@@ -22,7 +58,9 @@ test("shows the deterministic Week first and the same workouts in Month", async 
   await expect(
     page.getByRole("heading", { name: "August 2026" }),
   ).toBeVisible();
-  await expect(page.getByText("5 × 1 km threshold")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /5 × 1 km threshold, 2026-08-26/ }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /18 km long run, 2026-08-30/ }),
   ).toBeVisible();
@@ -41,10 +79,141 @@ test("shows the partial Workout Result without conflating it with planned intent
     page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeVisible();
   await expect(page.getByText("Planned prescription")).toBeVisible();
+  await expect(page.getByText("App-owned plan")).toBeVisible();
   await expect(page.getByText("Workout Result")).toBeVisible();
+  await expect(
+    page.getByText("Synthetic observation", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("of 5 work repetitions")).toBeVisible();
   await expect(page.getByText("4:36/km · 165 bpm")).toBeVisible();
   await expect(page.getByText("4:48/km · 176 bpm")).toBeVisible();
+});
+
+test("shows recent training and the complete mixed recovery evidence", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 720, height: 900 });
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "How you’re arriving" }),
+  ).toBeVisible();
+  await expect(page.getByText("52 bpm", { exact: true })).toBeVisible();
+  await expect(page.getByText("Unremarkable", { exact: true })).toBeVisible();
+  await expect(page.getByText("7h 22", { exact: true })).toBeVisible();
+  await expect(page.getByText("55 ms", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Recent training" }),
+  ).toBeVisible();
+  await expect(page.getByText("56 km from 18–23 August")).toBeVisible();
+  await expect(page.getByText("13 Aug", { exact: true })).toBeVisible();
+  await expect(page.getByText("26 Aug", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Seeded synthetic observations", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: /5 × 1 km threshold/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "5 × 1 km threshold" }),
+  ).toBeVisible();
+  await expect(page.getByText("Planned prescription")).toBeVisible();
+  await expect(page.getByText("Workout Result")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(720);
+});
+
+test("registers selector-backed WebMCP tools once and tears them down", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page);
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("button", { name: "Coach Agent connection: connected" }),
+  ).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const harness = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              title: string;
+              description: string;
+              inputSchema: Record<string, unknown>;
+              annotations: Record<string, unknown>;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+            signal?: AbortSignal;
+          }>;
+        };
+      }
+    ).__webMcpHarness;
+    const execution = { signal: new AbortController().signal };
+    const tools = Object.fromEntries(
+      harness.registrations.map(({ tool }) => [tool.name, tool]),
+    );
+    return {
+      registrations: harness.registrations.map(({ tool }) => ({
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+      })),
+      athlete: await tools.get_athlete_context.execute({}, execution),
+      plan: await tools.get_training_plan.execute(
+        { from: "2026-08-24", to: "2026-08-30" },
+        execution,
+      ),
+      workout: await tools.get_workout_context.execute(
+        { workoutId: "planned-2026-08-26-threshold" },
+        execution,
+      ),
+    };
+  });
+
+  expect(result.registrations.map(({ name }) => name)).toEqual([
+    "get_athlete_context",
+    "get_training_plan",
+    "get_workout_context",
+  ]);
+  expect(
+    result.registrations.every(
+      ({ annotations }) => annotations.readOnlyHint === true,
+    ),
+  ).toBe(true);
+  expect(result.athlete).toMatchObject({
+    status: "ok",
+    data: { athlete: { displayName: "Sam" } },
+  });
+  expect(result.plan).toMatchObject({
+    status: "ok",
+    data: { planVersion: 1 },
+  });
+  expect(result.workout).toMatchObject({
+    status: "ok",
+    data: {
+      plannedWorkout: { id: "planned-2026-08-26-threshold" },
+      workoutResult: { status: "partial" },
+    },
+  });
+
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  const signalsAborted = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{ signal?: AbortSignal }>;
+        };
+      }
+    ).__webMcpHarness.registrations.every(({ signal }) => signal?.aborted),
+  );
+  expect(signalsAborted).toBe(true);
 });
 
 test("persists the seeded envelope across reload and resets with in-page approval", async ({

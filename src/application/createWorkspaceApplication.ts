@@ -69,16 +69,22 @@ export function createWorkspaceApplication(
   let state = deepFreeze(structuredClone(options.initialState));
   const listeners = new Set<() => void>();
 
-  const query = ((query: CalendarQuery | {
-    type: "get_athlete_context";
-  } | {
-    type: "get_training_plan";
-    from: unknown;
-    to: unknown;
-  } | {
-    type: "get_workout_context";
-    workoutId: unknown;
-  }) => {
+  const query = ((
+    query:
+      | CalendarQuery
+      | {
+          type: "get_athlete_context";
+        }
+      | {
+          type: "get_training_plan";
+          from: unknown;
+          to: unknown;
+        }
+      | {
+          type: "get_workout_context";
+          workoutId: unknown;
+        },
+  ) => {
     if (query.type === "get_athlete_context") {
       return selectAthleteContext(state);
     }

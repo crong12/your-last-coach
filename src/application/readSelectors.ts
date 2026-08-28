@@ -11,9 +11,7 @@ import type {
 } from "../domain/types";
 
 export type EvidenceSource =
-  | "app_owned"
-  | "athlete_owned"
-  | "synthetic_observation";
+  "app_owned" | "athlete_owned" | "synthetic_observation";
 
 export interface ApplicationError {
   status: "error";
@@ -61,7 +59,7 @@ export interface WorkoutContextData {
   athleteFeedback: AthleteFeedback[];
   sources: {
     plannedWorkout: EvidenceSource;
-    workoutResult: EvidenceSource;
+    workoutResult: EvidenceSource | null;
     athleteFeedback: EvidenceSource;
   };
 }
@@ -90,7 +88,9 @@ function isIsoDate(value: unknown): value is IsoDate {
     return false;
   }
   const date = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+  return (
+    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
 export function selectAthleteContext(
@@ -196,7 +196,7 @@ export function selectWorkoutContext(
       athleteFeedback,
       sources: {
         plannedWorkout: "app_owned",
-        workoutResult: "synthetic_observation",
+        workoutResult: workoutResult ? "synthetic_observation" : null,
         athleteFeedback: "athlete_owned",
       },
     },

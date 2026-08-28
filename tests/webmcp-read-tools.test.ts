@@ -109,7 +109,8 @@ describe("WebMCP coaching read tools", () => {
         workoutId: {
           type: "string",
           minLength: 1,
-          description: "Stable Planned Workout ID returned by get_training_plan.",
+          description:
+            "Stable Planned Workout ID returned by get_training_plan.",
         },
       },
       required: ["workoutId"],

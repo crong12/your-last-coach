@@ -160,30 +160,31 @@ describe("shared coaching read selectors", () => {
         plannedWorkRepetitions: 5,
       },
     });
-    expect(result.data.workoutResult?.laps.filter(({ kind }) => kind === "work"))
-      .toEqual([
-        {
-          id: "lap-threshold-rep-1",
-          kind: "work",
-          distanceKm: 1,
-          paceSecondsPerKm: 276,
-          averageHeartRateBpm: 165,
-        },
-        {
-          id: "lap-threshold-rep-2",
-          kind: "work",
-          distanceKm: 1,
-          paceSecondsPerKm: 279,
-          averageHeartRateBpm: 171,
-        },
-        {
-          id: "lap-threshold-rep-3",
-          kind: "work",
-          distanceKm: 1,
-          paceSecondsPerKm: 288,
-          averageHeartRateBpm: 176,
-        },
-      ]);
+    expect(
+      result.data.workoutResult?.laps.filter(({ kind }) => kind === "work"),
+    ).toEqual([
+      {
+        id: "lap-threshold-rep-1",
+        kind: "work",
+        distanceKm: 1,
+        paceSecondsPerKm: 276,
+        averageHeartRateBpm: 165,
+      },
+      {
+        id: "lap-threshold-rep-2",
+        kind: "work",
+        distanceKm: 1,
+        paceSecondsPerKm: 279,
+        averageHeartRateBpm: 171,
+      },
+      {
+        id: "lap-threshold-rep-3",
+        kind: "work",
+        distanceKm: 1,
+        paceSecondsPerKm: 288,
+        averageHeartRateBpm: 176,
+      },
+    ]);
     expect(result.data.athleteFeedback).toHaveLength(1);
     expect(result.data.sources).toEqual({
       plannedWorkout: "app_owned",
@@ -211,4 +212,18 @@ describe("shared coaching read selectors", () => {
       });
     },
   );
+
+  it("keeps an absent Workout Result distinct from synthetic evidence", () => {
+    const result = selectWorkoutContext(createDemoWorkspaceState(), {
+      workoutId: "planned-2026-08-30-long",
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") throw new Error("Expected workout context");
+    expect(result.data.workoutResult).toBeNull();
+    expect(result.data.sources.workoutResult).toBeNull();
+    expect(result.evidenceRefs).toEqual([
+      "planned-workout:planned-2026-08-30-long",
+    ]);
+  });
 });
