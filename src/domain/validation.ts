@@ -33,7 +33,11 @@ const isTimestamp = (value: unknown): value is string =>
 const isIsoDate = (value: unknown): value is string =>
   isNonEmptyString(value) && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-function validateUniqueStrings(value: unknown, field: string, errors: string[]) {
+function validateUniqueStrings(
+  value: unknown,
+  field: string,
+  errors: string[],
+) {
   if (
     !Array.isArray(value) ||
     value.some((item) => !isNonEmptyString(item)) ||
@@ -134,10 +138,7 @@ function validateObservations(value: unknown, errors: string[]) {
   if (!valid) errors.push("Synthetic observation context is invalid");
 }
 
-function validateTrainingPlan(
-  value: unknown,
-  errors: string[],
-): Set<string> {
+function validateTrainingPlan(value: unknown, errors: string[]): Set<string> {
   const workoutIds = new Set<string>();
   if (
     !isRecord(value) ||
@@ -170,9 +171,7 @@ function validateTrainingPlan(
       !isRecord(workout.prescription) ||
       !Array.isArray(workout.prescription.blocks) ||
       workout.prescription.blocks.length === 0 ||
-      workout.prescription.blocks.some(
-        (block) => !isValidWorkoutBlock(block),
-      )
+      workout.prescription.blocks.some((block) => !isValidWorkoutBlock(block))
     ) {
       errors.push(`Invalid Planned Workout: ${workout.id}`);
     }

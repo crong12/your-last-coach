@@ -66,10 +66,9 @@ const INVALID_SAVED_CASES = [
   "invalid workspace state",
 ] as const;
 
-const MALFORMED_STATE_CASES: Array<[
-  string,
-  (state: Record<string, any>) => void,
-]> = [
+const MALFORMED_STATE_CASES: Array<
+  [string, (state: Record<string, any>) => void]
+> = [
   [
     "invalid Planned Workout type",
     (state) => {
@@ -162,9 +161,7 @@ describe("browser workspace persistence", () => {
     const repository = new BrowserWorkspaceRepository(() => storage);
 
     storage.failWrites = true;
-    expect(await repository.save(await fixtureEnvelope(3))).toBe(
-      "memory_only",
-    );
+    expect(await repository.save(await fixtureEnvelope(3))).toBe("memory_only");
 
     storage.failWrites = false;
     await repository.clear();
