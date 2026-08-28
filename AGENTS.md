@@ -8,3 +8,9 @@ This project is in discovery and wayfinding. Preserve resolved decisions, avoid 
 - Before creating, claiming, relating, triaging, or closing project work, read [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
 - Before applying or changing issue roles, read [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
 - When defining domain terms or recording consequential architectural decisions, read [docs/agents/domain.md](docs/agents/domain.md).
+
+## Source authority
+
+For implementation, the active ticket owns slice scope and acceptance criteria; its parent specification owns cross-ticket requirements. Linked architecture and domain documents provide durable constraints and rationale. Historical issues and prototypes are evidence.
+
+When these sources conflict, pause implementation and reconcile the latest approved decision across the active ticket, parent specification, and linked documents. Do not silently choose a source or treat existing code as the decision.
