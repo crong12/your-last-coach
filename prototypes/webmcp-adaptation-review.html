@@ -109,6 +109,7 @@
   </section>
 </main>
 
+<script src="./webmcp-registration-harness.js"></script>
 <script>
 // Portable lifecycle module: no DOM access.
 const ReviewLifecycle = (() => {
@@ -212,26 +213,21 @@ function beginPendingReview(signal) {
   });
 }
 
+const registrationMode = new URLSearchParams(location.search).get('mode') === 'fallback' ? 'fallback' : 'primary';
+let registeredToolNames = [];
 async function registerWebMCP() {
-  if (typeof document.modelContext?.registerTool !== 'function') return false;
-  await document.modelContext.registerTool({
-    name:'review_workout_adaptation',
-    description:'Open one Athlete review and wait for explicit approval or discussion.',
-    inputSchema:{type:'object',properties:{},additionalProperties:false},
-    execute:async (_input, options={}) => beginPendingReview(options.signal)
-  });
-  await document.modelContext.registerTool({
-    name:'read_workout_adaptation_decision',
-    description:'Read and clear a locally stored decision from the two-call fallback.',
-    inputSchema:{type:'object',properties:{},additionalProperties:false},
-    execute:async () => {
+  const registrar = document.modelContext?.registerTool;
+  if (typeof registrar !== 'function') return {supported:false, mode:registrationMode, toolNames:[]};
+  registeredToolNames = await WebMCPRegistrationHarness.register(registrationMode, registrar.bind(document.modelContext), {
+    review: async (_input, options={}) => beginPendingReview(options.signal),
+    readFallback: async () => {
       const stored = localStorage.getItem(storageKey);
       if (!stored) return {decision:'not_ready'};
       localStorage.removeItem(storageKey);
       return JSON.parse(stored);
     }
   });
-  return true;
+  return {supported:true, mode:registrationMode, toolNames:registeredToolNames};
 }
 
 const scenarios = [
@@ -299,8 +295,11 @@ window.addEventListener('pagehide',()=>{
   if(state.phase==='reviewing') dispatch({type:'ABORT',reason:'document_unload'});
 });
 
-registerWebMCP().then(supported=>{
-  document.querySelector('#support').textContent=supported ? 'WebMCP tools registered in this browser' : 'Manual simulator — WebMCP host unavailable';
+registerWebMCP().then(result=>{
+  const tools = result.toolNames.length ? result.toolNames.join(', ') : 'none';
+  document.querySelector('#support').textContent=result.supported
+    ? `WebMCP ${result.mode} mode — registered tools: ${tools}`
+    : `Manual simulator — WebMCP host unavailable (mode: ${result.mode}; tools: ${tools})`;
 }).catch(error=>{
   document.querySelector('#support').textContent=`WebMCP registration failed: ${error.message}`;
 });
