@@ -6,7 +6,7 @@ import type {
   WorkspaceRepository,
 } from "../src/application/ports";
 import {
-  registerWebMcpReadTools,
+  registerWebMcpTools,
   type ModelContextHost,
   type WebMcpTool,
 } from "../src/adapters/webmcp/registerReadTools";
@@ -45,12 +45,12 @@ function createRecordingHost() {
   return { host, registrations };
 }
 
-describe("WebMCP coaching read tools", () => {
-  it("registers the three read-only tools once with actionable metadata and schemas", async () => {
+describe("WebMCP coaching tools", () => {
+  it("registers three read tools and the retry-safe feedback mutation", async () => {
     const application = await createApplication();
     const { host, registrations } = createRecordingHost();
 
-    const registration = await registerWebMcpReadTools(host, application);
+    const registration = await registerWebMcpTools(host, application);
 
     expect(registration).toMatchObject({
       status: "connected",
@@ -58,9 +58,10 @@ describe("WebMCP coaching read tools", () => {
         "get_athlete_context",
         "get_training_plan",
         "get_workout_context",
+        "record_athlete_feedback",
       ],
     });
-    expect(registrations).toHaveLength(3);
+    expect(registrations).toHaveLength(4);
     expect(registrations.map(({ tool }) => tool.name)).toEqual(
       registration.toolNames,
     );
@@ -68,8 +69,9 @@ describe("WebMCP coaching read tools", () => {
       "Get athlete context",
       "Get training plan",
       "Get workout context",
+      "Record athlete feedback",
     ]);
-    for (const { tool, signal } of registrations) {
+    for (const { tool, signal } of registrations.slice(0, 3)) {
       expect(tool.description.length).toBeGreaterThan(30);
       expect(tool.annotations).toEqual({
         readOnlyHint: true,
@@ -116,12 +118,70 @@ describe("WebMCP coaching read tools", () => {
       required: ["workoutId"],
       additionalProperties: false,
     });
+    expect(registrations[3].tool.annotations).toEqual({
+      readOnlyHint: false,
+      untrustedContentHint: false,
+    });
+    expect(registrations[3].tool.description).toContain("requestId");
+    expect(registrations[3].tool.inputSchema).toMatchObject({
+      type: "object",
+      required: ["requestId", "relatedWorkoutId", "rawText"],
+      additionalProperties: false,
+      properties: {
+        requestId: { type: "string", minLength: 1 },
+        relatedWorkoutId: { type: "string", minLength: 1 },
+        rawText: { type: "string", minLength: 1 },
+        reported: {
+          type: "object",
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+
+  it("records feedback through the application and exposes it through workout context", async () => {
+    const application = await createApplication();
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application);
+    const tools = Object.fromEntries(
+      registrations.map(({ tool }) => [tool.name, tool]),
+    );
+    const execution = { signal: new AbortController().signal };
+
+    const recorded = await tools.record_athlete_feedback.execute(
+      {
+        requestId: "webmcp-feedback",
+        relatedWorkoutId: "planned-2026-08-26-threshold",
+        rawText: "That was rough. No pain.",
+        reported: { sessionRpe: 9, painReported: false },
+      },
+      execution,
+    );
+    const workout = await tools.get_workout_context.execute(
+      { workoutId: "planned-2026-08-26-threshold" },
+      execution,
+    );
+
+    expect(recorded).toMatchObject({
+      status: "ok",
+      feedback: {
+        requestId: "webmcp-feedback",
+        rawText: "That was rough. No pain.",
+        reported: { sessionRpe: 9, painReported: false },
+      },
+    });
+    expect(workout).toMatchObject({
+      status: "ok",
+      data: {
+        athleteFeedback: [{ requestId: "webmcp-feedback" }],
+      },
+    });
   });
 
   it("executes every tool against the application's current authoritative state", async () => {
     const application = await createApplication();
     const { host, registrations } = createRecordingHost();
-    await registerWebMcpReadTools(host, application);
+    await registerWebMcpTools(host, application);
     const tools = Object.fromEntries(
       registrations.map(({ tool }) => [tool.name, tool]),
     );
@@ -169,7 +229,7 @@ describe("WebMCP coaching read tools", () => {
   it("returns structured input and not-found errors through tool execution", async () => {
     const application = await createApplication();
     const { host, registrations } = createRecordingHost();
-    await registerWebMcpReadTools(host, application);
+    await registerWebMcpTools(host, application);
     const tools = Object.fromEntries(
       registrations.map(({ tool }) => [tool.name, tool]),
     );
@@ -198,10 +258,42 @@ describe("WebMCP coaching read tools", () => {
     });
   });
 
+  it("converts unexpected asynchronous adapter failures to a safe error", async () => {
+    const application = await createApplication();
+    const before = application.getState();
+    application.command = (async () => {
+      throw new Error("private stack detail");
+    }) as typeof application.command;
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application);
+    const feedbackTool = registrations.find(
+      ({ tool }) => tool.name === "record_athlete_feedback",
+    )?.tool;
+    if (!feedbackTool) throw new Error("Expected feedback tool");
+
+    const outcome = await feedbackTool.execute(
+      {
+        requestId: "adapter-failure",
+        relatedWorkoutId: "planned-2026-08-26-threshold",
+        rawText: "Heavy legs.",
+      },
+      { signal: new AbortController().signal },
+    );
+
+    expect(outcome).toEqual({
+      status: "error",
+      code: "internal_error",
+      message: "The Coach Agent request could not be completed.",
+      retryable: true,
+    });
+    expect(JSON.stringify(outcome)).not.toContain("private stack detail");
+    expect(application.getState()).toBe(before);
+  });
+
   it("aborts all registrations once during cleanup", async () => {
     const application = await createApplication();
     const { host, registrations } = createRecordingHost();
-    const registration = await registerWebMcpReadTools(host, application);
+    const registration = await registerWebMcpTools(host, application);
 
     registration.cleanup();
     registration.cleanup();
@@ -212,7 +304,7 @@ describe("WebMCP coaching read tools", () => {
   it("reports unavailable without attempting registration when the host is absent", async () => {
     const application = await createApplication();
 
-    const registration = await registerWebMcpReadTools(undefined, application);
+    const registration = await registerWebMcpTools(undefined, application);
 
     expect(registration).toMatchObject({
       status: "unavailable",
@@ -231,7 +323,7 @@ describe("WebMCP coaching read tools", () => {
       },
     };
 
-    const registration = await registerWebMcpReadTools(host, application);
+    const registration = await registerWebMcpTools(host, application);
 
     expect(registration).toMatchObject({
       status: "error",

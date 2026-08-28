@@ -6,7 +6,7 @@ import "@fontsource/manrope/latin-700.css";
 import "@fontsource/newsreader/latin-500.css";
 
 import { BrowserWorkspaceRepository } from "./adapters/persistence/BrowserWorkspaceRepository";
-import { registerWebMcpReadTools } from "./adapters/webmcp/registerReadTools";
+import { registerWebMcpTools } from "./adapters/webmcp/registerReadTools";
 import type { ModelContextHost } from "./adapters/webmcp/types";
 import { createWorkspaceApplication } from "./application/createWorkspaceApplication";
 import { initializeWorkspace } from "./application/initializeWorkspace";
@@ -26,7 +26,7 @@ async function bootstrap() {
   const modelContext = (
     document as Document & { readonly modelContext?: ModelContextHost }
   ).modelContext;
-  const webMcpRegistration = await registerWebMcpReadTools(
+  const webMcpRegistration = await registerWebMcpTools(
     modelContext,
     application,
   );

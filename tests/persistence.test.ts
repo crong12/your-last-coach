@@ -97,6 +97,19 @@ const MALFORMED_STATE_CASES: Array<
     },
   ],
   [
+    "invalid Athlete Feedback reported fields",
+    (state) => {
+      state.athleteFeedback.push({
+        id: "athlete-feedback:invalid-reported",
+        requestId: "invalid-reported",
+        relatedWorkoutId: "planned-2026-08-26-threshold",
+        rawText: "Hard session",
+        reported: { sessionRpe: 11 },
+        recordedAt: "2026-08-26T20:15:00+01:00",
+      });
+    },
+  ],
+  [
     "missing processed request identifiers",
     (state) => {
       delete state.processedRequestIds;
@@ -172,6 +185,32 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
+  it("restores sparse Athlete Feedback from the persisted envelope", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope();
+    saved.state.athleteFeedback.push({
+      id: "athlete-feedback:persisted",
+      requestId: "persisted",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      rawText: "My legs felt heavy.",
+      reported: { legFeel: "heavy" },
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    });
+    saved.state.processedRequestIds.push("persisted");
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.state.athleteFeedback).toEqual([
+      expect.objectContaining({
+        rawText: "My legs felt heavy.",
+        reported: { legFeel: "heavy" },
+      }),
+    ]);
+  });
   it("restores a valid saved workspace", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope(3);

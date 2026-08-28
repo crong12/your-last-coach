@@ -83,6 +83,12 @@ export interface AthleteFeedback {
   requestId: string;
   relatedWorkoutId: string;
   rawText: string;
+  reported?: {
+    sessionRpe?: number;
+    legFeel?: string;
+    painReported?: boolean;
+    stoppedReason?: string;
+  };
   recordedAt: string;
 }
 

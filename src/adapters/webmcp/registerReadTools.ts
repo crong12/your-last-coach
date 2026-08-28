@@ -8,36 +8,37 @@ import type {
 
 export type { ModelContextHost, WebMcpTool } from "./types";
 
-export const WEBMCP_READ_TOOL_NAMES = [
+export const WEBMCP_TOOL_NAMES = [
   "get_athlete_context",
   "get_training_plan",
   "get_workout_context",
+  "record_athlete_feedback",
 ] as const;
 
 function safeExecution(
-  execute: (input: Record<string, unknown>) => unknown,
+  execute: (input: Record<string, unknown>) => unknown | Promise<unknown>,
 ): WebMcpTool["execute"] {
   return async (input) => {
     try {
-      return execute(input);
+      return await execute(input);
     } catch {
       return {
         status: "error",
         code: "internal_error",
-        message: "Coach Agent context could not be read.",
+        message: "The Coach Agent request could not be completed.",
         retryable: true,
       };
     }
   };
 }
 
-function createReadTools(application: WorkspaceApplication): WebMcpTool[] {
+function createTools(application: WorkspaceApplication): WebMcpTool[] {
   const annotations = {
     readOnlyHint: true,
     untrustedContentHint: false,
   } as const;
 
-  return [
+  const tools: WebMcpTool[] = [
     {
       name: "get_athlete_context",
       title: "Get athlete context",
@@ -111,6 +112,59 @@ function createReadTools(application: WorkspaceApplication): WebMcpTool[] {
       ),
     },
   ];
+  tools.push({
+    name: "record_athlete_feedback",
+    title: "Record athlete feedback",
+    description:
+      "Record the Athlete’s original report and only explicitly reported normalized fields for one Planned Workout. Retrying the same valid requestId returns the original record without recording twice.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        requestId: {
+          type: "string",
+          minLength: 1,
+          description: "Stable idempotency key for this feedback report.",
+        },
+        relatedWorkoutId: {
+          type: "string",
+          minLength: 1,
+          description:
+            "Stable Planned Workout ID returned by get_training_plan.",
+        },
+        rawText: {
+          type: "string",
+          minLength: 1,
+          description: "The Athlete’s natural-language statement, unchanged.",
+        },
+        reported: {
+          type: "object",
+          properties: {
+            sessionRpe: { type: "number", minimum: 0, maximum: 10 },
+            legFeel: { type: "string", minLength: 1 },
+            painReported: { type: "boolean" },
+            stoppedReason: { type: "string", minLength: 1 },
+          },
+          additionalProperties: false,
+        },
+      },
+      required: ["requestId", "relatedWorkoutId", "rawText"],
+      additionalProperties: false,
+    },
+    annotations: {
+      readOnlyHint: false,
+      untrustedContentHint: false,
+    },
+    execute: safeExecution((input) =>
+      application.command({
+        type: "record_athlete_feedback",
+        requestId: input.requestId,
+        relatedWorkoutId: input.relatedWorkoutId,
+        rawText: input.rawText,
+        reported: input.reported,
+      }),
+    ),
+  });
+  return tools;
 }
 
 function withCleanup(
@@ -128,7 +182,7 @@ function withCleanup(
   };
 }
 
-export async function registerWebMcpReadTools(
+export async function registerWebMcpTools(
   host: ModelContextHost | undefined,
   application: WorkspaceApplication,
 ): Promise<WebMcpRegistration> {
@@ -142,13 +196,13 @@ export async function registerWebMcpReadTools(
 
   const controller = new AbortController();
   try {
-    for (const tool of createReadTools(application)) {
+    for (const tool of createTools(application)) {
       await host.registerTool(tool, { signal: controller.signal });
     }
     return withCleanup(
       {
         status: "connected",
-        toolNames: [...WEBMCP_READ_TOOL_NAMES],
+        toolNames: [...WEBMCP_TOOL_NAMES],
         message: "Coach Agent tools are connected.",
       },
       controller,

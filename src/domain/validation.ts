@@ -260,21 +260,45 @@ function validateAthleteFeedback(
     return;
   }
   const feedbackIds = new Set<string>();
+  const requestIds = new Set<string>();
   for (const feedback of value) {
+    const reported = isRecord(feedback) ? feedback.reported : undefined;
+    const validReported =
+      reported === undefined ||
+      (isRecord(reported) &&
+        Object.keys(reported).every((key) =>
+          ["sessionRpe", "legFeel", "painReported", "stoppedReason"].includes(
+            key,
+          ),
+        ) &&
+        (reported.sessionRpe === undefined ||
+          (typeof reported.sessionRpe === "number" &&
+            Number.isFinite(reported.sessionRpe) &&
+            reported.sessionRpe >= 0 &&
+            reported.sessionRpe <= 10)) &&
+        (reported.legFeel === undefined ||
+          isNonEmptyString(reported.legFeel)) &&
+        (reported.painReported === undefined ||
+          typeof reported.painReported === "boolean") &&
+        (reported.stoppedReason === undefined ||
+          isNonEmptyString(reported.stoppedReason)));
     if (
       !isRecord(feedback) ||
       !isNonEmptyString(feedback.id) ||
       feedbackIds.has(feedback.id) ||
       !isNonEmptyString(feedback.requestId) ||
+      requestIds.has(feedback.requestId) ||
       !isNonEmptyString(feedback.relatedWorkoutId) ||
       !workoutIds.has(feedback.relatedWorkoutId) ||
       !isNonEmptyString(feedback.rawText) ||
+      !validReported ||
       !isTimestamp(feedback.recordedAt)
     ) {
       errors.push("Athlete Feedback entry is invalid");
       continue;
     }
     feedbackIds.add(feedback.id);
+    requestIds.add(feedback.requestId);
   }
 }
 

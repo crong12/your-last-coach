@@ -181,12 +181,11 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
     "get_athlete_context",
     "get_training_plan",
     "get_workout_context",
+    "record_athlete_feedback",
   ]);
   expect(
-    result.registrations.every(
-      ({ annotations }) => annotations.readOnlyHint === true,
-    ),
-  ).toBe(true);
+    result.registrations.map(({ annotations }) => annotations.readOnlyHint),
+  ).toEqual([true, true, true, false]);
   expect(result.athlete).toMatchObject({
     status: "ok",
     data: { athlete: { displayName: "Sam" } },
@@ -214,6 +213,78 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
     ).__webMcpHarness.registrations.every(({ signal }) => signal?.aborted),
   );
   expect(signalsAborted).toBe(true);
+});
+
+test("records, persists, and resets Athlete Feedback through the injected host", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page);
+  await page.goto("/");
+  const rawText =
+    "That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn’t hold the pace. No pain. Can we make the rest of this week easier?";
+  const recordFeedback = () =>
+    page.evaluate(
+      async ({ rawText }) => {
+        const registrations = (
+          window as unknown as {
+            __webMcpHarness: {
+              registrations: Array<{
+                tool: {
+                  name: string;
+                  execute: (
+                    input: Record<string, unknown>,
+                    options: { signal: AbortSignal },
+                  ) => Promise<unknown>;
+                };
+              }>;
+            };
+          }
+        ).__webMcpHarness.registrations;
+        const tool = registrations.find(
+          ({ tool }) => tool.name === "record_athlete_feedback",
+        )?.tool;
+        if (!tool) throw new Error("Feedback tool was not registered");
+        return tool.execute(
+          {
+            requestId: "hero-feedback-request",
+            relatedWorkoutId: "planned-2026-08-26-threshold",
+            rawText,
+            reported: {
+              sessionRpe: 9,
+              legFeel: "heavy from the warm-up",
+              painReported: false,
+              stoppedReason: "couldn’t hold the pace",
+            },
+          },
+          { signal: new AbortController().signal },
+        );
+      },
+      { rawText },
+    );
+
+  await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
+  await expect(
+    page.getByRole("heading", { name: "Athlete Feedback" }),
+  ).toBeVisible();
+  await expect(page.getByText(rawText)).toBeVisible();
+  await expect(page.getByText("9/10 effort")).toBeVisible();
+  await expect(page.getByText("No pain reported")).toBeVisible();
+
+  await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
+  await expect(page.getByText(rawText)).toHaveCount(1);
+
+  await page.reload();
+  await expect(page.getByText(rawText)).toBeVisible();
+
+  await page.getByRole("button", { name: "Reset demo" }).click();
+  await page
+    .getByRole("dialog", { name: "Reset the demo?" })
+    .getByRole("button", { name: "Reset demo" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Athlete Feedback" }),
+  ).toBeHidden();
+  await expect(page.getByText(rawText)).toBeHidden();
 });
 
 test("persists the seeded envelope across reload and resets with in-page approval", async ({

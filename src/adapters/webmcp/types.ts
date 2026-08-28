@@ -11,7 +11,7 @@ export interface WebMcpTool {
   description: string;
   inputSchema: JsonSchema;
   annotations: {
-    readOnlyHint: true;
+    readOnlyHint: boolean;
     untrustedContentHint: false;
   };
   execute(
