@@ -1,11 +1,13 @@
 # Demo Athlete and coaching tool contract
 
 Status: Accepted for the WebMCP Challenge proof of concept  
-Contract version: `1.0`  
+Contract version: `1.1`  
 Fixture version: `demo-athlete-v1`  
 Fixed demo time: `2026-08-26T20:15:00+01:00` (`Europe/London`)
 
 This contract defines the deterministic fixture and Coach Agent–Shared Coaching Workspace boundary for the proof of concept. It is demo-oriented, not a production COROS integration contract.
+
+Version 1.1 reduces host and Agent variance: the runtime exposes exactly one review mode, and the proposal shape names the recommendation and alternative instead of redundantly encoding roles through array position, rank, and role fields.
 
 ## Demo Athlete
 
@@ -178,6 +180,14 @@ Uncertainty:
 | `open_workout_adaptation_review` | Compatibility fallback only: open the same review without keeping a call pending | Same proposal payload | Immediate `review_opened` | The call itself does not mutate; later on-page approval may apply |
 | `read_workout_adaptation_decision` | Compatibility fallback only: deliver and clear a stored terminal result | `reviewId` | `not_ready` or stored terminal result, then cleared for delivery | Read-only; any application already occurred on-page |
 
+The standing contract contains seven tools, but they are conditionally exposed.
+
+- `primary` mode registers the three read tools, `record_athlete_feedback`, and `review_workout_adaptation`.
+- `fallback` mode registers the three read tools, `record_athlete_feedback`, `open_workout_adaptation_review`, and `read_workout_adaptation_decision`.
+- Primary and fallback review tools are never registered together.
+
+The early ChatGPT verification gate selects the hackathon default. The fallback implementation is non-blocking when primary mode is reliable and becomes must-ship when it is not.
+
 The standing surface covers reading Athlete/race context, Training Plan and workout context; recording Athlete Feedback; reviewing a Workout Adaptation; and applying or discarding it. Additional tools require a separately recorded need.
 
 ## Review proposal
@@ -186,6 +196,7 @@ The standing surface covers reading Athlete/race context, Training Plan and work
 {
   reviewId: string;
   sourceWorkoutId: string;
+  expectedPlanVersion: number;
   evidenceRefs: string[];
   rationale: {
     summary: string;
@@ -193,30 +204,24 @@ The standing surface covers reading Athlete/race context, Training Plan and work
     confidence: "low" | "moderate" | "high";
     limitations: string[];
   };
-  options: [
-    {
-      optionId: string;
-      rank: 1 | 2;
-      role: "recommended" | "alternative";
-      label: string;
-      summary: string;
-      tradeoff: string;
-      workoutChanges: WorkoutChange[];
-    },
-    {
-      optionId: string;
-      rank: 1 | 2;
-      role: "recommended" | "alternative";
-      label: string;
-      summary: string;
-      tradeoff: string;
-      workoutChanges: WorkoutChange[];
-    }
-  ];
+  recommended: {
+    optionId: string;
+    label: string;
+    summary: string;
+    tradeoff: string;
+    workoutChanges: WorkoutChange[];
+  };
+  alternative: {
+    optionId: string;
+    label: string;
+    summary: string;
+    tradeoff: string;
+    workoutChanges: WorkoutChange[];
+  };
 }
 ```
 
-The app validates that there are exactly two options with distinct ranks and roles and that every referenced Planned Workout belongs to the current `planVersion`.
+The named properties guarantee exactly one recommendation and one alternative. The app validates distinct option IDs, the expected `planVersion`, and every referenced Planned Workout. `get_training_plan` makes `planVersion` and stable workout IDs prominent; context reads return reusable evidence references. Rejections identify the invalid field and expected correction so the Coach Agent can retry.
 
 ## Review lifecycle and mutation rules
 
@@ -228,6 +233,7 @@ The app validates that there are exactly two options with distinct ranks and rol
 - `reviewId` and `requestId` are idempotency keys; reuse cannot apply or record twice.
 - `None — discuss further`, cancellation, timeout, unload before approval, and reset discard the pending proposal without changing the Training Plan.
 - The primary pending-call path and compatibility open/read path use the same proposal, validation, preview, approval, application, and idempotency semantics. Only result delivery differs.
+- The configured review mode determines which path is registered; the Coach Agent never chooses between both paths in one session.
 
 There is deliberately no agent-callable `apply_plan` tool. Training Plan mutation remains behind the Athlete’s explicit Plan Approval in the Shared Coaching Workspace.
 
