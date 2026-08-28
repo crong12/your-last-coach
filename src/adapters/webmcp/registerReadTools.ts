@@ -1,4 +1,5 @@
 import type { WorkspaceApplication } from "../../application/createWorkspaceApplication";
+import type { ReviewCoordinator } from "../../application/createReviewCoordinator";
 import type {
   CoachAgentConnection,
   ModelContextHost,
@@ -16,11 +17,14 @@ export const WEBMCP_TOOL_NAMES = [
 ] as const;
 
 function safeExecution(
-  execute: (input: Record<string, unknown>) => unknown | Promise<unknown>,
+  execute: (
+    input: Record<string, unknown>,
+    options: { signal: AbortSignal },
+  ) => unknown | Promise<unknown>,
 ): WebMcpTool["execute"] {
-  return async (input) => {
+  return async (input, options) => {
     try {
-      return await execute(input);
+      return await execute(input, options);
     } catch {
       return {
         status: "error",
@@ -32,7 +36,128 @@ function safeExecution(
   };
 }
 
-function createTools(application: WorkspaceApplication): WebMcpTool[] {
+export type ReviewMode = "primary" | "fallback";
+
+interface RegisterWebMcpOptions {
+  reviewMode: ReviewMode;
+  reviewCoordinator: ReviewCoordinator;
+}
+
+const reviewProposalSchema: WebMcpTool["inputSchema"] = {
+  type: "object",
+  properties: {
+    reviewId: { type: "string", minLength: 1 },
+    sourceWorkoutId: { type: "string", minLength: 1 },
+    expectedPlanVersion: { type: "integer", minimum: 1 },
+    evidenceRefs: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1 },
+    },
+    rationale: {
+      type: "object",
+      properties: {
+        summary: { type: "string", minLength: 1 },
+        counterEvidence: { type: "string", minLength: 1 },
+        confidence: { type: "string", enum: ["low", "moderate", "high"] },
+        limitations: {
+          type: "array",
+          minItems: 1,
+          items: { type: "string", minLength: 1 },
+        },
+      },
+      required: ["summary", "counterEvidence", "confidence", "limitations"],
+      additionalProperties: false,
+    },
+    recommended: { $ref: "#/$defs/adaptationOption" },
+    alternative: { $ref: "#/$defs/adaptationOption" },
+  },
+  required: [
+    "reviewId",
+    "sourceWorkoutId",
+    "expectedPlanVersion",
+    "evidenceRefs",
+    "rationale",
+    "recommended",
+    "alternative",
+  ],
+  additionalProperties: false,
+  $defs: {
+    prescription: {
+      type: "object",
+      properties: {
+        blocks: { type: "array", minItems: 1, items: { type: "object" } },
+      },
+      required: ["blocks"],
+      additionalProperties: false,
+    },
+    workoutChange: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            kind: { const: "create" },
+            workout: { type: "object" },
+          },
+          required: ["kind", "workout"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            kind: { const: "update" },
+            workoutId: { type: "string", minLength: 1 },
+            changes: {
+              type: "object",
+              properties: {
+                date: { type: "string", format: "date" },
+                title: { type: "string", minLength: 1 },
+                purpose: { type: "string", minLength: 1 },
+                distanceKm: { type: "number", exclusiveMinimum: 0 },
+                prescription: { $ref: "#/$defs/prescription" },
+              },
+              minProperties: 1,
+              additionalProperties: false,
+            },
+          },
+          required: ["kind", "workoutId", "changes"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            kind: { const: "delete" },
+            workoutId: { type: "string", minLength: 1 },
+          },
+          required: ["kind", "workoutId"],
+          additionalProperties: false,
+        },
+      ],
+    },
+    adaptationOption: {
+      type: "object",
+      properties: {
+        optionId: { type: "string", minLength: 1 },
+        label: { type: "string", minLength: 1 },
+        summary: { type: "string", minLength: 1 },
+        tradeoff: { type: "string", minLength: 1 },
+        workoutChanges: {
+          type: "array",
+          minItems: 1,
+          items: { $ref: "#/$defs/workoutChange" },
+        },
+      },
+      required: ["optionId", "label", "summary", "tradeoff", "workoutChanges"],
+      additionalProperties: false,
+    },
+  },
+} as WebMcpTool["inputSchema"];
+
+function createTools(
+  application: WorkspaceApplication,
+  options?: RegisterWebMcpOptions,
+): WebMcpTool[] {
   const annotations = {
     readOnlyHint: true,
     untrustedContentHint: false,
@@ -164,6 +289,32 @@ function createTools(application: WorkspaceApplication): WebMcpTool[] {
       }),
     ),
   });
+  if (options?.reviewMode === "primary") {
+    tools.push({
+      name: "review_workout_adaptation",
+      title: "Review workout adaptation",
+      description:
+        "Open one ranked Workout Adaptation review. The call remains pending while the Athlete compares the recommendation and alternative, and settles when they discuss further or dismiss this issue-14 review.",
+      inputSchema: reviewProposalSchema,
+      annotations: {
+        readOnlyHint: false,
+        untrustedContentHint: false,
+      },
+      execute: safeExecution(async (input, execution) => {
+        const opened = options.reviewCoordinator.open(input) as {
+          status: string;
+          reviewId?: string;
+        };
+        if (opened.status !== "review_opened" || !opened.reviewId) {
+          return opened;
+        }
+        return options.reviewCoordinator.waitForSettlement(
+          opened.reviewId,
+          execution.signal,
+        );
+      }),
+    });
+  }
   return tools;
 }
 
@@ -185,6 +336,7 @@ function withCleanup(
 export async function registerWebMcpTools(
   host: ModelContextHost | undefined,
   application: WorkspaceApplication,
+  options?: RegisterWebMcpOptions,
 ): Promise<WebMcpRegistration> {
   if (!host) {
     return withCleanup({
@@ -196,13 +348,14 @@ export async function registerWebMcpTools(
 
   const controller = new AbortController();
   try {
-    for (const tool of createTools(application)) {
+    const tools = createTools(application, options);
+    for (const tool of tools) {
       await host.registerTool(tool, { signal: controller.signal });
     }
     return withCleanup(
       {
         status: "connected",
-        toolNames: [...WEBMCP_TOOL_NAMES],
+        toolNames: tools.map(({ name }) => name),
         message: "Coach Agent tools are connected.",
       },
       controller,

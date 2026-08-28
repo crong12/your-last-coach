@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createWorkspaceApplication } from "../src/application/createWorkspaceApplication";
+import { createReviewCoordinator } from "../src/application/createReviewCoordinator";
 import type {
   PersistedWorkspace,
   WorkspaceRepository,
@@ -11,6 +12,90 @@ import {
   type WebMcpTool,
 } from "../src/adapters/webmcp/registerReadTools";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
+import type { ReviewProposal } from "../src/domain/review";
+
+function reviewProposal(): ReviewProposal {
+  const prescription = (distanceKm: number) => ({
+    blocks: [{ kind: "easy" as const, distanceKm }],
+  });
+  return {
+    reviewId: "review:webmcp",
+    sourceWorkoutId: "planned-2026-08-26-threshold",
+    expectedPlanVersion: 2,
+    evidenceRefs: [
+      "planned-workout:planned-2026-08-26-threshold",
+      "workout-result:result-2026-08-26-threshold",
+    ],
+    rationale: {
+      summary: "Accumulated fatigue is more consistent with the evidence.",
+      counterEvidence: "Sleep and HRV remain close to the normal range.",
+      confidence: "moderate",
+      limitations: ["One difficult workout cannot establish the cause."],
+    },
+    recommended: {
+      optionId: "recovery-first",
+      label: "Recovery first",
+      summary: "Reduce accumulated load.",
+      tradeoff: "Loses weekly volume.",
+      workoutChanges: [
+        { kind: "delete", workoutId: "planned-2026-08-27-recovery" },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-29-strides",
+          changes: {
+            title: "Easy run",
+            distanceKm: 6,
+            prescription: prescription(6),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-30-long",
+          changes: {
+            title: "Easy long run",
+            distanceKm: 14,
+            prescription: prescription(14),
+          },
+        },
+      ],
+    },
+    alternative: {
+      optionId: "keep-the-rhythm",
+      label: "Keep the rhythm",
+      summary: "Preserve more aerobic volume.",
+      tradeoff: "Provides less recovery.",
+      workoutChanges: [
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-27-recovery",
+          changes: {
+            title: "Very easy run",
+            distanceKm: 5,
+            prescription: prescription(5),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-29-strides",
+          changes: {
+            title: "Easy run",
+            distanceKm: 6,
+            prescription: prescription(6),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-30-long",
+          changes: {
+            title: "Easy long run",
+            distanceKm: 16,
+            prescription: prescription(16),
+          },
+        },
+      ],
+    },
+  };
+}
 
 async function createApplication() {
   const fixtureSource = createDemoCoachingContextSource();
@@ -46,6 +131,97 @@ function createRecordingHost() {
 }
 
 describe("WebMCP coaching tools", () => {
+  it("keeps primary and fallback review registrations mutually exclusive", async () => {
+    for (const mode of ["primary", "fallback"] as const) {
+      const application = await createApplication();
+      const coordinator = createReviewCoordinator({ application });
+      const { host, registrations } = createRecordingHost();
+
+      const registration = await registerWebMcpTools(host, application, {
+        reviewMode: mode,
+        reviewCoordinator: coordinator,
+      });
+      const names = registrations.map(({ tool }) => tool.name);
+
+      expect(names.includes("review_workout_adaptation")).toBe(
+        mode === "primary",
+      );
+      expect(names).not.toContain("open_workout_adaptation_review");
+      expect(names).not.toContain("read_workout_adaptation_decision");
+      expect(registration.toolNames).toEqual(names);
+    }
+  });
+
+  it("keeps an accepted primary call pending through selection and settles discussion", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "primary",
+      reviewCoordinator: coordinator,
+    });
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "review_workout_adaptation",
+    )!.tool;
+    let settled = false;
+    const pending = tool
+      .execute(reviewProposal() as unknown as Record<string, unknown>, {
+        signal: new AbortController().signal,
+      })
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+    coordinator.select("recovery-first");
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    coordinator.discussFurther();
+    await expect(pending).resolves.toEqual({
+      status: "discuss_further",
+      reviewId: "review:webmcp",
+    });
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
+  it("returns invalid, stale, and busy primary outcomes immediately", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "primary",
+      reviewCoordinator: coordinator,
+    });
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "review_workout_adaptation",
+    )!.tool;
+    const execution = { signal: new AbortController().signal };
+
+    await expect(tool.execute({}, execution)).resolves.toMatchObject({
+      status: "error",
+      code: "invalid_input",
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: expect.any(String) }),
+      ]),
+    });
+    const stale = reviewProposal();
+    stale.expectedPlanVersion = 1;
+    await expect(
+      tool.execute(stale as unknown as Record<string, unknown>, execution),
+    ).resolves.toMatchObject({ status: "error", code: "stale_plan" });
+
+    coordinator.open(reviewProposal());
+    await expect(
+      tool.execute(
+        reviewProposal() as unknown as Record<string, unknown>,
+        execution,
+      ),
+    ).resolves.toMatchObject({ status: "error", code: "busy" });
+  });
+
   it("registers three read tools and the retry-safe feedback mutation", async () => {
     const application = await createApplication();
     const { host, registrations } = createRecordingHost();

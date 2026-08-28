@@ -9,6 +9,7 @@ import { BrowserWorkspaceRepository } from "./adapters/persistence/BrowserWorksp
 import { registerWebMcpTools } from "./adapters/webmcp/registerReadTools";
 import type { ModelContextHost } from "./adapters/webmcp/types";
 import { createWorkspaceApplication } from "./application/createWorkspaceApplication";
+import { createReviewCoordinator } from "./application/createReviewCoordinator";
 import { initializeWorkspace } from "./application/initializeWorkspace";
 import { createDemoCoachingContextSource } from "./demo/demoCoachingContextSource";
 import { WorkspaceApp } from "./ui/WorkspaceApp";
@@ -23,12 +24,23 @@ async function bootstrap() {
     fixtureSource,
     repository,
   });
+  const reviewCoordinator = createReviewCoordinator({ application });
   const modelContext = (
     document as Document & { readonly modelContext?: ModelContextHost }
   ).modelContext;
+  const controlledHarnessMode = (
+    window as Window & {
+      __webMcpHarness?: { reviewMode?: "primary" | "fallback" };
+    }
+  ).__webMcpHarness?.reviewMode;
+  const reviewMode =
+    import.meta.env.DEV && controlledHarnessMode === "primary"
+      ? "primary"
+      : "fallback";
   const webMcpRegistration = await registerWebMcpTools(
     modelContext,
     application,
+    { reviewMode, reviewCoordinator },
   );
   window.addEventListener("pagehide", webMcpRegistration.cleanup, {
     once: true,
@@ -37,6 +49,7 @@ async function bootstrap() {
     <React.StrictMode>
       <WorkspaceApp
         application={application}
+        reviewCoordinator={reviewCoordinator}
         initialNotice={initialized.notice}
         initialDurability={initialized.durability}
         coachAgentConnection={webMcpRegistration}
