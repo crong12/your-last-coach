@@ -2,6 +2,7 @@ import type { WorkspaceRepository } from "./ports";
 import type { Durability } from "./ports";
 import type {
   CoachingContextSource,
+  AthleteFeedback,
   IsoDate,
   PlannedWorkout,
   WorkspaceState,
@@ -33,7 +34,30 @@ type TrainingPlanQueryResult = {
   plannedWorkouts: PlannedWorkout[];
 };
 
-type WorkspaceCommand = { type: "reset_demo" };
+type WorkspaceCommand =
+  | { type: "reset_demo" }
+  | {
+      type: "record_athlete_feedback";
+      requestId: unknown;
+      relatedWorkoutId: unknown;
+      rawText: unknown;
+      reported?: unknown;
+    };
+
+type CommandError = {
+  status: "error";
+  code: "invalid_input" | "not_found";
+  message: string;
+  retryable: false;
+};
+
+type RecordFeedbackResult =
+  | {
+      status: "ok";
+      feedback: AthleteFeedback;
+      durability: Durability;
+    }
+  | CommandError;
 
 export interface WorkspaceApplication {
   getState(): WorkspaceState;
@@ -50,10 +74,13 @@ export interface WorkspaceApplication {
     type: "get_workout_context";
     workoutId: unknown;
   }): ReadResult<WorkoutContextData>;
-  command(command: WorkspaceCommand): Promise<{
+  command(command: { type: "reset_demo" }): Promise<{
     status: "reset";
     durability: Durability;
   }>;
+  command(
+    command: Extract<WorkspaceCommand, { type: "record_athlete_feedback" }>,
+  ): Promise<RecordFeedbackResult>;
   subscribe(listener: () => void): () => void;
 }
 
@@ -68,6 +95,76 @@ export function createWorkspaceApplication(
 ): WorkspaceApplication {
   let state = deepFreeze(structuredClone(options.initialState));
   const listeners = new Set<() => void>();
+
+  const invalidFeedback = (message: string): CommandError => ({
+    status: "error",
+    code: "invalid_input",
+    message,
+    retryable: false,
+  });
+
+  const normalizeReported = (
+    value: unknown,
+  ): {
+    value?: NonNullable<AthleteFeedback["reported"]>;
+    error?: CommandError;
+  } => {
+    if (value === undefined) return {};
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return {
+        error: invalidFeedback("reported must be an object when provided."),
+      };
+    }
+    const reported = value as Record<string, unknown>;
+    const accepted = ["sessionRpe", "legFeel", "painReported", "stoppedReason"];
+    if (Object.keys(reported).some((key) => !accepted.includes(key))) {
+      return {
+        error: invalidFeedback("reported contains an unsupported field."),
+      };
+    }
+    const normalized: NonNullable<AthleteFeedback["reported"]> = {};
+    if (reported.sessionRpe !== undefined) {
+      if (
+        typeof reported.sessionRpe !== "number" ||
+        !Number.isFinite(reported.sessionRpe) ||
+        reported.sessionRpe < 0 ||
+        reported.sessionRpe > 10
+      ) {
+        return {
+          error: invalidFeedback(
+            "reported.sessionRpe must be a finite number from 0 through 10.",
+          ),
+        };
+      }
+      normalized.sessionRpe = reported.sessionRpe;
+    }
+    for (const field of ["legFeel", "stoppedReason"] as const) {
+      if (reported[field] !== undefined) {
+        if (
+          typeof reported[field] !== "string" ||
+          reported[field].trim() === ""
+        ) {
+          return {
+            error: invalidFeedback(
+              `reported.${field} must be a non-empty string when provided.`,
+            ),
+          };
+        }
+        normalized[field] = reported[field].trim();
+      }
+    }
+    if (reported.painReported !== undefined) {
+      if (typeof reported.painReported !== "boolean") {
+        return {
+          error: invalidFeedback(
+            "reported.painReported must be a boolean when provided.",
+          ),
+        };
+      }
+      normalized.painReported = reported.painReported;
+    }
+    return { value: normalized };
+  };
 
   const query = ((
     query:
@@ -118,7 +215,85 @@ export function createWorkspaceApplication(
       return state;
     },
     query,
-    async command(_command) {
+    command: (async (command: WorkspaceCommand) => {
+      if (command.type === "record_athlete_feedback") {
+        if (
+          typeof command.requestId !== "string" ||
+          command.requestId.trim() === ""
+        ) {
+          return invalidFeedback("requestId must be a non-empty string.");
+        }
+        const existing = state.athleteFeedback.find(
+          ({ requestId }) => requestId === command.requestId,
+        );
+        if (existing) {
+          return {
+            status: "ok",
+            feedback: existing,
+            durability: options.repository.durability ?? "persistent",
+          };
+        }
+        if (
+          typeof command.relatedWorkoutId !== "string" ||
+          command.relatedWorkoutId.trim() === ""
+        ) {
+          return invalidFeedback(
+            "relatedWorkoutId must be a non-empty Planned Workout ID.",
+          );
+        }
+        if (
+          !state.trainingPlan.plannedWorkouts.some(
+            ({ id }) => id === command.relatedWorkoutId,
+          )
+        ) {
+          return {
+            status: "error",
+            code: "not_found",
+            message: `No Planned Workout was found for relatedWorkoutId ${command.relatedWorkoutId}.`,
+            retryable: false,
+          };
+        }
+        if (
+          typeof command.rawText !== "string" ||
+          command.rawText.trim() === ""
+        ) {
+          return invalidFeedback("rawText must be a non-empty string.");
+        }
+        const normalized = normalizeReported(command.reported);
+        if (normalized.error) return normalized.error;
+
+        const feedback: AthleteFeedback = {
+          id: `athlete-feedback:${command.requestId}`,
+          requestId: command.requestId,
+          relatedWorkoutId: command.relatedWorkoutId,
+          rawText: command.rawText,
+          ...(command.reported === undefined
+            ? {}
+            : { reported: normalized.value ?? {} }),
+          recordedAt: state.clock.now,
+        };
+        state = deepFreeze({
+          ...state,
+          athleteFeedback: [...state.athleteFeedback, feedback],
+          processedRequestIds: [
+            ...state.processedRequestIds,
+            command.requestId,
+          ],
+        });
+        listeners.forEach((listener) => listener());
+        let durability: Durability = "persistent";
+        try {
+          durability = await options.repository.save({
+            schemaVersion: 1,
+            seedVersion: "demo-athlete-v1",
+            savedAt: state.clock.now,
+            state,
+          });
+        } catch {
+          durability = "memory_only";
+        }
+        return { status: "ok", feedback, durability };
+      }
       let durability: Durability = "persistent";
       try {
         await options.repository.clear();
@@ -129,7 +304,7 @@ export function createWorkspaceApplication(
       state = await options.fixtureSource.loadContext();
       listeners.forEach((listener) => listener());
       return { status: "reset", durability };
-    },
+    }) as WorkspaceApplication["command"],
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

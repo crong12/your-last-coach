@@ -4,7 +4,11 @@ import type { CoachAgentConnection } from "../adapters/webmcp/types";
 import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
-import type { PlannedWorkout, WorkoutResult } from "../domain/types";
+import type {
+  AthleteFeedback,
+  PlannedWorkout,
+  WorkoutResult,
+} from "../domain/types";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -356,9 +360,11 @@ function ResetDialog({
 function ContextRail({
   context,
   plannedWorkouts,
+  athleteFeedback,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
+  athleteFeedback: AthleteFeedback[];
 }) {
   const { observations } = context;
   const priorWeekDistanceKm = context.recentTraining
@@ -435,6 +441,55 @@ function ContextRail({
           Seeded synthetic observations
         </small>
       </section>
+      {athleteFeedback.length > 0 && (
+        <section className="feedback-card" aria-labelledby="feedback-title">
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">What you told me</span>
+              <h2 id="feedback-title">Athlete Feedback</h2>
+            </div>
+          </div>
+          <ol className="feedback-list">
+            {athleteFeedback.map((feedback) => (
+              <li key={feedback.id}>
+                <blockquote>{feedback.rawText}</blockquote>
+                {feedback.reported && (
+                  <dl className="feedback-reported">
+                    {feedback.reported.sessionRpe !== undefined && (
+                      <div>
+                        <dt>Effort</dt>
+                        <dd>{feedback.reported.sessionRpe}/10 effort</dd>
+                      </div>
+                    )}
+                    {feedback.reported.legFeel !== undefined && (
+                      <div>
+                        <dt>Legs</dt>
+                        <dd>{feedback.reported.legFeel}</dd>
+                      </div>
+                    )}
+                    {feedback.reported.painReported !== undefined && (
+                      <div>
+                        <dt>Pain</dt>
+                        <dd>
+                          {feedback.reported.painReported
+                            ? "Pain reported"
+                            : "No pain reported"}
+                        </dd>
+                      </div>
+                    )}
+                    {feedback.reported.stoppedReason !== undefined && (
+                      <div>
+                        <dt>Why you stopped</dt>
+                        <dd>{feedback.reported.stoppedReason}</dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <section className="recent-training-card">
         <div className="section-heading section-heading--small">
           <div>
@@ -639,6 +694,7 @@ export function WorkspaceApp({
         <ContextRail
           context={athleteContext.data}
           plannedWorkouts={state.trainingPlan.plannedWorkouts}
+          athleteFeedback={state.athleteFeedback}
         />
       </main>
 
