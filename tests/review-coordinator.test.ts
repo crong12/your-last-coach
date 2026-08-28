@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createReviewCoordinator } from "../src/application/createReviewCoordinator";
 import { createWorkspaceApplication } from "../src/application/createWorkspaceApplication";
@@ -129,6 +129,117 @@ async function setup() {
 }
 
 describe("Workout Adaptation review coordinator", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("persists one fallback timeout after five minutes without mutating the plan", async () => {
+    vi.useFakeTimers();
+    const { application } = await setup();
+    const coordinator = createReviewCoordinator({ application });
+    const before = application.getState();
+
+    coordinator.open(acceptedProposal(), "fallback");
+    await vi.advanceTimersByTimeAsync(300_000);
+
+    expect(coordinator.getState()).toEqual({ status: "idle" });
+    await expect(
+      application.readFallbackResult("review:rest-of-week:2026-08-26"),
+    ).resolves.toEqual({
+      status: "cancelled",
+      reviewId: "review:rest-of-week:2026-08-26",
+      reason: "timeout",
+    });
+    expect(application.getState()).toBe(before);
+  });
+
+  it("rejects stale UI actions from an earlier review generation", async () => {
+    const { coordinator } = await setup();
+    coordinator.open(acceptedProposal());
+    const first = coordinator.getState();
+    if (first.status !== "reviewing") throw new Error("Expected review");
+    await coordinator.dismiss("athlete_dismissed", first.generation);
+    coordinator.open(acceptedProposal());
+
+    expect(
+      coordinator.select("recovery-first", first.generation),
+    ).toMatchObject({ status: "error", code: "not_found" });
+    expect(coordinator.getState()).toMatchObject({
+      status: "reviewing",
+      selectedOptionId: null,
+    });
+    expect(coordinator.discussFurther(first.generation)).toMatchObject({
+      status: "error",
+      code: "not_found",
+    });
+    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+  });
+
+  it("settles in memory when fallback cancellation persistence rejects", async () => {
+    const fixtureSource = createDemoCoachingContextSource();
+    const application = createWorkspaceApplication({
+      initialState: await fixtureSource.loadContext(),
+      fixtureSource,
+      repository: {
+        async load() {
+          return null;
+        },
+        async save() {
+          throw new Error("storage failed");
+        },
+        async clear() {},
+      },
+    });
+    const coordinator = createReviewCoordinator({ application });
+    coordinator.open(acceptedProposal(), "fallback");
+
+    await expect(coordinator.discussFurther()).resolves.toEqual({
+      status: "discuss_further",
+      reviewId: "review:rest-of-week:2026-08-26",
+    });
+    expect(coordinator.getState()).toEqual({ status: "idle" });
+    expect(application.hasUndeliveredFallbackResult()).toBe(true);
+  });
+
+  it("disposes an active primary waiter once and clears its timeout", async () => {
+    vi.useFakeTimers();
+    const { application } = await setup();
+    const coordinator = createReviewCoordinator({ application });
+    coordinator.open(acceptedProposal());
+    const pending = coordinator.waitForSettlement(
+      "review:rest-of-week:2026-08-26",
+    );
+
+    coordinator.dispose();
+    coordinator.dispose();
+
+    await expect(pending).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "teardown",
+    });
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(coordinator.getState()).toEqual({ status: "idle" });
+  });
+
+  it("lets the first fallback cancellation win across abort, teardown, and timeout", async () => {
+    vi.useFakeTimers();
+    const { application, saved } = await setup();
+    const coordinator = createReviewCoordinator({ application });
+    const controller = new AbortController();
+    coordinator.open(acceptedProposal(), "fallback", controller.signal);
+
+    controller.abort();
+    coordinator.dispose();
+    await vi.advanceTimersByTimeAsync(300_000);
+    await expect.poll(() => coordinator.getState()).toEqual({ status: "idle" });
+
+    expect(saved).toHaveLength(1);
+    await expect(
+      application.readFallbackResult("review:rest-of-week:2026-08-26"),
+    ).resolves.toEqual({
+      status: "cancelled",
+      reviewId: "review:rest-of-week:2026-08-26",
+      reason: "host_aborted",
+    });
+  });
   it("requires a selection, then approves and settles with the structured application result", async () => {
     const { application, coordinator, saved } = await setup();
     coordinator.open(acceptedProposal());
@@ -320,14 +431,14 @@ describe("Workout Adaptation review coordinator", () => {
       message: "Another Workout Adaptation review is already active.",
       retryable: true,
     });
-    expect(coordinator.discussFurther()).toEqual({
+    await expect(coordinator.discussFurther()).resolves.toEqual({
       status: "discuss_further",
       reviewId: "review:rest-of-week:2026-08-26",
     });
     expect(application.getState()).toEqual(before);
 
     coordinator.open(acceptedProposal());
-    expect(coordinator.dismiss("athlete_dismissed")).toEqual({
+    await expect(coordinator.dismiss("athlete_dismissed")).resolves.toEqual({
       status: "cancelled",
       reviewId: "review:rest-of-week:2026-08-26",
       reason: "athlete_dismissed",
@@ -336,7 +447,10 @@ describe("Workout Adaptation review coordinator", () => {
 
     coordinator.open(acceptedProposal());
     const reset = coordinator.reset();
-    expect(reset).toMatchObject({ status: "cancelled", reason: "reset" });
+    await expect(reset).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "reset",
+    });
     await application.command({ type: "reset_demo" });
     expect(application.getState()).toEqual(await fixtureSource.loadContext());
     expect(saved).toHaveLength(0);

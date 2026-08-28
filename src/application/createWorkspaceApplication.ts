@@ -1,5 +1,6 @@
 import type { WorkspaceRepository } from "./ports";
 import type { Durability } from "./ports";
+import type { PersistedFallbackResult } from "./ports";
 import type {
   CoachingContextSource,
   AppliedPlanAdaptation,
@@ -30,6 +31,7 @@ interface CreateWorkspaceApplicationOptions {
   initialState: WorkspaceState;
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
+  initialUndeliveredFallbackResult?: PersistedFallbackResult;
 }
 
 type CalendarQuery =
@@ -66,7 +68,7 @@ type CommandError = {
 
 type PlanApprovalError = {
   status: "error";
-  code: "invalid_input" | "stale_plan" | "busy";
+  code: "invalid_input" | "stale_plan" | "busy" | "cancelled";
   message: string;
   retryable: boolean;
   issues?: unknown[];
@@ -110,11 +112,28 @@ export interface WorkspaceApplication {
   command(
     command: Extract<WorkspaceCommand, { type: "apply_plan_approval" }>,
   ): Promise<PlanApprovalResult | PlanApprovalError>;
-  activatePlanReview(proposal: ReviewProposal): void;
+  activatePlanReview(
+    proposal: ReviewProposal,
+    delivery?: "primary" | "fallback",
+  ): void;
   deactivatePlanReview(reviewId: string): void;
   getPlanApproval(reviewId: string): PlanApprovalResult | null;
+  hasUndeliveredFallbackResult(): boolean;
+  cancelPlanReview(
+    result?: Exclude<PersistedFallbackResult, { status: "approved" }>,
+  ): Promise<void>;
+  readFallbackResult(
+    reviewId: unknown,
+  ): Promise<
+    | ReviewFallbackDelivery
+    | { status: "not_ready"; reviewId: string }
+    | CommandError
+  >;
   subscribe(listener: () => void): () => void;
 }
+
+type ReviewFallbackDelivery =
+  PlanApprovalResult | Exclude<PersistedFallbackResult, { status: "approved" }>;
 
 function addDays(date: IsoDate, days: number): IsoDate {
   const next = new Date(`${date}T00:00:00Z`);
@@ -132,7 +151,40 @@ export function createWorkspaceApplication(
     reviewId: string;
     promise: Promise<PlanApprovalResult | PlanApprovalError>;
   } | null = null;
-  let activePlanReview: ReviewProposal | null = null;
+  let activePlanReview: {
+    proposal: ReviewProposal;
+    delivery: "primary" | "fallback";
+    generation: number;
+  } | null = null;
+  let reviewGeneration = 0;
+  let undeliveredFallbackResult = options.initialUndeliveredFallbackResult;
+  let persistenceTail: Promise<void> = Promise.resolve();
+
+  const persist = (
+    persistedState: WorkspaceState,
+    fallbackResult = undeliveredFallbackResult,
+  ): Promise<Durability> => {
+    let durability: Durability = "persistent";
+    const operation = persistenceTail.then(async () => {
+      durability = await options.repository.save({
+        schemaVersion: 1,
+        seedVersion: "demo-athlete-v1",
+        savedAt: persistedState.clock.now,
+        state: persistedState,
+        ...(fallbackResult === undefined
+          ? {}
+          : { undeliveredFallbackResult: fallbackResult }),
+      });
+    });
+    persistenceTail = operation.catch(() => undefined);
+    return operation.then(() => durability);
+  };
+
+  const clearPersisted = (): Promise<void> => {
+    const operation = persistenceTail.then(() => options.repository.clear());
+    persistenceTail = operation.catch(() => undefined);
+    return operation;
+  };
 
   const replay = (receipt: AppliedPlanAdaptation): PlanApprovalResult => ({
     status: "approved",
@@ -297,17 +349,69 @@ export function createWorkspaceApplication(
       return state;
     },
     query,
-    activatePlanReview(proposal) {
-      activePlanReview = proposal;
+    activatePlanReview(proposal, delivery = "primary") {
+      activePlanReview = {
+        proposal,
+        delivery,
+        generation: ++reviewGeneration,
+      };
     },
     deactivatePlanReview(reviewId) {
-      if (activePlanReview?.reviewId === reviewId) activePlanReview = null;
+      if (activePlanReview?.proposal.reviewId === reviewId)
+        activePlanReview = null;
     },
     getPlanApproval(reviewId) {
       const receipt = state.adaptationReceipts.find(
         (candidate) => candidate.reviewId === reviewId,
       );
       return receipt ? replay(receipt) : null;
+    },
+    hasUndeliveredFallbackResult() {
+      return undeliveredFallbackResult !== undefined;
+    },
+    async cancelPlanReview(result) {
+      const restoreAfterApproval = approvalInFlight !== null;
+      reviewGeneration += 1;
+      activePlanReview = null;
+      if (result) {
+        try {
+          await persist(state, result);
+        } catch {
+          // Keep the completed decision available in memory for this page.
+        }
+        undeliveredFallbackResult = result;
+      } else if (restoreAfterApproval) {
+        try {
+          await persist(state);
+        } catch {
+          // BrowserWorkspaceRepository already retains the authoritative page
+          // state in memory when durable storage is unavailable.
+        }
+      }
+    },
+    async readFallbackResult(reviewId) {
+      if (typeof reviewId !== "string" || reviewId.trim() === "") {
+        return invalidFeedback("reviewId must be a non-empty string.");
+      }
+      const claimed = undeliveredFallbackResult;
+      if (!claimed || claimed.reviewId !== reviewId) {
+        return { status: "not_ready", reviewId };
+      }
+      undeliveredFallbackResult = undefined;
+      try {
+        const durability = await persist(state, undefined);
+        return claimed.status === "approved"
+          ? { ...claimed, durability }
+          : claimed;
+      } catch {
+        undeliveredFallbackResult = claimed;
+        return {
+          status: "error",
+          code: "not_found",
+          message: "The completed fallback decision could not be delivered.",
+          retryable: false,
+        };
+      }
     },
     command: (async (command: WorkspaceCommand) => {
       if (command.type === "apply_plan_approval") {
@@ -348,8 +452,9 @@ export function createWorkspaceApplication(
         }
         if (
           !activePlanReview ||
-          activePlanReview.reviewId !== reviewId ||
-          activePlanReview.expectedPlanVersion !== command.expectedPlanVersion
+          activePlanReview.proposal.reviewId !== reviewId ||
+          activePlanReview.proposal.expectedPlanVersion !==
+            command.expectedPlanVersion
         ) {
           return {
             status: "error",
@@ -372,8 +477,8 @@ export function createWorkspaceApplication(
           };
         }
         const activeOption = [
-          activePlanReview.recommended,
-          activePlanReview.alternative,
+          activePlanReview.proposal.recommended,
+          activePlanReview.proposal.alternative,
         ].find(({ optionId }) => optionId === validated.option.optionId);
         if (
           !activeOption ||
@@ -386,6 +491,7 @@ export function createWorkspaceApplication(
             retryable: false,
           };
         }
+        const approvalGeneration = activePlanReview.generation;
         const promise = (async () => {
           const { plannedWorkouts, affectedWorkouts } = applyOption(
             state.trainingPlan.plannedWorkouts,
@@ -430,18 +536,29 @@ export function createWorkspaceApplication(
               issues: nextValidation.errors,
             };
           }
+          const persistedFallbackResult: PersistedFallbackResult | undefined =
+            activePlanReview?.delivery === "fallback"
+              ? { status: "approved", ...receipt }
+              : undeliveredFallbackResult;
           let durability: Durability = "persistent";
           try {
-            durability = await options.repository.save({
-              schemaVersion: 1,
-              seedVersion: "demo-athlete-v1",
-              savedAt: nextState.clock.now,
-              state: nextState,
-            });
+            durability = await persist(nextState, persistedFallbackResult);
           } catch {
             durability = "memory_only";
           }
+          if (
+            reviewGeneration !== approvalGeneration ||
+            activePlanReview?.generation !== approvalGeneration
+          ) {
+            return {
+              status: "error" as const,
+              code: "cancelled" as const,
+              message: "Plan Approval was cancelled before publication.",
+              retryable: false,
+            };
+          }
           state = nextState;
+          undeliveredFallbackResult = persistedFallbackResult;
           activePlanReview = null;
           approvalDurability.set(reviewId, durability);
           listeners.forEach((listener) => listener());
@@ -455,6 +572,7 @@ export function createWorkspaceApplication(
         }
       }
       if (command.type === "record_athlete_feedback") {
+        if (approvalInFlight) await approvalInFlight.promise;
         if (
           typeof command.requestId !== "string" ||
           command.requestId.trim() === ""
@@ -521,20 +639,18 @@ export function createWorkspaceApplication(
         listeners.forEach((listener) => listener());
         let durability: Durability = "persistent";
         try {
-          durability = await options.repository.save({
-            schemaVersion: 1,
-            seedVersion: "demo-athlete-v1",
-            savedAt: state.clock.now,
-            state,
-          });
+          durability = await persist(state);
         } catch {
           durability = "memory_only";
         }
         return { status: "ok", feedback, durability };
       }
+      reviewGeneration += 1;
+      activePlanReview = null;
+      undeliveredFallbackResult = undefined;
       let durability: Durability = "persistent";
       try {
-        await options.repository.clear();
+        await clearPersisted();
       } catch {
         durability = "memory_only";
       }

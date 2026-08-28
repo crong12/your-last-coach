@@ -23,6 +23,7 @@ async function bootstrap() {
     initialState: initialized.state,
     fixtureSource,
     repository,
+    initialUndeliveredFallbackResult: initialized.undeliveredFallbackResult,
   });
   const reviewCoordinator = createReviewCoordinator({ application });
   const modelContext = (
@@ -42,9 +43,13 @@ async function bootstrap() {
     application,
     { reviewMode, reviewCoordinator },
   );
-  window.addEventListener("pagehide", webMcpRegistration.cleanup, {
-    once: true,
-  });
+  const cleanup = () => {
+    window.removeEventListener("pagehide", cleanup);
+    window.removeEventListener("beforeunload", cleanup);
+    webMcpRegistration.cleanup();
+  };
+  window.addEventListener("pagehide", cleanup, { once: true });
+  window.addEventListener("beforeunload", cleanup, { once: true });
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <WorkspaceApp

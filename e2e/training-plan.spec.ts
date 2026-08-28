@@ -242,9 +242,9 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
 test("applies Recovery first atomically through Adapt my plan", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "primary");
+  await installWebMcpHarness(page, "fallback");
   await page.goto("/");
-  await page.evaluate((proposal) => {
+  const opened = await page.evaluate(async (proposal) => {
     const harness = window as unknown as {
       __webMcpHarness: {
         registrations: Array<{
@@ -257,16 +257,19 @@ test("applies Recovery first atomically through Adapt my plan", async ({
           };
         }>;
       };
-      __reviewResult?: unknown;
     };
     const tool = harness.__webMcpHarness.registrations.find(
-      ({ tool }) => tool.name === "review_workout_adaptation",
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
     )?.tool;
-    if (!tool) throw new Error("Primary review tool was not registered");
-    void tool
-      .execute(proposal, { signal: new AbortController().signal })
-      .then((result) => (harness.__reviewResult = result));
+    if (!tool) throw new Error("Fallback open tool was not registered");
+    return tool.execute(proposal, {
+      signal: new AbortController().signal,
+    });
   }, acceptedReviewProposal());
+  expect(opened).toEqual({
+    status: "review_opened",
+    reviewId: "review:playwright",
+  });
 
   const dialog = page.getByRole("dialog", {
     name: "Review Workout Adaptations",
@@ -291,10 +294,31 @@ test("applies Recovery first atomically through Adapt my plan", async ({
   ).toHaveCount(0);
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as { __reviewResult?: unknown }).__reviewResult,
-      ),
+      page.evaluate(async () => {
+        const registrations = (
+          window as unknown as {
+            __webMcpHarness: {
+              registrations: Array<{
+                tool: {
+                  name: string;
+                  execute: (
+                    input: Record<string, unknown>,
+                    options: { signal: AbortSignal },
+                  ) => Promise<unknown>;
+                };
+              }>;
+            };
+          }
+        ).__webMcpHarness.registrations;
+        const tool = registrations.find(
+          ({ tool }) => tool.name === "read_workout_adaptation_decision",
+        )?.tool;
+        if (!tool) throw new Error("Fallback read tool was not registered");
+        return tool.execute(
+          { reviewId: "review:playwright" },
+          { signal: new AbortController().signal },
+        );
+      }),
     )
     .toMatchObject({
       status: "approved",
@@ -457,10 +481,12 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
     "get_training_plan",
     "get_workout_context",
     "record_athlete_feedback",
+    "open_workout_adaptation_review",
+    "read_workout_adaptation_decision",
   ]);
   expect(
     result.registrations.map(({ annotations }) => annotations.readOnlyHint),
-  ).toEqual([true, true, true, false]);
+  ).toEqual([true, true, true, false, false, true]);
   expect(result.athlete).toMatchObject({
     status: "ok",
     data: { athlete: { displayName: "Sam" } },

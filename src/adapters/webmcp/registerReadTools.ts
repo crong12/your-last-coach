@@ -301,19 +301,53 @@ function createTools(
         untrustedContentHint: false,
       },
       execute: safeExecution(async (input, execution) => {
-        const opened = options.reviewCoordinator.open(input) as {
+        const opened = options.reviewCoordinator.open(
+          input,
+          "primary",
+          execution.signal,
+        ) as {
           status: string;
           reviewId?: string;
         };
         if (opened.status !== "review_opened" || !opened.reviewId) {
           return opened;
         }
-        return options.reviewCoordinator.waitForSettlement(
-          opened.reviewId,
-          execution.signal,
-        );
+        return options.reviewCoordinator.waitForSettlement(opened.reviewId);
       }),
     });
+  } else if (options?.reviewMode === "fallback") {
+    tools.push(
+      {
+        name: "open_workout_adaptation_review",
+        title: "Open workout adaptation review",
+        description:
+          "Open one ranked Workout Adaptation review and return immediately while the Athlete decides in the workspace.",
+        inputSchema: reviewProposalSchema,
+        annotations: {
+          readOnlyHint: false,
+          untrustedContentHint: false,
+        },
+        execute: safeExecution((input, execution) =>
+          options.reviewCoordinator.open(input, "fallback", execution.signal),
+        ),
+      },
+      {
+        name: "read_workout_adaptation_decision",
+        title: "Read workout adaptation decision",
+        description:
+          "Read the completed fallback decision once, or report that the active review is not ready.",
+        inputSchema: {
+          type: "object",
+          properties: { reviewId: { type: "string", minLength: 1 } },
+          required: ["reviewId"],
+          additionalProperties: false,
+        },
+        annotations,
+        execute: safeExecution((input) =>
+          application.readFallbackResult(input.reviewId),
+        ),
+      },
+    );
   }
   return tools;
 }
@@ -321,6 +355,7 @@ function createTools(
 function withCleanup(
   connection: CoachAgentConnection,
   controller?: AbortController,
+  onCleanup?: () => void,
 ): WebMcpRegistration {
   let cleanedUp = false;
   return {
@@ -329,6 +364,7 @@ function withCleanup(
       if (cleanedUp) return;
       cleanedUp = true;
       controller?.abort();
+      onCleanup?.();
     },
   };
 }
@@ -359,6 +395,7 @@ export async function registerWebMcpTools(
         message: "Coach Agent tools are connected.",
       },
       controller,
+      options?.reviewCoordinator.dispose,
     );
   } catch {
     controller.abort();

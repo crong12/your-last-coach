@@ -554,17 +554,18 @@ export function ReviewModal({
   useEffect(() => {
     if (review.status !== "reviewing") return;
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") coordinator.dismiss("athlete_dismissed");
+      if (event.key === "Escape")
+        void coordinator.dismiss("athlete_dismissed", review.generation);
     };
     window.addEventListener("keydown", dismissOnEscape);
     return () => window.removeEventListener("keydown", dismissOnEscape);
-  }, [coordinator, review.status]);
+  }, [coordinator, review]);
 
   if (review.status !== "reviewing") return null;
   const { proposal } = review;
   const approve = async () => {
     setApprovalError(null);
-    const result = (await coordinator.approve()) as {
+    const result = (await coordinator.approve(review.generation)) as {
       status: string;
       durability?: Durability;
       message?: string;
@@ -587,7 +588,7 @@ export function ReviewModal({
         className={`review-option review-option--${role} ${selected ? "review-option--selected" : ""}`}
         aria-pressed={selected}
         aria-label={`${prefix} — ${option.label}`}
-        onClick={() => coordinator.select(option.optionId)}
+        onClick={() => coordinator.select(option.optionId, review.generation)}
       >
         <span className="eyebrow">{prefix}</span>
         <strong>{option.label}</strong>
@@ -601,7 +602,9 @@ export function ReviewModal({
     <div
       className="dialog-backdrop review-backdrop"
       role="presentation"
-      onMouseDown={() => coordinator.dismiss("athlete_dismissed")}
+      onMouseDown={() =>
+        void coordinator.dismiss("athlete_dismissed", review.generation)
+      }
     >
       <section
         className="review-dialog"
@@ -612,7 +615,9 @@ export function ReviewModal({
       >
         <button
           className="icon-button"
-          onClick={() => coordinator.dismiss("athlete_dismissed")}
+          onClick={() =>
+            void coordinator.dismiss("athlete_dismissed", review.generation)
+          }
           aria-label="Close adaptation review"
         >
           ×
@@ -655,7 +660,7 @@ export function ReviewModal({
           <button
             className="button button--quiet"
             disabled={review.applying}
-            onClick={() => coordinator.discussFurther()}
+            onClick={() => void coordinator.discussFurther(review.generation)}
           >
             None — discuss further
           </button>
@@ -728,7 +733,7 @@ export function WorkspaceApp({
         : "unavailable";
 
   const resetDemo = async () => {
-    reviewCoordinator.reset();
+    await Promise.resolve(reviewCoordinator.reset());
     const outcome = await application.command({ type: "reset_demo" });
     setDurability(outcome.durability);
     setView("week");
