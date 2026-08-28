@@ -1,4 +1,4 @@
-import type { WorkspaceState } from "./types";
+import type { PlannedWorkout, WorkspaceState } from "./types";
 
 const WORKOUT_TYPES = new Set([
   "easy",
@@ -30,8 +30,14 @@ const isPositiveInteger = (value: unknown): value is number =>
 const isTimestamp = (value: unknown): value is string =>
   isNonEmptyString(value) && Number.isFinite(Date.parse(value));
 
-const isIsoDate = (value: unknown): value is string =>
-  isNonEmptyString(value) && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const isIsoDate = (value: unknown): value is string => {
+  if (!isNonEmptyString(value) || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
+  );
+};
 
 function validateUniqueStrings(
   value: unknown,
@@ -66,6 +72,24 @@ function isValidWorkoutBlock(value: unknown): boolean {
   return (
     Number(value.targetPaceSecondsPerKm.min) <=
     Number(value.targetPaceSecondsPerKm.max)
+  );
+}
+
+function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isIsoDate(value.date) &&
+    value.date.startsWith("2026-08-") &&
+    isNonEmptyString(value.type) &&
+    WORKOUT_TYPES.has(value.type) &&
+    isNonEmptyString(value.title) &&
+    isNonEmptyString(value.purpose) &&
+    isPositiveNumber(value.distanceKm) &&
+    isRecord(value.prescription) &&
+    Array.isArray(value.prescription.blocks) &&
+    value.prescription.blocks.length > 0 &&
+    value.prescription.blocks.every(isValidWorkoutBlock)
   );
 }
 
@@ -160,19 +184,7 @@ function validateTrainingPlan(value: unknown, errors: string[]): Set<string> {
     }
     workoutIds.add(workout.id);
 
-    if (
-      !isIsoDate(workout.date) ||
-      !workout.date.startsWith("2026-08-") ||
-      !isNonEmptyString(workout.type) ||
-      !WORKOUT_TYPES.has(workout.type) ||
-      !isNonEmptyString(workout.title) ||
-      !isNonEmptyString(workout.purpose) ||
-      !isPositiveNumber(workout.distanceKm) ||
-      !isRecord(workout.prescription) ||
-      !Array.isArray(workout.prescription.blocks) ||
-      workout.prescription.blocks.length === 0 ||
-      workout.prescription.blocks.some((block) => !isValidWorkoutBlock(block))
-    ) {
+    if (!isValidPlannedWorkout(workout)) {
       errors.push(`Invalid Planned Workout: ${workout.id}`);
     }
   }
@@ -324,6 +336,62 @@ function validateMutationHistory(value: unknown, errors: string[]) {
   }
 }
 
+function validateAdaptationReceipts(
+  value: unknown,
+  currentPlanVersion: unknown,
+  errors: string[],
+): Set<string> {
+  const reviewIds = new Set<string>();
+  if (!Array.isArray(value)) {
+    errors.push("Adaptation receipts must be an array");
+    return reviewIds;
+  }
+  for (const receipt of value) {
+    if (!isRecord(receipt)) {
+      errors.push("Applied Plan Adaptation is invalid");
+      continue;
+    }
+    const selected = receipt.selectedOption;
+    const affected = receipt.affectedWorkouts;
+    const validAffected =
+      Array.isArray(affected) &&
+      affected.length > 0 &&
+      affected.every((item) => {
+        if (!isRecord(item) || !isNonEmptyString(item.workoutId)) return false;
+        const before = item.before;
+        const after = item.after;
+        const validBefore =
+          before === null ||
+          (isValidPlannedWorkout(before) && before.id === item.workoutId);
+        const validAfter =
+          after === null ||
+          (isValidPlannedWorkout(after) && after.id === item.workoutId);
+        return (
+          validBefore && validAfter && !(before === null && after === null)
+        );
+      });
+    if (
+      !isNonEmptyString(receipt.reviewId) ||
+      reviewIds.has(receipt.reviewId) ||
+      !isRecord(selected) ||
+      !isNonEmptyString(selected.optionId) ||
+      !isNonEmptyString(selected.label) ||
+      !validAffected ||
+      !isTimestamp(receipt.appliedAt) ||
+      !isPositiveInteger(receipt.planVersionBefore) ||
+      !isPositiveInteger(receipt.planVersionAfter) ||
+      receipt.planVersionAfter !== receipt.planVersionBefore + 1 ||
+      !isPositiveInteger(currentPlanVersion) ||
+      receipt.planVersionAfter > currentPlanVersion
+    ) {
+      errors.push("Applied Plan Adaptation is invalid");
+      continue;
+    }
+    reviewIds.add(receipt.reviewId);
+  }
+  return reviewIds;
+}
+
 export function validateWorkspaceState(value: unknown): {
   valid: boolean;
   errors: string[];
@@ -367,8 +435,19 @@ export function validateWorkspaceState(value: unknown): {
     "Applied review identifiers",
     errors,
   );
-  if (!Array.isArray(value.adaptationReceipts)) {
-    errors.push("Adaptation receipts must be an array");
+  const receiptReviewIds = validateAdaptationReceipts(
+    value.adaptationReceipts,
+    isRecord(value.trainingPlan) ? value.trainingPlan.planVersion : undefined,
+    errors,
+  );
+  const appliedReviewIds = Array.isArray(value.appliedReviewIds)
+    ? new Set(value.appliedReviewIds.filter(isNonEmptyString))
+    : new Set<string>();
+  if (
+    appliedReviewIds.size !== receiptReviewIds.size ||
+    [...appliedReviewIds].some((reviewId) => !receiptReviewIds.has(reviewId))
+  ) {
+    errors.push("Applied review identifiers must match adaptation receipts");
   }
   validateMutationHistory(value.mutationHistory, errors);
 

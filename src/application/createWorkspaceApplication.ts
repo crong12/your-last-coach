@@ -2,11 +2,18 @@ import type { WorkspaceRepository } from "./ports";
 import type { Durability } from "./ports";
 import type {
   CoachingContextSource,
+  AppliedPlanAdaptation,
   AthleteFeedback,
   IsoDate,
   PlannedWorkout,
   WorkspaceState,
 } from "../domain/types";
+import {
+  validateAdaptationOption,
+  type AdaptationOption,
+  type ReviewProposal,
+} from "../domain/review";
+import { validateWorkspaceState } from "../domain/validation";
 import { deepFreeze } from "../domain/immutable";
 import {
   selectAthleteContext,
@@ -42,6 +49,12 @@ type WorkspaceCommand =
       relatedWorkoutId: unknown;
       rawText: unknown;
       reported?: unknown;
+    }
+  | {
+      type: "apply_plan_approval";
+      reviewId: unknown;
+      expectedPlanVersion: unknown;
+      selectedOption: unknown;
     };
 
 type CommandError = {
@@ -49,6 +62,19 @@ type CommandError = {
   code: "invalid_input" | "not_found";
   message: string;
   retryable: false;
+};
+
+type PlanApprovalError = {
+  status: "error";
+  code: "invalid_input" | "stale_plan" | "busy";
+  message: string;
+  retryable: boolean;
+  issues?: unknown[];
+};
+
+export type PlanApprovalResult = AppliedPlanAdaptation & {
+  status: "approved";
+  durability: Durability;
 };
 
 type RecordFeedbackResult =
@@ -81,6 +107,12 @@ export interface WorkspaceApplication {
   command(
     command: Extract<WorkspaceCommand, { type: "record_athlete_feedback" }>,
   ): Promise<RecordFeedbackResult>;
+  command(
+    command: Extract<WorkspaceCommand, { type: "apply_plan_approval" }>,
+  ): Promise<PlanApprovalResult | PlanApprovalError>;
+  activatePlanReview(proposal: ReviewProposal): void;
+  deactivatePlanReview(reviewId: string): void;
+  getPlanApproval(reviewId: string): PlanApprovalResult | null;
   subscribe(listener: () => void): () => void;
 }
 
@@ -95,6 +127,56 @@ export function createWorkspaceApplication(
 ): WorkspaceApplication {
   let state = deepFreeze(structuredClone(options.initialState));
   const listeners = new Set<() => void>();
+  const approvalDurability = new Map<string, Durability>();
+  let approvalInFlight: {
+    reviewId: string;
+    promise: Promise<PlanApprovalResult | PlanApprovalError>;
+  } | null = null;
+  let activePlanReview: ReviewProposal | null = null;
+
+  const replay = (receipt: AppliedPlanAdaptation): PlanApprovalResult => ({
+    status: "approved",
+    ...receipt,
+    durability:
+      approvalDurability.get(receipt.reviewId) ??
+      options.repository.durability ??
+      "persistent",
+  });
+
+  const applyOption = (
+    plannedWorkouts: PlannedWorkout[],
+    option: AdaptationOption,
+  ): {
+    plannedWorkouts: PlannedWorkout[];
+    affectedWorkouts: AppliedPlanAdaptation["affectedWorkouts"];
+  } => {
+    const next = new Map(
+      plannedWorkouts.map((workout) => [workout.id, structuredClone(workout)]),
+    );
+    const affectedWorkouts: AppliedPlanAdaptation["affectedWorkouts"] = [];
+    for (const change of option.workoutChanges) {
+      if (change.kind === "create") {
+        const after = structuredClone(change.workout);
+        next.set(after.id, after);
+        affectedWorkouts.push({ workoutId: after.id, before: null, after });
+        continue;
+      }
+      const before = structuredClone(next.get(change.workoutId)!);
+      if (change.kind === "delete") {
+        next.delete(change.workoutId);
+        affectedWorkouts.push({
+          workoutId: change.workoutId,
+          before,
+          after: null,
+        });
+        continue;
+      }
+      const after = { ...before, ...structuredClone(change.changes) };
+      next.set(change.workoutId, after);
+      affectedWorkouts.push({ workoutId: change.workoutId, before, after });
+    }
+    return { plannedWorkouts: [...next.values()], affectedWorkouts };
+  };
 
   const invalidFeedback = (message: string): CommandError => ({
     status: "error",
@@ -215,7 +297,163 @@ export function createWorkspaceApplication(
       return state;
     },
     query,
+    activatePlanReview(proposal) {
+      activePlanReview = proposal;
+    },
+    deactivatePlanReview(reviewId) {
+      if (activePlanReview?.reviewId === reviewId) activePlanReview = null;
+    },
+    getPlanApproval(reviewId) {
+      const receipt = state.adaptationReceipts.find(
+        (candidate) => candidate.reviewId === reviewId,
+      );
+      return receipt ? replay(receipt) : null;
+    },
     command: (async (command: WorkspaceCommand) => {
+      if (command.type === "apply_plan_approval") {
+        const reviewId =
+          typeof command.reviewId === "string" ? command.reviewId : "";
+        const existing = state.adaptationReceipts.find(
+          (receipt) => receipt.reviewId === reviewId,
+        );
+        if (existing) return replay(existing);
+        if (approvalInFlight) {
+          if (approvalInFlight.reviewId === reviewId)
+            return approvalInFlight.promise;
+          return {
+            status: "error",
+            code: "busy",
+            message: "Another Plan Approval is being applied.",
+            retryable: true,
+          };
+        }
+        if (reviewId.trim() === "") {
+          return {
+            status: "error",
+            code: "invalid_input",
+            message: "reviewId must be a non-empty string.",
+            retryable: false,
+          };
+        }
+        if (
+          !Number.isInteger(command.expectedPlanVersion) ||
+          command.expectedPlanVersion !== state.trainingPlan.planVersion
+        ) {
+          return {
+            status: "error",
+            code: "stale_plan",
+            message: `Expected current planVersion ${state.trainingPlan.planVersion}.`,
+            retryable: true,
+          };
+        }
+        if (
+          !activePlanReview ||
+          activePlanReview.reviewId !== reviewId ||
+          activePlanReview.expectedPlanVersion !== command.expectedPlanVersion
+        ) {
+          return {
+            status: "error",
+            code: "invalid_input",
+            message: "No matching active Workout Adaptation review exists.",
+            retryable: false,
+          };
+        }
+        const validated = validateAdaptationOption(
+          command.selectedOption,
+          state.trainingPlan.plannedWorkouts,
+        );
+        if (!validated.valid) {
+          return {
+            status: "error",
+            code: "invalid_input",
+            message: "The selected Workout Adaptation is invalid.",
+            retryable: false,
+            issues: validated.issues,
+          };
+        }
+        const activeOption = [
+          activePlanReview.recommended,
+          activePlanReview.alternative,
+        ].find(({ optionId }) => optionId === validated.option.optionId);
+        if (
+          !activeOption ||
+          JSON.stringify(activeOption) !== JSON.stringify(validated.option)
+        ) {
+          return {
+            status: "error",
+            code: "invalid_input",
+            message: "The selected option does not match the active review.",
+            retryable: false,
+          };
+        }
+        const promise = (async () => {
+          const { plannedWorkouts, affectedWorkouts } = applyOption(
+            state.trainingPlan.plannedWorkouts,
+            validated.option,
+          );
+          const receipt: AppliedPlanAdaptation = {
+            reviewId,
+            selectedOption: {
+              optionId: validated.option.optionId,
+              label: validated.option.label,
+            },
+            affectedWorkouts,
+            appliedAt: state.clock.now,
+            planVersionBefore: state.trainingPlan.planVersion,
+            planVersionAfter: state.trainingPlan.planVersion + 1,
+          };
+          const nextState = deepFreeze({
+            ...state,
+            trainingPlan: {
+              planVersion: receipt.planVersionAfter,
+              plannedWorkouts,
+            },
+            appliedReviewIds: [...state.appliedReviewIds, reviewId],
+            adaptationReceipts: [...state.adaptationReceipts, receipt],
+            mutationHistory: [
+              ...state.mutationHistory,
+              {
+                id: `plan-adaptation:${reviewId}`,
+                kind: "plan_adaptation" as const,
+                occurredAt: state.clock.now,
+              },
+            ],
+          });
+          const nextValidation = validateWorkspaceState(nextState);
+          if (!nextValidation.valid) {
+            return {
+              status: "error" as const,
+              code: "invalid_input" as const,
+              message:
+                "The selected Workout Adaptation would create an invalid Training Plan.",
+              retryable: false,
+              issues: nextValidation.errors,
+            };
+          }
+          let durability: Durability = "persistent";
+          try {
+            durability = await options.repository.save({
+              schemaVersion: 1,
+              seedVersion: "demo-athlete-v1",
+              savedAt: nextState.clock.now,
+              state: nextState,
+            });
+          } catch {
+            durability = "memory_only";
+          }
+          state = nextState;
+          activePlanReview = null;
+          approvalDurability.set(reviewId, durability);
+          listeners.forEach((listener) => listener());
+          return { status: "approved" as const, ...receipt, durability };
+        })();
+        approvalInFlight = { reviewId, promise };
+        try {
+          return await promise;
+        } finally {
+          if (approvalInFlight?.promise === promise) approvalInFlight = null;
+        }
+      }
       if (command.type === "record_athlete_feedback") {
         if (
           typeof command.requestId !== "string" ||

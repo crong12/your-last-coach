@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { initializeWorkspace } from "../src/application/initializeWorkspace";
+import { createWorkspaceApplication } from "../src/application/createWorkspaceApplication";
 import type { PersistedWorkspace } from "../src/application/ports";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
 import {
@@ -57,6 +58,54 @@ async function fixtureEnvelope(planVersion = 1): Promise<PersistedWorkspace> {
     savedAt: "2026-08-26T20:14:00+01:00",
     state,
   };
+}
+
+async function approvedEnvelope(): Promise<PersistedWorkspace> {
+  const envelope = await fixtureEnvelope(2);
+  const workouts = envelope.state.trainingPlan.plannedWorkouts;
+  const thursday = structuredClone(
+    workouts.find(({ id }) => id === "planned-2026-08-27-recovery")!,
+  );
+  const saturdayBefore = structuredClone(
+    workouts.find(({ id }) => id === "planned-2026-08-29-strides")!,
+  );
+  const saturdayAfter = {
+    ...structuredClone(saturdayBefore),
+    title: "6 km easy",
+    distanceKm: 6,
+    prescription: { blocks: [{ kind: "easy" as const, distanceKm: 6 }] },
+  };
+  envelope.state.trainingPlan.plannedWorkouts = workouts
+    .filter(({ id }) => id !== thursday.id)
+    .map((workout) =>
+      workout.id === saturdayAfter.id ? saturdayAfter : workout,
+    );
+  envelope.state.appliedReviewIds = ["review:persisted"];
+  envelope.state.adaptationReceipts = [
+    {
+      reviewId: "review:persisted",
+      selectedOption: { optionId: "recovery-first", label: "Recovery first" },
+      affectedWorkouts: [
+        { workoutId: thursday.id, before: thursday, after: null },
+        {
+          workoutId: saturdayBefore.id,
+          before: saturdayBefore,
+          after: saturdayAfter,
+        },
+      ],
+      appliedAt: "2026-08-26T20:15:00+01:00",
+      planVersionBefore: 1,
+      planVersionAfter: 2,
+    },
+  ];
+  envelope.state.mutationHistory = [
+    {
+      id: "plan-adaptation:review:persisted",
+      kind: "plan_adaptation",
+      occurredAt: "2026-08-26T20:15:00+01:00",
+    },
+  ];
+  return envelope;
 }
 
 const INVALID_SAVED_CASES = [
@@ -185,6 +234,75 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
+  it.each([
+    [
+      "an incomplete affected workout",
+      (state: Record<string, any>) => {
+        state.adaptationReceipts[0].affectedWorkouts[0].before = {};
+      },
+    ],
+    [
+      "an affected workout ID mismatch",
+      (state: Record<string, any>) => {
+        state.adaptationReceipts[0].affectedWorkouts[0].before.id =
+          "another-workout";
+      },
+    ],
+    [
+      "an applied-review ID mismatch",
+      (state: Record<string, any>) => {
+        state.appliedReviewIds = ["review:without-outcome"];
+      },
+    ],
+    [
+      "an outcome version later than the Training Plan",
+      (state: Record<string, any>) => {
+        state.adaptationReceipts[0].planVersionBefore = 2;
+        state.adaptationReceipts[0].planVersionAfter = 3;
+      },
+    ],
+  ])("refreshes persisted state containing %s", async (_case, corrupt) => {
+    const envelope = await approvedEnvelope();
+    corrupt(envelope.state as unknown as Record<string, any>);
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.state).toEqual(await source.loadContext());
+    expect(initialized.notice).toContain("could not be used");
+  });
+
+  it("restores and replays a complete persisted Plan Approval outcome", async () => {
+    const envelope = await approvedEnvelope();
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+    const repository = new BrowserWorkspaceRepository(() => storage);
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository,
+    });
+    const application = createWorkspaceApplication({
+      initialState: initialized.state,
+      fixtureSource: source,
+      repository,
+    });
+
+    expect(application.getPlanApproval("review:persisted")).toMatchObject({
+      status: "approved",
+      reviewId: "review:persisted",
+      planVersionBefore: 1,
+      planVersionAfter: 2,
+      durability: "persistent",
+    });
+    expect(initialized.notice).toBeNull();
+  });
+
   it("restores sparse Athlete Feedback from the persisted envelope", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();

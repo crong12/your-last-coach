@@ -363,6 +363,29 @@ function validateOption(
   });
 }
 
+export function validateAdaptationOption(
+  value: unknown,
+  plannedWorkouts: PlannedWorkout[],
+):
+  | { valid: true; option: AdaptationOption }
+  | { valid: false; issues: ReviewValidationIssue[] } {
+  const issues: ReviewValidationIssue[] = [];
+  validateOption(
+    value,
+    "recommended",
+    new Set(plannedWorkouts.map(({ id }) => id)),
+    issues,
+  );
+  return issues.length === 0
+    ? {
+        valid: true,
+        option: deepFreeze(
+          structuredClone(value as unknown as AdaptationOption),
+        ),
+      }
+    : { valid: false, issues };
+}
+
 export function validateReviewProposal(
   value: unknown,
   context: {

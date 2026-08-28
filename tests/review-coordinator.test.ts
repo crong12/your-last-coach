@@ -129,6 +129,46 @@ async function setup() {
 }
 
 describe("Workout Adaptation review coordinator", () => {
+  it("requires a selection, then approves and settles with the structured application result", async () => {
+    const { application, coordinator, saved } = await setup();
+    coordinator.open(acceptedProposal());
+
+    expect(await coordinator.approve()).toMatchObject({
+      status: "error",
+      code: "invalid_input",
+    });
+    expect(application.getState().trainingPlan.planVersion).toBe(1);
+    coordinator.select("recovery-first");
+    const settlement = coordinator.waitForSettlement(
+      "review:rest-of-week:2026-08-26",
+    );
+
+    const approved = await coordinator.approve();
+
+    expect(approved).toMatchObject({
+      status: "approved",
+      selectedOption: { optionId: "recovery-first" },
+      planVersionBefore: 1,
+      planVersionAfter: 2,
+      durability: "persistent",
+    });
+    await expect(settlement).resolves.toEqual(approved);
+    expect(coordinator.getState()).toEqual({ status: "idle" });
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+    expect(saved).toHaveLength(1);
+  });
+
+  it("returns an applied review outcome without reopening the modal", async () => {
+    const { coordinator } = await setup();
+    const proposal = acceptedProposal();
+    coordinator.open(proposal);
+    coordinator.select("recovery-first");
+    const first = await coordinator.approve();
+
+    expect(coordinator.open(proposal)).toEqual(first);
+    expect(coordinator.getState()).toEqual({ status: "idle" });
+  });
+
   it("opens the accepted proposal and previews both exact fixture options without mutation", async () => {
     const { application, coordinator, saved } = await setup();
     const before = structuredClone(application.getState());

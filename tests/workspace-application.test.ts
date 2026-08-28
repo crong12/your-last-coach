@@ -6,6 +6,7 @@ import type {
   PersistedWorkspace,
   WorkspaceRepository,
 } from "../src/application/ports";
+import { acceptedProposal } from "./review-coordinator.test";
 
 function createRecordingRepository() {
   let cleared = 0;
@@ -26,6 +27,308 @@ function createRecordingRepository() {
 }
 
 describe("Workspace application", () => {
+  it("applies Recovery first atomically and persists one replayable outcome", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository, saves } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+    const notifications: number[] = [];
+    application.subscribe(() =>
+      notifications.push(application.getState().trainingPlan.planVersion),
+    );
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+
+    const outcome = await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: proposal.expectedPlanVersion,
+      selectedOption: proposal.recommended,
+    });
+
+    expect(outcome).toEqual({
+      status: "approved",
+      reviewId: proposal.reviewId,
+      selectedOption: {
+        optionId: "recovery-first",
+        label: "Recovery first",
+      },
+      affectedWorkouts: [
+        {
+          workoutId: "planned-2026-08-27-recovery",
+          before: expect.objectContaining({ distanceKm: 6 }),
+          after: null,
+        },
+        {
+          workoutId: "planned-2026-08-29-strides",
+          before: expect.objectContaining({ distanceKm: 8 }),
+          after: expect.objectContaining({ distanceKm: 6 }),
+        },
+        {
+          workoutId: "planned-2026-08-30-long",
+          before: expect.objectContaining({ distanceKm: 18 }),
+          after: expect.objectContaining({ distanceKm: 14 }),
+        },
+      ],
+      appliedAt: "2026-08-26T20:15:00+01:00",
+      planVersionBefore: 1,
+      planVersionAfter: 2,
+      durability: "persistent",
+    });
+    expect(application.getState().trainingPlan).toMatchObject({
+      planVersion: 2,
+      plannedWorkouts: expect.not.arrayContaining([
+        expect.objectContaining({ id: "planned-2026-08-27-recovery" }),
+      ]),
+    });
+    expect(application.getState().appliedReviewIds).toEqual([
+      proposal.reviewId,
+    ]);
+    expect(application.getState().adaptationReceipts).toHaveLength(1);
+    expect(application.getState().mutationHistory).toEqual([
+      {
+        id: `plan-adaptation:${proposal.reviewId}`,
+        kind: "plan_adaptation",
+        occurredAt: "2026-08-26T20:15:00+01:00",
+      },
+    ]);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].state.trainingPlan.planVersion).toBe(2);
+    expect(notifications).toEqual([2]);
+  });
+
+  it("replays an applied review without validating divergent input or saving again", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository, saves } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+    const command = {
+      type: "apply_plan_approval" as const,
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: proposal.expectedPlanVersion,
+      selectedOption: proposal.recommended,
+    };
+    const first = await application.command(command);
+    const repeated = await application.command({
+      ...command,
+      expectedPlanVersion: 999,
+      selectedOption: null,
+    });
+
+    expect(repeated).toEqual(first);
+    expect(saves).toHaveLength(1);
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
+  it("coalesces the same in-flight review and rejects a different concurrent approval", async () => {
+    const source = createDemoCoachingContextSource();
+    let releaseSave!: () => void;
+    const saveGate = new Promise<void>((resolve) => (releaseSave = resolve));
+    let saveCount = 0;
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository: {
+        async load() {
+          return null;
+        },
+        async save() {
+          saveCount += 1;
+          await saveGate;
+          return "persistent";
+        },
+        async clear() {},
+      },
+    });
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+    const command = {
+      type: "apply_plan_approval" as const,
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    };
+
+    const first = application.command(command);
+    const repeated = application.command(command);
+    const competing = await application.command({
+      ...command,
+      reviewId: "review:competing",
+    });
+    releaseSave();
+
+    await expect(first).resolves.toEqual(await repeated);
+    expect(competing).toMatchObject({ status: "error", code: "busy" });
+    expect(saveCount).toBe(1);
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
+  it("keeps an approved snapshot authoritative and reports memory-only after save failure", async () => {
+    const source = createDemoCoachingContextSource();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository: {
+        durability: "memory_only",
+        async load() {
+          return null;
+        },
+        async save() {
+          return "memory_only";
+        },
+        async clear() {},
+      },
+    });
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+
+    const outcome = await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    });
+
+    expect(outcome).toMatchObject({
+      status: "approved",
+      durability: "memory_only",
+    });
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
+  it("rejects an active option whose result falls outside the persisted plan horizon", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository, saves } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+    const proposal = acceptedProposal();
+    const update = proposal.recommended.workoutChanges[1];
+    if (update.kind === "update") update.changes.date = "2026-09-01";
+    application.activatePlanReview(proposal);
+    const before = application.getState();
+
+    const outcome = await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    });
+
+    expect(outcome).toMatchObject({ status: "error", code: "invalid_input" });
+    expect(application.getState()).toBe(before);
+    expect(saves).toHaveLength(0);
+  });
+
+  it("rejects approval when no matching review is active", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository, saves } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+    const proposal = acceptedProposal();
+    const before = application.getState();
+
+    const outcome = await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    });
+
+    expect(outcome).toMatchObject({ status: "error", code: "invalid_input" });
+    expect(application.getState()).toBe(before);
+    expect(saves).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      "stale_plan",
+      (command: Record<string, unknown>) => (command.expectedPlanVersion = 2),
+    ],
+    [
+      "invalid_input",
+      (command: Record<string, unknown>) => (command.reviewId = ""),
+    ],
+    [
+      "invalid_input",
+      (command: Record<string, unknown>) => (command.selectedOption = null),
+    ],
+    [
+      "invalid_input",
+      (command: Record<string, unknown>) => {
+        const option = structuredClone(command.selectedOption) as ReturnType<
+          typeof acceptedProposal
+        >["recommended"];
+        option.workoutChanges.push({
+          kind: "delete",
+          workoutId: "planned-2026-08-27-recovery",
+        });
+        command.selectedOption = option;
+      },
+    ],
+    [
+      "invalid_input",
+      (command: Record<string, unknown>) => {
+        const option = structuredClone(command.selectedOption) as ReturnType<
+          typeof acceptedProposal
+        >["recommended"];
+        const update = option.workoutChanges[1];
+        if (update.kind === "update") update.changes.date = "2026-09-01";
+        command.selectedOption = option;
+      },
+    ],
+    [
+      "invalid_input",
+      (command: Record<string, unknown>) => {
+        const option = structuredClone(command.selectedOption) as ReturnType<
+          typeof acceptedProposal
+        >["recommended"];
+        option.workoutChanges[0] = { kind: "delete", workoutId: "missing" };
+        command.selectedOption = option;
+      },
+    ],
+  ])(
+    "rejects approval %s without mutation or persistence",
+    async (code, mutate) => {
+      const source = createDemoCoachingContextSource();
+      const { repository, saves } = createRecordingRepository();
+      const application = createWorkspaceApplication({
+        initialState: await source.loadContext(),
+        fixtureSource: source,
+        repository,
+      });
+      const proposal = acceptedProposal();
+      application.activatePlanReview(proposal);
+      const command: Record<string, unknown> = {
+        type: "apply_plan_approval",
+        reviewId: proposal.reviewId,
+        expectedPlanVersion: proposal.expectedPlanVersion,
+        selectedOption: proposal.recommended,
+      };
+      mutate(command);
+      const before = application.getState();
+
+      const outcome = await application.command(command as never);
+
+      expect(outcome).toMatchObject({ status: "error", code });
+      expect(application.getState()).toBe(before);
+      expect(saves).toHaveLength(0);
+    },
+  );
+
   it("records the hero Athlete Feedback with only explicit normalized fields", async () => {
     const source = createDemoCoachingContextSource();
     const initialState = await source.loadContext();
