@@ -48,7 +48,6 @@ export class BrowserWorkspaceRepository implements WorkspaceRepository {
 
   async clear(): Promise<void> {
     this.memoryEnvelope = null;
-    if (this.durability === "memory_only") return;
 
     try {
       this.storageProvider().removeItem(WORKSPACE_STORAGE_KEY);

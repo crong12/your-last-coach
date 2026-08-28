@@ -66,6 +66,57 @@ const INVALID_SAVED_CASES = [
   "invalid workspace state",
 ] as const;
 
+const MALFORMED_STATE_CASES: Array<[
+  string,
+  (state: Record<string, any>) => void,
+]> = [
+  [
+    "invalid Planned Workout type",
+    (state) => {
+      state.trainingPlan.plannedWorkouts[0].type = "race";
+    },
+  ],
+  [
+    "incomplete repeat block",
+    (state) => {
+      delete state.trainingPlan.plannedWorkouts.find(
+        (workout: Record<string, unknown>) =>
+          workout.id === "planned-2026-08-26-threshold",
+      ).prescription.blocks[1].recoverySeconds;
+    },
+  ],
+  [
+    "invalid Workout Result lap",
+    (state) => {
+      state.workoutResults.at(-1).laps[1].kind = "interval";
+    },
+  ],
+  [
+    "invalid Athlete Feedback entry",
+    (state) => {
+      state.athleteFeedback.push({ id: "feedback-without-required-fields" });
+    },
+  ],
+  [
+    "missing processed request identifiers",
+    (state) => {
+      delete state.processedRequestIds;
+    },
+  ],
+  [
+    "missing applied review identifiers",
+    (state) => {
+      delete state.appliedReviewIds;
+    },
+  ],
+  [
+    "missing adaptation receipts",
+    (state) => {
+      delete state.adaptationReceipts;
+    },
+  ],
+];
+
 describe("browser workspace persistence", () => {
   it("loads and saves a versioned persistent envelope", async () => {
     const storage = new ControlledStorage();
@@ -102,6 +153,24 @@ describe("browser workspace persistence", () => {
 
     expect(await repository.save(envelope)).toBe("memory_only");
     expect(await repository.load()).toEqual(envelope);
+  });
+
+  it("removes stale persistent state during reset after a memory-only fallback", async () => {
+    const storage = new ControlledStorage();
+    const staleEnvelope = await fixtureEnvelope(2);
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(staleEnvelope));
+    const repository = new BrowserWorkspaceRepository(() => storage);
+
+    storage.failWrites = true;
+    expect(await repository.save(await fixtureEnvelope(3))).toBe(
+      "memory_only",
+    );
+
+    storage.failWrites = false;
+    await repository.clear();
+
+    const repositoryAfterReload = new BrowserWorkspaceRepository(() => storage);
+    expect(await repositoryAfterReload.load()).toBeNull();
   });
 });
 
@@ -161,6 +230,28 @@ describe("workspace initialization", () => {
         savedAt: "2026-08-26T20:15:00+01:00",
         state: initialized.state,
       });
+    },
+  );
+
+  it.each(MALFORMED_STATE_CASES)(
+    "replaces a saved workspace with %s",
+    async (_case, corrupt) => {
+      const envelope = await fixtureEnvelope(4);
+      corrupt(envelope.state as unknown as Record<string, any>);
+      const storage = new ControlledStorage();
+      storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+      const repository = new BrowserWorkspaceRepository(() => storage);
+      const source = createDemoCoachingContextSource();
+
+      const initialized = await initializeWorkspace({
+        fixtureSource: source,
+        repository,
+      });
+
+      expect(initialized.state).toEqual(await source.loadContext());
+      expect(initialized.notice).toBe(
+        "Saved demo data could not be used, so the Training Plan was refreshed.",
+      );
     },
   );
 });

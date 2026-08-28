@@ -34,6 +34,47 @@ function formatPace(seconds: number) {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function formatDate(date: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatClock(now: string, timeZone: string) {
+  const instant = new Date(now);
+  const date = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  }).format(instant);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).format(instant);
+  return `${date} · ${time}`;
+}
+
+function formatObjective(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+function formatSleep(minutes: number) {
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function formatClassification(classification: string) {
+  const words = classification.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function workoutTone(workout: PlannedWorkout) {
   if (workout.id === "planned-2026-08-26-threshold") return "incomplete";
   return workout.type;
@@ -67,11 +108,17 @@ function WorkoutButton({
 
 function WeekPlan({
   workouts,
+  currentDate,
   onSelect,
 }: {
   workouts: PlannedWorkout[];
+  currentDate: string;
   onSelect: (workout: PlannedWorkout) => void;
 }) {
+  const remainingDistanceKm = workouts
+    .filter((workout) => workout.date > currentDate)
+    .reduce((total, workout) => total + workout.distanceKm, 0);
+
   return (
     <section className="plan-panel" aria-labelledby="week-title">
       <div className="section-heading">
@@ -79,7 +126,9 @@ function WeekPlan({
           <span className="eyebrow">This week</span>
           <h2 id="week-title">24–30 August</h2>
         </div>
-        <p>32 km remain after Wednesday’s partial session.</p>
+        <p>
+          {remainingDistanceKm} km remain after Wednesday’s partial session.
+        </p>
       </div>
       <div className="week-route">
         {WEEK_DATES.map((date, index) => {
@@ -296,15 +345,16 @@ function ResetDialog({
 }
 
 function ContextRail({ state }: { state: WorkspaceState }) {
+  const { observations } = state;
   return (
     <aside className="context-rail" aria-label="Shared coaching context">
       <section className="race-card">
         <span className="eyebrow">Target Race</span>
         <h2>{state.targetRace.name}</h2>
-        <p>4 April 2027</p>
+        <p>{formatDate(state.targetRace.date)}</p>
         <div className="race-objective">
           <span>Objective</span>
-          <strong>3:40</strong>
+          <strong>{formatObjective(state.targetRace.objectiveSeconds)}</strong>
         </div>
       </section>
       <section className="evidence-card">
@@ -317,23 +367,31 @@ function ContextRail({ state }: { state: WorkspaceState }) {
         <dl className="metrics-list">
           <div>
             <dt>Recovery</dt>
-            <dd>46%</dd>
-            <small>Partially recovered</small>
+            <dd>{observations.recovery.percent}%</dd>
+            <small>
+              {formatClassification(observations.recovery.classification)}
+            </small>
           </div>
           <div>
             <dt>Load ratio</dt>
-            <dd>1.33</dd>
-            <small>68 short / 51 long</small>
+            <dd>{observations.trainingLoad.ratio.toFixed(2)}</dd>
+            <small>
+              {observations.trainingLoad.shortTerm} short /{" "}
+              {observations.trainingLoad.longTerm} long
+            </small>
           </div>
           <div>
             <dt>Sleep</dt>
-            <dd>7h 22</dd>
-            <small>Score 81</small>
+            <dd>{formatSleep(observations.sleep.durationMinutes)}</dd>
+            <small>Score {observations.sleep.score}</small>
           </div>
           <div>
             <dt>HRV</dt>
-            <dd>55 ms</dd>
-            <small>Usual 49–63 ms</small>
+            <dd>{observations.sleepHrvMs.value} ms</dd>
+            <small>
+              Usual {observations.sleepHrvMs.syntheticNormalRange[0]}–
+              {observations.sleepHrvMs.syntheticNormalRange[1]} ms
+            </small>
           </div>
         </dl>
         <p className="evidence-balance">
@@ -456,13 +514,15 @@ export function WorkspaceApp({
               </span>
               <h1>Your Training Plan</h1>
               <p>
-                Build aerobic strength, absorb the work, and arrive ready for
-                Brighton.
+                Build aerobic strength, absorb the work, and arrive ready for{" "}
+                {state.targetRace.name}.
               </p>
             </div>
             <div className="hero-meta">
               <span>{state.trainingPhase.name}</span>
-              <strong>26 August 2026 · 20:15</strong>
+              <strong>
+                {formatClock(state.clock.now, state.clock.timeZone)}
+              </strong>
               <small>Plan version {state.trainingPlan.planVersion}</small>
             </div>
           </header>
@@ -482,6 +542,7 @@ export function WorkspaceApp({
           {view === "week" ? (
             <WeekPlan
               workouts={week.plannedWorkouts}
+              currentDate={state.clock.now.slice(0, 10)}
               onSelect={setSelectedWorkout}
             />
           ) : (

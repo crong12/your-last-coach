@@ -94,6 +94,68 @@ test("replaces invalid saved data and explains the refresh", async ({
   await expect(page.getByText("Plan version 1")).toBeVisible();
 });
 
+test("renders context from a valid modified saved workspace", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const storageKey = "your-last-coach.workspace.v1";
+    const saved = window.localStorage.getItem(storageKey);
+    if (!saved) throw new Error("Expected the demo workspace to be saved");
+
+    const envelope = JSON.parse(saved);
+    envelope.state.targetRace.name = "South Downs Marathon";
+    envelope.state.targetRace.date = "2027-05-09";
+    envelope.state.targetRace.objectiveSeconds = 14_400;
+    envelope.state.observations.recovery.percent = 61;
+    envelope.state.observations.trainingLoad = {
+      shortTerm: 72,
+      longTerm: 60,
+      ratio: 1.2,
+    };
+    envelope.state.observations.sleep = {
+      durationMinutes: 390,
+      score: 77,
+    };
+    envelope.state.observations.sleepHrvMs = {
+      value: 58,
+      syntheticNormalRange: [50, 66],
+    };
+
+    const thursday = envelope.state.trainingPlan.plannedWorkouts.find(
+      (workout: { id: string }) => workout.id === "planned-2026-08-27-recovery",
+    );
+    thursday.distanceKm = 5;
+    thursday.prescription.blocks[0].distanceKm = 5;
+
+    const sunday = envelope.state.trainingPlan.plannedWorkouts.find(
+      (workout: { id: string }) => workout.id === "planned-2026-08-30-long",
+    );
+    sunday.distanceKm = 16;
+    sunday.prescription.blocks[0].distanceKm = 16;
+
+    window.localStorage.setItem(storageKey, JSON.stringify(envelope));
+  });
+
+  await page.reload();
+
+  await expect(
+    page.getByText(/arrive ready for South Downs Marathon/),
+  ).toBeVisible();
+  await expect(page.getByText("9 May 2027")).toBeVisible();
+  await expect(page.getByText("4:00", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("29 km remain after Wednesday’s partial session."),
+  ).toBeVisible();
+  await expect(page.getByText("61%", { exact: true })).toBeVisible();
+  await expect(page.getByText("1.20", { exact: true })).toBeVisible();
+  await expect(page.getByText("72 short / 60 long")).toBeVisible();
+  await expect(page.getByText("6h 30", { exact: true })).toBeVisible();
+  await expect(page.getByText("Score 77")).toBeVisible();
+  await expect(page.getByText("58 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("Usual 50–66 ms")).toBeVisible();
+});
+
 test("remains usable without WebMCP and warns when storage is memory-only", async ({
   page,
 }) => {
