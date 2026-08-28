@@ -66,6 +66,17 @@ Use the cost line once in the Devpost description or near the close, not as a pr
 - Do not switch between unrelated windows during the hero flow.
 - The presenter writes the final narration. The timings and beats below are the content boundary.
 
+## Early ChatGPT host gate
+
+Before production review work begins, run the corrected disposable prototype in ChatGPT's enabled in-app browser:
+
+- three consecutive pending-call approvals;
+- one **None — discuss further** outcome;
+- one cancellation or reset;
+- recorded attachment steps, registered tools, approximate durations, host version, timestamps, and results.
+
+Reliable results select `primary` mode. Any timeout or inconsistency selects `fallback` mode. The configured app exposes only that review path; it never asks the Coach Agent to choose between primary and fallback tools.
+
 ## Pre-recording state
 
 Reset the Shared Coaching Workspace to `demo-athlete-v1` and the fixed clock:
@@ -132,7 +143,7 @@ The exact conversational ordering may vary when the Agent asks a justified clari
 2. `get_athlete_context`
 3. `get_training_plan`
 4. `get_workout_context`
-5. `review_workout_adaptation`
+5. `review_workout_adaptation` in primary mode, or `open_workout_adaptation_review` followed later by `read_workout_adaptation_decision` in fallback mode
 
 The ChatGPT trace may be inspected or narrated to show structured tool use. The video need not dwell on raw payloads.
 
@@ -165,11 +176,11 @@ Cancellation, timeout, unload before approval, reset, and **None — discuss fur
 
 ## Primary and fallback host paths
 
-Run the final ChatGPT in-app-browser smoke test before recording.
+Confirm the early ChatGPT gate result against the final release before recording. Expose only the selected review mode.
 
 ### Primary path
 
-Use `review_workout_adaptation` when the host keeps the tool call pending during the on-page decision and returns the structured result after approval. If this succeeds, use it in the video and do not mention the fallback.
+Use `review_workout_adaptation` when the host keeps the tool call pending during the on-page decision and returns the structured result after approval. If the early and final gates succeed, use it in the video and do not register or mention the fallback.
 
 ### Compatibility fallback
 
@@ -180,7 +191,7 @@ If the intended host cannot reliably keep the call pending:
 3. the Athlete decides on-page;
 4. the Agent calls `read_workout_adaptation_decision` to retrieve the stored result.
 
-Explain the split in one short line only if it is the path actually used. Both paths preserve the same preview, explicit approval, idempotence, and mutation semantics.
+Explain the split in one short line only if it is the path actually used. Both paths preserve the same preview, explicit approval, idempotence, and mutation semantics. Primary and fallback tools are never offered together.
 
 ## Synthetic-data disclosure
 
@@ -264,7 +275,7 @@ A separate “Future” section is optional, not required. Do not imply that rea
 - [ ] Selecting each option produces the correct preview without mutation.
 - [ ] **Adapt my plan** applies once and increments `planVersion`.
 - [ ] **None — discuss further**, cancellation, timeout, unload, and reset do not mutate.
-- [ ] The final host uses either the verified primary path or the documented fallback.
+- [ ] The final host exposes only the review mode selected by the verified ChatGPT gate.
 - [ ] Human and Agent read the same post-approval Training Plan.
 - [ ] Synthetic provenance and limitations remain truthful.
 
