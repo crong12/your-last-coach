@@ -1,7 +1,7 @@
 # Implementation and verification architecture
 
 Status: Accepted for the WebMCP Challenge proof of concept  
-Architecture version: `1.0`  
+Architecture version: `1.1`  
 Fixture contract: [`demo-athlete-v1`](demo-athlete-coaching-contract-v1.md)
 
 This document defines the module boundaries, state ownership, adapter seams, deterministic lifecycle, verification layers, and release evidence for the Shared Coaching Workspace. It is an architecture decision artifact, not a production implementation specification.
@@ -14,6 +14,35 @@ This document defines the module boundaries, state ownership, adapter seams, det
 - Make Plan Approval explicit, previewable, atomic, and idempotent.
 - Preserve a direct transition from synthetic data to a bespoke Brighton 2027 product.
 - Produce verifiable evidence for the exact public release build.
+
+## Delivery cut order
+
+Architecture preserves the future product; hackathon acceptance is tiered.
+
+### Must ship
+
+- the shared Week experience and accepted fixture;
+- Athlete-visible workout/health evidence and Coach-Agent-readable context;
+- Athlete Feedback;
+- one host-verified review mode;
+- two ranked Workout Adaptations, calendar preview, explicit Plan Approval, and visible update;
+- deterministic reset, happy-path browser persistence, and an honest lightweight memory-only fallback;
+- focused domain/contract tests, one complete Playwright hero flow plus critical non-mutation/reset coverage;
+- public deployment and real-host smoke evidence.
+
+Ticket 1's Month view and simple storage fallback remain in scope because implementation began before this cut order.
+
+### Strengthen if time
+
+- the alternate review-delivery mode when the primary mode is reliable;
+- broader Demo Guide and debugging affordances;
+- additional responsive/accessibility refinement beyond the polished baseline;
+- extra lifecycle end-to-end flows and exhaustive storage failure cases;
+- richer Adaptation Receipt presentation.
+
+### Post-hackathon
+
+Real COROS hydration, server persistence, full Training Plan generation, Phase Transition, rich audit history, and broader integrations belong to the [post-hackathon product roadmap](post-hackathon-product-roadmap.md). The ports remain; speculative infrastructure does not.
 
 ## System shape
 
@@ -75,6 +104,7 @@ Owns only host mechanics:
 
 - capability detection;
 - tool names, descriptions, JSON input schemas, and annotations;
+- an explicit `primary` or `fallback` review mode;
 - registration after successful application initialization;
 - translation between tool payloads and typed application commands/queries;
 - `AbortSignal`, unload, cleanup, and single-settlement behaviour;
@@ -82,6 +112,8 @@ Owns only host mechanics:
 - structured safe errors.
 
 It does not generate Coach Recommendations, interpret Athlete evidence, or mutate the Training Plan independently.
+
+The codebase owns a seven-tool contract, but a host never sees both review paths. In `primary` mode it registers the three read tools, Athlete Feedback, and `review_workout_adaptation`. In `fallback` mode it registers the three reads, Athlete Feedback, `open_workout_adaptation_review`, and `read_workout_adaptation_decision`.
 
 ### `ui`
 
@@ -226,9 +258,32 @@ type WorkoutChange =
   | { kind: "delete"; workoutId: string };
 ```
 
-Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. An Adaptation Receipt allows the UI to show that the rest day was created by an approved adaptation.
+Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. A lightweight applied marker may show that the rest day came from Plan Approval. Rich Adaptation Receipt history is not required for the hackathon release.
 
 Every proposed option records the `planVersion` on which it was based. A mismatch returns `stale_plan` without applying or merging changes.
+
+## Review proposal interface
+
+The tool input encodes ranking structurally rather than asking the Coach Agent to coordinate array order, ranks, and roles:
+
+```ts
+type ReviewProposal = {
+  reviewId: string;
+  sourceWorkoutId: string;
+  expectedPlanVersion: number;
+  evidenceRefs: string[];
+  rationale: {
+    summary: string;
+    counterEvidence: string;
+    confidence: "low" | "moderate" | "high";
+    limitations: string[];
+  };
+  recommended: AdaptationOption;
+  alternative: AdaptationOption;
+};
+```
+
+`get_training_plan` makes `planVersion` and stable Planned Workout IDs prominent. Context reads expose reusable evidence references. Validation errors identify the rejected field and expected correction so the Agent can retry without reconstructing the proposal blindly.
 
 ## Plan Approval transaction
 
@@ -240,7 +295,7 @@ The application command:
 2. validates every Workout Change against the current Training Plan;
 3. produces the entire next Training Plan or rejects without mutation;
 4. increments `planVersion`;
-5. records the `reviewId` and Adaptation Receipt atomically in state;
+5. records the `reviewId` and a lightweight applied outcome atomically in state;
 6. attempts to persist the complete resulting snapshot;
 7. produces the terminal result for the pending primary call or stored fallback delivery.
 
@@ -257,7 +312,7 @@ Initialization order:
 3. Restore `demo-athlete-v1` when state is missing, invalid, or unsupported.
 4. Construct the application core and review coordinator.
 5. Mount the Shared Coaching Workspace.
-6. Register the seven WebMCP tools exactly once when `document.modelContext` is available.
+6. Register exactly one active review-mode tool set when `document.modelContext` is available; never expose primary and fallback review tools together.
 7. Publish `connected`, `unavailable`, or `error` status to the UI.
 
 An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. A migration switch remains available when a second schema version actually exists.
@@ -306,36 +361,15 @@ This information is subordinate to the coaching experience. The full human works
 
 ## Automated verification
 
-Every release candidate must pass:
+Every release candidate must pass the highest practical behavior seams:
 
 1. TypeScript type-check.
 2. Production Vite build.
-3. Vitest domain and application tests:
-   - fixture and state validation;
-   - create, update, and delete Workout Changes;
-   - version rejection and atomic application;
-   - feedback and adaptation idempotency;
-   - review state-machine transitions and exactly-once settlement;
-   - selection/preview without mutation;
-   - primary and fallback semantic equivalence;
-   - deterministic reset.
-4. Vitest adapter tests:
-   - valid, invalid, unsupported, and unavailable storage;
-   - exact tool names, descriptions, schemas, and read-only annotations;
-   - structured read and mutation results;
-   - absent WebMCP API behaviour;
-   - abort, unload, cleanup, duplicate calls, and fallback delivery.
-5. Playwright product flows:
-   - seeded first visit and Demo Guide;
-   - Week and Month views;
-   - workout details and shared evidence;
-   - feedback recording;
-   - review card selection and calendar preview;
-   - explicit Plan Approval and adapted markers;
-   - reload persistence;
-   - reset and graceful non-WebMCP operation.
+3. Focused Vitest domain/application coverage for fixture validation, Workout Changes, atomicity, plan-version rejection, Athlete Feedback/review idempotency, preview-before-mutation, selected review-mode settlement, and deterministic reset.
+4. Focused adapter coverage for persistence happy path and lightweight memory-only fallback, active-mode tool registration, structured results/errors, absent WebMCP behavior, and cleanup.
+5. Playwright for one complete hero flow plus critical reset and non-mutation behavior.
 
-Playwright begins each scenario from cleared storage and the fixed demo clock. Test helpers invoke application/tool handlers through public interfaces rather than editing internal state.
+Additional lifecycle combinations, storage quota permutations, and duplicate end-to-end flows strengthen the release when time permits; they are not allowed to delay a working, manually verified hero flow. Automated tests use a controllable host harness. Real ChatGPT attachment and timeout behavior remains manual evidence.
 
 ## CI and deployment
 
