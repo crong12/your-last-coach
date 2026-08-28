@@ -4,6 +4,7 @@ import type { CoachAgentConnection } from "../adapters/webmcp/types";
 import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
+import type { ReviewCoordinator } from "../application/createReviewCoordinator";
 import type {
   AthleteFeedback,
   PlannedWorkout,
@@ -12,6 +13,7 @@ import type {
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
+  reviewCoordinator: ReviewCoordinator;
   initialNotice: string | null;
   initialDurability: Durability;
   coachAgentConnection: CoachAgentConnection;
@@ -523,8 +525,120 @@ function ContextRail({
   );
 }
 
+export function ReviewModal({
+  coordinator,
+}: {
+  coordinator: ReviewCoordinator;
+}) {
+  const review = useSyncExternalStore(
+    coordinator.subscribe,
+    coordinator.getState,
+    coordinator.getState,
+  );
+
+  useEffect(() => {
+    if (review.status !== "reviewing") return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") coordinator.dismiss("athlete_dismissed");
+    };
+    window.addEventListener("keydown", dismissOnEscape);
+    return () => window.removeEventListener("keydown", dismissOnEscape);
+  }, [coordinator, review.status]);
+
+  if (review.status !== "reviewing") return null;
+  const { proposal } = review;
+  const optionButton = (
+    option: typeof proposal.recommended,
+    role: "recommendation" | "alternative",
+  ) => {
+    const selected = review.selectedOptionId === option.optionId;
+    const prefix =
+      role === "recommendation" ? "Coach's recommendation" : "Alternative";
+    return (
+      <button
+        className={`review-option review-option--${role} ${selected ? "review-option--selected" : ""}`}
+        aria-pressed={selected}
+        aria-label={`${prefix} — ${option.label}`}
+        onClick={() => coordinator.select(option.optionId)}
+      >
+        <span className="eyebrow">{prefix}</span>
+        <strong>{option.label}</strong>
+        <span>{option.summary}</span>
+        <small>{option.tradeoff}</small>
+      </button>
+    );
+  };
+
+  return (
+    <div
+      className="dialog-backdrop review-backdrop"
+      role="presentation"
+      onMouseDown={() => coordinator.dismiss("athlete_dismissed")}
+    >
+      <section
+        className="review-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button
+          className="icon-button"
+          onClick={() => coordinator.dismiss("athlete_dismissed")}
+          aria-label="Close adaptation review"
+        >
+          ×
+        </button>
+        <span className="eyebrow">Coach Recommendation</span>
+        <h2 id="review-title">Review Workout Adaptations</h2>
+        <p className="review-summary">{proposal.rationale.summary}</p>
+        <div className="review-evidence">
+          <strong>
+            {formatClassification(proposal.rationale.confidence)} confidence
+          </strong>
+          <p>{proposal.rationale.counterEvidence}</p>
+          <ul>
+            {proposal.rationale.limitations.map((limitation) => (
+              <li key={limitation}>{limitation}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="review-options">
+          {optionButton(proposal.recommended, "recommendation")}
+          {optionButton(proposal.alternative, "alternative")}
+        </div>
+        {review.preview.length > 0 && (
+          <section className="review-preview" aria-labelledby="preview-title">
+            <h3 id="preview-title">Calendar preview</h3>
+            <p>Selection only. Your Training Plan has not changed.</p>
+            <ol>
+              {review.preview.map((row) => (
+                <li key={`${review.selectedOptionId}-${row.date}`}>
+                  <time dateTime={row.date}>{formatShortDate(row.date)}</time>
+                  <span>
+                    {row.before?.title ?? "Rest"} → {row.after?.title ?? "Rest"}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        <div className="dialog-actions review-actions">
+          <button
+            className="button button--quiet"
+            onClick={() => coordinator.discussFurther()}
+          >
+            None — discuss further
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function WorkspaceApp({
   application,
+  reviewCoordinator,
   initialNotice,
   initialDurability,
   coachAgentConnection,
@@ -569,6 +683,7 @@ export function WorkspaceApp({
         : "unavailable";
 
   const resetDemo = async () => {
+    reviewCoordinator.reset();
     const outcome = await application.command({ type: "reset_demo" });
     setDurability(outcome.durability);
     setView("week");
@@ -708,6 +823,7 @@ export function WorkspaceApp({
       {resetOpen && (
         <ResetDialog onCancel={() => setResetOpen(false)} onReset={resetDemo} />
       )}
+      <ReviewModal coordinator={reviewCoordinator} />
     </div>
   );
 }

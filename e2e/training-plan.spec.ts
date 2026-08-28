@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function installWebMcpHarness(page: Page) {
-  await page.addInitScript(() => {
+async function installWebMcpHarness(
+  page: Page,
+  reviewMode: "primary" | "fallback" = "fallback",
+) {
+  await page.addInitScript((mode) => {
     const registrations: Array<{
       tool: {
         name: string;
@@ -18,7 +21,7 @@ async function installWebMcpHarness(page: Page) {
     }> = [];
     Object.defineProperty(window, "__webMcpHarness", {
       configurable: true,
-      value: { registrations },
+      value: { registrations, reviewMode: mode },
     });
     Object.defineProperty(document, "modelContext", {
       configurable: true,
@@ -31,8 +34,210 @@ async function installWebMcpHarness(page: Page) {
         },
       },
     });
-  });
+  }, reviewMode);
 }
+
+function acceptedReviewProposal() {
+  const prescription = (distanceKm: number) => ({
+    blocks: [{ kind: "easy", distanceKm }],
+  });
+  return {
+    reviewId: "review:playwright",
+    sourceWorkoutId: "planned-2026-08-26-threshold",
+    expectedPlanVersion: 1,
+    evidenceRefs: [
+      "planned-workout:planned-2026-08-26-threshold",
+      "workout-result:result-2026-08-26-threshold",
+      "observation:training-load",
+      "observation:recovery",
+    ],
+    rationale: {
+      summary:
+        "Your incomplete session is more consistent with accumulated fatigue than a sudden loss of fitness.",
+      counterEvidence:
+        "Your sleep, HRV, resting heart rate, and stress remain close to your normal range.",
+      confidence: "moderate",
+      limitations: [
+        "One difficult workout cannot establish the cause.",
+        "This does not diagnose injury or overtraining.",
+      ],
+    },
+    recommended: {
+      optionId: "recovery-first",
+      label: "Recovery first",
+      summary: "Make the clearest reduction in accumulated load.",
+      tradeoff: "Loses weekly volume and long-run stimulus.",
+      workoutChanges: [
+        { kind: "delete", workoutId: "planned-2026-08-27-recovery" },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-29-strides",
+          changes: {
+            title: "6 km easy",
+            purpose: "Keep the run relaxed and leave the strides out.",
+            distanceKm: 6,
+            prescription: prescription(6),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-30-long",
+          changes: {
+            title: "14 km easy long run",
+            purpose: "Keep the long run easy and finish fresher.",
+            distanceKm: 14,
+            prescription: prescription(14),
+          },
+        },
+      ],
+    },
+    alternative: {
+      optionId: "keep-the-rhythm",
+      label: "Keep the rhythm",
+      summary: "Preserve running frequency and more aerobic volume.",
+      tradeoff: "Provides less recovery if fatigue has accumulated.",
+      workoutChanges: [
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-27-recovery",
+          changes: {
+            title: "5 km very easy",
+            purpose: "Keep the run very easy.",
+            distanceKm: 5,
+            prescription: prescription(5),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-29-strides",
+          changes: {
+            title: "6 km easy",
+            purpose: "Keep the run relaxed and leave the strides out.",
+            distanceKm: 6,
+            prescription: prescription(6),
+          },
+        },
+        {
+          kind: "update",
+          workoutId: "planned-2026-08-30-long",
+          changes: {
+            title: "16 km easy long run",
+            purpose: "Keep the long run easy while preserving more volume.",
+            distanceKm: 16,
+            prescription: prescription(16),
+          },
+        },
+      ],
+    },
+  };
+}
+
+test("reviews both ranked Workout Adaptations and leaves every exit non-mutating", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "primary");
+  await page.goto("/");
+  const beforeEnvelope = await page.evaluate(() =>
+    localStorage.getItem("your-last-coach.workspace.v1"),
+  );
+  const openReview = () =>
+    page.evaluate((proposal) => {
+      const registrations = (
+        window as unknown as {
+          __webMcpHarness: {
+            registrations: Array<{
+              tool: {
+                name: string;
+                execute: (
+                  input: Record<string, unknown>,
+                  options: { signal: AbortSignal },
+                ) => Promise<unknown>;
+              };
+            }>;
+          };
+        }
+      ).__webMcpHarness.registrations;
+      const tool = registrations.find(
+        ({ tool }) => tool.name === "review_workout_adaptation",
+      )?.tool;
+      if (!tool) throw new Error("Primary review tool was not registered");
+      void tool.execute(proposal, { signal: new AbortController().signal });
+    }, acceptedReviewProposal());
+
+  await openReview();
+  const dialog = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Moderate confidence")).toBeVisible();
+  await expect(
+    dialog.getByText(/sleep, HRV, resting heart rate/),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("One difficult workout cannot establish the cause."),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", {
+      name: /Coach's recommendation — Recovery first/,
+    }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /Alternative — Keep the rhythm/ }),
+  ).toBeVisible();
+
+  await dialog
+    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await expect(dialog.getByText("6 km recovery → Rest")).toBeVisible();
+  await expect(
+    dialog.getByText("8 km easy with strides → 6 km easy"),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("18 km long run → 14 km easy long run"),
+  ).toBeVisible();
+
+  await dialog
+    .getByRole("button", { name: /Alternative — Keep the rhythm/ })
+    .click();
+  await expect(
+    dialog.getByText("6 km recovery → 5 km very easy"),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("18 km long run → 16 km easy long run"),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "None — discuss further" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /18 km long run, 2026-08-30, 18 kilometres/,
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("your-last-coach.workspace.v1"),
+    ),
+  ).toBe(beforeEnvelope);
+
+  await openReview();
+  await page.getByRole("button", { name: "Close adaptation review" }).click();
+  await expect(dialog).toBeHidden();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("your-last-coach.workspace.v1"),
+    ),
+  ).toBe(beforeEnvelope);
+
+  await openReview();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("your-last-coach.workspace.v1"),
+    ),
+  ).toBe(beforeEnvelope);
+});
 
 test("shows the deterministic Week first and the same workouts in Month", async ({
   page,

@@ -219,6 +219,7 @@ type PlannedWorkout = {
   type: WorkoutType;
   title: string;
   purpose: string;
+  distanceKm: number;
   prescription: {
     blocks: WorkoutBlock[];
   };
@@ -252,13 +253,14 @@ type WorkoutChange =
         date?: string;
         title?: string;
         purpose?: string;
+        distanceKm?: number;
         prescription?: WorkoutPrescription;
       };
     }
   | { kind: "delete"; workoutId: string };
 ```
 
-Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. A lightweight applied marker may show that the rest day came from Plan Approval. Rich Adaptation Receipt history is not required for the hackathon release.
+Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. Distance and a replacement prescription are validated independently; focused fixture tests prove that supplied pairs carry the accepted coherent values without deriving distance from arbitrary Workout Blocks. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. A lightweight applied marker may show that the rest day came from Plan Approval. Rich Adaptation Receipt history is not required for the hackathon release.
 
 Every proposed option records the `planVersion` on which it was based. A mismatch returns `stale_plan` without applying or merging changes.
 
