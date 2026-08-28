@@ -171,6 +171,112 @@ describe("Workspace application", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
+  it("orders reset after an in-flight approval save and never publishes the stale plan", async () => {
+    const source = createDemoCoachingContextSource();
+    let releaseSave!: () => void;
+    const saveGate = new Promise<void>((resolve) => (releaseSave = resolve));
+    const operations: string[] = [];
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository: {
+        async load() {
+          return null;
+        },
+        async save(workspace) {
+          operations.push(`save:${workspace.state.trainingPlan.planVersion}`);
+          await saveGate;
+          return "persistent";
+        },
+        async clear() {
+          operations.push("clear");
+        },
+      },
+    });
+    const observed: number[] = [];
+    application.subscribe(() =>
+      observed.push(application.getState().trainingPlan.planVersion),
+    );
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal, "fallback");
+
+    const approval = application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    });
+    await Promise.resolve();
+    const reset = application.command({ type: "reset_demo" });
+    releaseSave();
+
+    await expect(approval).resolves.toMatchObject({
+      status: "error",
+      code: "cancelled",
+    });
+    await expect(reset).resolves.toEqual({
+      status: "reset",
+      durability: "persistent",
+    });
+    expect(operations).toEqual(["save:2", "clear"]);
+    expect(observed).toEqual([1]);
+    expect(application.getState()).toEqual(await source.loadContext());
+  });
+
+  it("records feedback against the published plan after an in-flight approval", async () => {
+    const source = createDemoCoachingContextSource();
+    let releaseFirstSave!: () => void;
+    const firstSaveGate = new Promise<void>(
+      (resolve) => (releaseFirstSave = resolve),
+    );
+    const saves: PersistedWorkspace[] = [];
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository: {
+        async load() {
+          return null;
+        },
+        async save(workspace) {
+          saves.push(structuredClone(workspace));
+          if (saves.length === 1) await firstSaveGate;
+          return "persistent";
+        },
+        async clear() {},
+      },
+    });
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+    const approval = application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: 1,
+      selectedOption: proposal.recommended,
+    });
+    await Promise.resolve();
+
+    const feedback = application.command({
+      type: "record_athlete_feedback",
+      requestId: "during-approval",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      rawText: "Still heavy.",
+    });
+    releaseFirstSave();
+
+    await expect(approval).resolves.toMatchObject({ status: "approved" });
+    await expect(feedback).resolves.toMatchObject({ status: "ok" });
+    expect(application.getState()).toMatchObject({
+      trainingPlan: { planVersion: 2 },
+      athleteFeedback: [{ requestId: "during-approval" }],
+    });
+    expect(saves[1]).toMatchObject({
+      state: {
+        trainingPlan: { planVersion: 2 },
+        athleteFeedback: [{ requestId: "during-approval" }],
+      },
+    });
+  });
+
   it("keeps an approved snapshot authoritative and reports memory-only after save failure", async () => {
     const source = createDemoCoachingContextSource();
     const application = createWorkspaceApplication({

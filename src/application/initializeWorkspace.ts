@@ -1,6 +1,7 @@
 import type {
   CoachingContextSource,
   Durability,
+  PersistedFallbackResult,
   WorkspaceRepository,
 } from "./ports";
 import type { WorkspaceState } from "../domain/types";
@@ -16,6 +17,7 @@ export interface InitializedWorkspace {
   state: WorkspaceState;
   notice: string | null;
   durability: Durability;
+  undeliveredFallbackResult?: PersistedFallbackResult;
 }
 
 const REFRESH_NOTICE =
@@ -30,14 +32,52 @@ function isPersistedWorkspace(value: unknown): value is {
   seedVersion: "demo-athlete-v1";
   savedAt: string;
   state: WorkspaceState;
+  undeliveredFallbackResult?: PersistedFallbackResult;
 } {
-  return (
+  if (!(
     isRecord(value) &&
     value.schemaVersion === 1 &&
     value.seedVersion === "demo-athlete-v1" &&
     typeof value.savedAt === "string" &&
     isWorkspaceState(value.state) &&
     value.state.seedVersion === value.seedVersion
+  ))
+    return false;
+  const result = value.undeliveredFallbackResult;
+  if (result === undefined) return true;
+  if (
+    !isRecord(result) ||
+    typeof result.reviewId !== "string" ||
+    result.reviewId.trim() === ""
+  )
+    return false;
+  const receipt = value.state.adaptationReceipts.find(
+    (candidate) => candidate.reviewId === result.reviewId,
+  );
+  if (result.status === "discuss_further") {
+    return (
+      receipt === undefined &&
+      Object.keys(result).every((key) => ["status", "reviewId"].includes(key))
+    );
+  }
+  if (result.status === "cancelled") {
+    return (
+      receipt === undefined &&
+      typeof result.reason === "string" &&
+      result.reason.trim() !== "" &&
+      Object.keys(result).every((key) =>
+        ["status", "reviewId", "reason"].includes(key),
+      )
+    );
+  }
+  if (result.status !== "approved") return false;
+  return (
+    receipt !== undefined &&
+    JSON.stringify(result) ===
+      JSON.stringify({
+        status: "approved",
+        ...receipt,
+      })
   );
 }
 
@@ -62,6 +102,9 @@ export async function initializeWorkspace(
       state: deepFreeze(structuredClone(saved.state)),
       notice: null,
       durability: options.repository.durability ?? "persistent",
+      ...(saved.undeliveredFallbackResult === undefined
+        ? {}
+        : { undeliveredFallbackResult: saved.undeliveredFallbackResult }),
     };
   }
 

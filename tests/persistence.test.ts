@@ -234,6 +234,88 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
+  it("restores a valid completed undelivered fallback result from schema version 1", async () => {
+    const envelope = await approvedEnvelope();
+    envelope.undeliveredFallbackResult = {
+      status: "approved",
+      ...envelope.state.adaptationReceipts[0],
+    };
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.undeliveredFallbackResult).toEqual(
+      envelope.undeliveredFallbackResult,
+    );
+    expect(initialized.notice).toBeNull();
+  });
+
+  it("refreshes schema version 1 state whose approved fallback result has no matching receipt", async () => {
+    const envelope = await approvedEnvelope();
+    envelope.undeliveredFallbackResult = {
+      status: "approved",
+      ...envelope.state.adaptationReceipts[0],
+      reviewId: "review:missing",
+    };
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.notice).toContain("could not be used");
+  });
+
+  it.each([
+    {
+      status: "discuss_further" as const,
+      reviewId: "",
+    },
+    {
+      status: "cancelled" as const,
+      reviewId: "review:cancelled",
+      reason: "",
+    },
+  ])("refreshes an invalid non-approved fallback result %#", async (result) => {
+    const envelope = await fixtureEnvelope();
+    envelope.undeliveredFallbackResult = result;
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.notice).toContain("could not be used");
+  });
+
+  it("refreshes a non-approved fallback result that contradicts an applied receipt", async () => {
+    const envelope = await approvedEnvelope();
+    envelope.undeliveredFallbackResult = {
+      status: "discuss_further",
+      reviewId: "review:persisted",
+    };
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.notice).toContain("could not be used");
+  });
+
   it.each([
     [
       "an incomplete affected workout",
