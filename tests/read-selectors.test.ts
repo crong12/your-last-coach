@@ -37,6 +37,21 @@ describe("shared coaching read selectors", () => {
       id: "phase-aerobic-development",
       name: "Aerobic development",
     });
+    expect(result.data).toMatchObject({
+      trainingPlan: {
+        planVersion: 1,
+        currentWeek: { from: "2026-08-24", to: "2026-08-30" },
+      },
+      activeCoachingTopics: [
+        { id: "coaching-topic:shin-discomfort", status: "monitoring" },
+      ],
+      recentAthleteFeedback: [{ id: "athlete-feedback:seed-shin-discomfort" }],
+      recentAdaptationHistory: [],
+    });
+    expect(result.data.trainingPlan.currentWeekPlannedWorkouts).toHaveLength(5);
+    expect(result.evidenceRefs).toContain(
+      "coaching-topic:coaching-topic:shin-discomfort",
+    );
     expect(result.data.recentTraining).toHaveLength(10);
     expect(result.data.recentTraining.at(-1)).toMatchObject({
       id: "result-2026-08-26-threshold",
@@ -74,6 +89,32 @@ describe("shared coaching read selectors", () => {
         "workout-result:result-2026-08-26-threshold",
       ]),
     );
+  });
+
+  it("includes current no-pain feedback without closing the stable monitoring topic", () => {
+    const state = structuredClone(createDemoWorkspaceState());
+    const seededTopic = structuredClone(state.coachingTopics[0]);
+    state.athleteFeedback.push({
+      id: "athlete-feedback:current-no-pain",
+      requestId: "current-no-pain",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      relatedWorkoutResultId: "result-2026-08-26-threshold",
+      rawText: "The session was hard, but there was no pain.",
+      reported: { painReported: false },
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    });
+
+    const result = selectAthleteContext(state);
+
+    expect(result.data.recentAthleteFeedback).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "athlete-feedback:current-no-pain",
+          reported: { painReported: false },
+        }),
+      ]),
+    );
+    expect(result.data.activeCoachingTopics[0]).toEqual(seededTopic);
   });
 
   it("returns an inclusive date range with the current plan version and stable IDs", () => {
