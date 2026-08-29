@@ -298,11 +298,9 @@ describe("WebMCP coaching tools", () => {
     )!.tool;
 
     await expect(
-      (
-        tool.execute as (
-          input: Record<string, unknown>,
-        ) => Promise<unknown>
-      )(reviewProposal() as unknown as Record<string, unknown>),
+      (tool.execute as (input: Record<string, unknown>) => Promise<unknown>)(
+        reviewProposal() as unknown as Record<string, unknown>,
+      ),
     ).resolves.toEqual({
       status: "review_opened",
       reviewId: "review:webmcp",
