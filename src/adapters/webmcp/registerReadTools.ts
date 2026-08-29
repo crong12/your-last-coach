@@ -425,7 +425,7 @@ function createTools(
         name: "read_workout_adaptation_decision",
         title: "Read workout adaptation decision",
         description:
-          "Use the same reviewId after opening; poll only as needed until applied, discuss_further, or cancelled; return the Athlete-controlled terminal outcome.",
+          "Use the same reviewId after opening; poll only as needed until approved, discuss_further, or cancelled; return the Athlete-controlled terminal outcome.",
         inputSchema: {
           type: "object",
           properties: { reviewId: { type: "string", minLength: 1 } },

@@ -585,7 +585,7 @@ Use descriptions with these exact responsibilities:
 - `get_training_plan`: retrieve the relevant date range from the current plan version; use returned Planned Workout IDs in later calls and proposals.
 - `get_workout_context`: inspect prescription, result, and feedback for one returned Planned Workout ID before explaining what happened.
 - `open_workout_adaptation_review`: submit evidence-grounded rationale and exactly two ranked, structurally different options; open the on-page review; never apply a plan directly; the call returns immediately.
-- `read_workout_adaptation_decision`: use the same `reviewId` after opening; poll only as needed until `applied`, `discuss_further`, or `cancelled`; return the Athlete-controlled terminal outcome.
+- `read_workout_adaptation_decision`: use the same `reviewId` after opening; poll only as needed until wire status `approved`, `discuss_further`, or `cancelled`; `approved` reports the Athlete's terminal choice, while the resulting applied adaptation and history record the plan change; return the Athlete-controlled terminal outcome.
 
 Remove the stale issue-14 wording. Do not encode fixed workout IDs, fixed dates, or an exact model-generated adaptation.
 
@@ -599,7 +599,7 @@ In the existing six-tool harness, exercise this order against one browser state:
 4. open two distinct adaptations using returned evidence references and current `planVersion`;
 5. verify selection alone leaves `planVersion` unchanged;
 6. press **Adapt my plan**;
-7. read the applied result with the same `reviewId`;
+7. read the `approved` wire result with the same `reviewId`, then verify the resulting applied adaptation and history;
 8. reload and read Coaching Briefing again;
 9. assert history contains the evidence references, chosen identity, before/after values, time, and `1 → 2` versions.
 

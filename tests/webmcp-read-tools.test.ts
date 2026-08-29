@@ -252,9 +252,13 @@ describe("WebMCP coaching tools", () => {
     expect(descriptionFor("open_workout_adaptation_review")).toMatch(
       /exactly two.*on-page review/i,
     );
-    expect(descriptionFor("read_workout_adaptation_decision")).toMatch(
-      /same reviewId.*terminal/i,
+    const decisionDescription = descriptionFor(
+      "read_workout_adaptation_decision",
     );
+    expect(decisionDescription).toMatch(
+      /same reviewId.*approved.*discuss_further.*cancelled.*terminal/i,
+    );
+    expect(decisionDescription).not.toMatch(/until applied/i);
 
     const feedbackTool = registrations.find(
       ({ tool }) => tool.name === "record_athlete_feedback",
