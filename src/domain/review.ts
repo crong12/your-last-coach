@@ -363,9 +363,63 @@ function validateOption(
   });
 }
 
+function workoutBlockFingerprint(block: WorkoutBlock): readonly unknown[] {
+  if (block.kind === "repeat") {
+    return [
+      block.kind,
+      block.repetitions,
+      block.workDistanceKm,
+      block.targetPaceSecondsPerKm.min,
+      block.targetPaceSecondsPerKm.max,
+      block.recoverySeconds,
+    ];
+  }
+  return [block.kind, block.distanceKm];
+}
+
+function workoutPrescriptionFingerprint(
+  prescription: WorkoutPrescription,
+): readonly unknown[] {
+  return [prescription.blocks.map(workoutBlockFingerprint)];
+}
+
+function plannedWorkoutFingerprint(
+  workout: PlannedWorkout,
+): readonly unknown[] {
+  return [
+    workout.id,
+    workout.date,
+    workout.type,
+    workout.title,
+    workout.purpose,
+    workout.distanceKm,
+    workoutPrescriptionFingerprint(workout.prescription),
+  ];
+}
+
+function workoutChangeFingerprint(change: WorkoutChange): readonly unknown[] {
+  if (change.kind === "create") {
+    return [change.kind, plannedWorkoutFingerprint(change.workout)];
+  }
+  if (change.kind === "delete") {
+    return [change.kind, change.workoutId];
+  }
+  return [
+    change.kind,
+    change.workoutId,
+    change.changes.date ?? null,
+    change.changes.title ?? null,
+    change.changes.purpose ?? null,
+    change.changes.distanceKm ?? null,
+    change.changes.prescription === undefined
+      ? null
+      : workoutPrescriptionFingerprint(change.changes.prescription),
+  ];
+}
+
 function workoutChangeSignature(changes: WorkoutChange[]): string {
   return changes
-    .map((change) => JSON.stringify(change))
+    .map((change) => JSON.stringify(workoutChangeFingerprint(change)))
     .sort()
     .join("|");
 }

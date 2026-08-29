@@ -9,6 +9,7 @@ import type {
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
 import {
   validateReviewProposal,
+  type WorkoutChange,
   type ReviewProposal,
 } from "../src/domain/review";
 
@@ -105,6 +106,73 @@ function acceptedProposal(): ReviewProposal {
         },
       ],
     },
+  };
+}
+
+function reorderedEquivalentChange(change: WorkoutChange): WorkoutChange {
+  if (change.kind === "delete") {
+    return { workoutId: change.workoutId, kind: "delete" };
+  }
+  if (change.kind === "create") {
+    const workout = change.workout;
+    return {
+      workout: {
+        prescription: {
+          blocks: workout.prescription.blocks.map((block) =>
+            block.kind === "repeat"
+              ? {
+                  recoverySeconds: block.recoverySeconds,
+                  targetPaceSecondsPerKm: {
+                    max: block.targetPaceSecondsPerKm.max,
+                    min: block.targetPaceSecondsPerKm.min,
+                  },
+                  workDistanceKm: block.workDistanceKm,
+                  repetitions: block.repetitions,
+                  kind: "repeat" as const,
+                }
+              : { distanceKm: block.distanceKm, kind: block.kind },
+          ),
+        },
+        distanceKm: workout.distanceKm,
+        purpose: workout.purpose,
+        title: workout.title,
+        type: workout.type,
+        date: workout.date,
+        id: workout.id,
+      },
+      kind: "create",
+    };
+  }
+
+  const changes = change.changes;
+  const reorderedChanges: typeof changes = {};
+  if (changes.prescription !== undefined) {
+    reorderedChanges.prescription = {
+      blocks: changes.prescription.blocks.map((block) =>
+        block.kind === "repeat"
+          ? {
+              recoverySeconds: block.recoverySeconds,
+              targetPaceSecondsPerKm: {
+                max: block.targetPaceSecondsPerKm.max,
+                min: block.targetPaceSecondsPerKm.min,
+              },
+              workDistanceKm: block.workDistanceKm,
+              repetitions: block.repetitions,
+              kind: "repeat" as const,
+            }
+          : { distanceKm: block.distanceKm, kind: block.kind },
+      ),
+    };
+  }
+  if (changes.distanceKm !== undefined)
+    reorderedChanges.distanceKm = changes.distanceKm;
+  if (changes.purpose !== undefined) reorderedChanges.purpose = changes.purpose;
+  if (changes.title !== undefined) reorderedChanges.title = changes.title;
+  if (changes.date !== undefined) reorderedChanges.date = changes.date;
+  return {
+    changes: reorderedChanges,
+    workoutId: change.workoutId,
+    kind: "update",
   };
 }
 
@@ -344,6 +412,27 @@ describe("Workout Adaptation review coordinator", () => {
     proposal.alternative.workoutChanges = structuredClone(
       proposal.recommended.workoutChanges,
     ).reverse();
+    const workspace = application.getState();
+
+    expect(
+      validateReviewProposal(proposal, {
+        planVersion: workspace.trainingPlan.planVersion,
+        plannedWorkouts: workspace.trainingPlan.plannedWorkouts,
+        evidenceRefs: new Set(proposal.evidenceRefs),
+      }),
+    ).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: "alternative.workoutChanges" }),
+      ]),
+    });
+  });
+
+  it("rejects alternatives with identical typed changes despite different object key order", async () => {
+    const { application } = await setup();
+    const proposal = structuredClone(acceptedProposal());
+    proposal.alternative.workoutChanges =
+      proposal.recommended.workoutChanges.map(reorderedEquivalentChange);
     const workspace = application.getState();
 
     expect(

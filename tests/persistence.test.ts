@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { initializeWorkspace } from "../src/application/initializeWorkspace";
 import { createWorkspaceApplication } from "../src/application/createWorkspaceApplication";
 import type { PersistedWorkspace } from "../src/application/ports";
+import type { AppliedPlanAdaptation } from "../src/domain/types";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
 import {
   BrowserWorkspaceRepository,
@@ -621,4 +622,62 @@ describe("workspace initialization", () => {
     expect(initialized.state).toEqual(await source.loadContext());
     expect(initialized.notice).toContain("could not be used");
   });
+
+  it.each([
+    [
+      "an unsupported receipt-root rationale",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt, { rationale: "discarded explanation" });
+      },
+    ],
+    [
+      "an unsupported selected-option field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.selectedOption, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+    [
+      "an unsupported affected-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[0], { note: "discarded note" });
+      },
+    ],
+    [
+      "an unsupported before-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[0].before!, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+    [
+      "an unsupported after-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[1].after!, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+  ] as const)(
+    "restores the exact fixture when saved data contains %s",
+    async (_case, corrupt) => {
+      const envelope = await approvedEnvelope();
+      corrupt(envelope.state.adaptationReceipts[0]);
+      const storage = new ControlledStorage();
+      storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+      const source = createDemoCoachingContextSource();
+
+      const initialized = await initializeWorkspace({
+        fixtureSource: source,
+        repository: new BrowserWorkspaceRepository(() => storage),
+      });
+
+      expect(initialized.state).toEqual(await source.loadContext());
+      expect(initialized.notice).toBe(
+        "Saved demo data could not be used, so the Training Plan was refreshed.",
+      );
+    },
+  );
 });

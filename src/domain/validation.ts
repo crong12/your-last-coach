@@ -13,7 +13,7 @@ const RESULT_STATUSES = new Set(["completed", "partial", "stopped"]);
 const MUTATION_KINDS = new Set(["reset", "plan_adaptation"]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
@@ -59,17 +59,35 @@ function validateUniqueStrings(
   }
 }
 
+function hasOnlyFields(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  return Object.keys(value).every((key) => fields.includes(key));
+}
+
 function isValidWorkoutBlock(value: unknown): boolean {
   if (!isRecord(value) || !isNonEmptyString(value.kind)) return false;
   if (SIMPLE_BLOCK_KINDS.has(value.kind)) {
-    return isPositiveNumber(value.distanceKm);
+    return (
+      hasOnlyFields(value, ["kind", "distanceKm"]) &&
+      isPositiveNumber(value.distanceKm)
+    );
   }
   if (value.kind !== "repeat") return false;
   if (
+    !hasOnlyFields(value, [
+      "kind",
+      "repetitions",
+      "workDistanceKm",
+      "targetPaceSecondsPerKm",
+      "recoverySeconds",
+    ]) ||
     !isPositiveInteger(value.repetitions) ||
     !isPositiveNumber(value.workDistanceKm) ||
     !isNonNegativeNumber(value.recoverySeconds) ||
     !isRecord(value.targetPaceSecondsPerKm) ||
+    !hasOnlyFields(value.targetPaceSecondsPerKm, ["min", "max"]) ||
     !isPositiveNumber(value.targetPaceSecondsPerKm.min) ||
     !isPositiveNumber(value.targetPaceSecondsPerKm.max)
   ) {
@@ -84,6 +102,15 @@ function isValidWorkoutBlock(value: unknown): boolean {
 function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
   return (
     isRecord(value) &&
+    hasOnlyFields(value, [
+      "id",
+      "date",
+      "type",
+      "title",
+      "purpose",
+      "distanceKm",
+      "prescription",
+    ]) &&
     isNonEmptyString(value.id) &&
     isIsoDate(value.date) &&
     value.date.startsWith("2026-08-") &&
@@ -93,6 +120,7 @@ function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
     isNonEmptyString(value.purpose) &&
     isPositiveNumber(value.distanceKm) &&
     isRecord(value.prescription) &&
+    hasOnlyFields(value.prescription, ["blocks"]) &&
     Array.isArray(value.prescription.blocks) &&
     value.prescription.blocks.length > 0 &&
     value.prescription.blocks.every(isValidWorkoutBlock)
@@ -471,11 +499,27 @@ function validateAdaptationReceipts(
     }
     const selected = receipt.selectedOption;
     const affected = receipt.affectedWorkouts;
+    const validReceiptShape = hasOnlyFields(receipt, [
+      "reviewId",
+      "selectedOption",
+      "affectedWorkouts",
+      "appliedAt",
+      "planVersionBefore",
+      "planVersionAfter",
+      "evidenceRefs",
+    ]);
+    const validSelected =
+      isRecord(selected) && hasOnlyFields(selected, ["optionId", "label"]);
     const validAffected =
       Array.isArray(affected) &&
       affected.length > 0 &&
       affected.every((item) => {
-        if (!isRecord(item) || !isNonEmptyString(item.workoutId)) return false;
+        if (
+          !isRecord(item) ||
+          !hasOnlyFields(item, ["workoutId", "before", "after"]) ||
+          !isNonEmptyString(item.workoutId)
+        )
+          return false;
         const before = item.before;
         const after = item.after;
         const validBefore =
@@ -491,7 +535,8 @@ function validateAdaptationReceipts(
     if (
       !isNonEmptyString(receipt.reviewId) ||
       reviewIds.has(receipt.reviewId) ||
-      !isRecord(selected) ||
+      !validReceiptShape ||
+      !validSelected ||
       !isNonEmptyString(selected.optionId) ||
       !isNonEmptyString(selected.label) ||
       !validAffected ||
