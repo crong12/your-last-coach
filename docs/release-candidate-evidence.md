@@ -6,14 +6,14 @@ Complete this record against one exact commit and its public deployment. Leave a
 
 | Field                                           | Evidence |
 | ----------------------------------------------- | -------- |
-| Commit SHA                                      | Pending  |
-| Branch                                          | Pending  |
-| Pull request                                    | Pending  |
-| GitHub Actions run                              | Pending  |
-| Vercel deployment ID                            | Pending  |
-| Public HTTPS URL                                | Pending  |
-| Resolved Vercel Node version and build-log link | Pending  |
-| Deployment UTC timestamp                        | Pending  |
+| Commit SHA                                      | `fdedfce77634da11cb13b87043a15a6751fff7da` |
+| Branch                                          | `main` |
+| Pull request                                    | [Prepare the verified release-candidate surface](https://github.com/crong12/your-last-coach/pull/31) |
+| GitHub Actions run                              | [Successful push-to-main Verify run](https://github.com/crong12/your-last-coach/actions/runs/33224476541) |
+| Vercel deployment ID                            | `dpl_HoquHrqnk5XGPRrDHcvzyeEyEYky` |
+| Public HTTPS URL                                | https://your-last-coach.vercel.app/ |
+| Resolved Vercel Node version and build-log link | Node `22.x` from `package.json#engines` (overrides project default); [Vercel deployment inspector](https://vercel.com/ongchinrong12-6627s-projects/your-last-coach/HoquHrqnk5XGPRrDHcvzyeEyEYky) |
+| Deployment UTC timestamp                        | 2026-08-29T07:09:33.275Z |
 
 ## Automated verification
 
@@ -36,27 +36,27 @@ Record the tester, UTC timestamp, command, exit status, and a link or attachment
 | Check                                                                       | Result  | Evidence |
 | --------------------------------------------------------------------------- | ------- | -------- |
 | `dist/` contains the top-level app and referenced assets                    | Pending | Pending  |
-| No credentials, auth configuration, private data, or private registry paths | Pending | Pending  |
-| No repository-only file or runtime dependency                               | Pending | Pending  |
-| No external runtime request is required to load the workspace               | Pending | Pending  |
-| `Origin-Agent-Cluster: ?1` appears on the public response                   | Pending | Pending  |
+| No credentials, auth configuration, private data, or private registry paths | Pass | Independent merged-tree gate recorded on [release-candidate ticket](https://github.com/crong12/your-last-coach/issues/18) |
+| No repository-only file or runtime dependency                               | Pass | Public deployment loaded from Vercel without repository access |
+| No external runtime request is required to load the workspace               | Pass | Public HTML and bundled assets loaded successfully |
+| `Origin-Agent-Cluster: ?1` appears on the public response                   | Pass | Unauthenticated public response header captured 2026-08-29T07:16:08Z |
 
 ## Signed-out browser verification
 
 | Field                                               | Evidence      |
 | --------------------------------------------------- | ------------- |
-| Result                                              | Not performed |
-| Browser and version                                 | Pending       |
-| Browser profile/session                             | Pending       |
-| Tester                                              | Pending       |
-| UTC start and end                                   | Pending       |
-| Public workspace loads                              | Pending       |
-| Demo Guide and fallback tool list are accurate      | Pending       |
-| Week and Month views work                           | Pending       |
-| Reset restores plan version 1 and the fixed fixture | Pending       |
-| Reload preserves approved state when storage works  | Pending       |
-| Unavailable-WebMCP workspace remains usable         | Pending       |
-| Evidence links or attachments                       | Pending       |
+| Result                                              | Pass for public-load, Week/Month, reset, and reset-persistence checks; remaining host-specific checks moved to issue #32 |
+| Browser and version                                 | Codex in-app Browser; exact build identifier not exposed |
+| Browser profile/session                             | Public URL required no site authentication or Vercel session |
+| Tester                                              | crong12 with Codex verification agent |
+| UTC start and end                                   | 2026-08-29T07:16:08Z to 2026-08-29T07:25:00Z |
+| Public workspace loads                              | Pass — HTTP 200, title `Your Last Coach`, no browser errors |
+| Demo Guide and fallback tool list are accurate      | Pass — exactly six fallback tools |
+| Week and Month views work                           | Pass |
+| Reset restores plan version 1 and the fixed fixture | Pass — user confirmed reset; original Thursday/Saturday/Sunday workouts restored |
+| Reload preserves approved state when storage works  | Not performed here — approved-state flow belongs to enabled-host ticket #32 |
+| Unavailable-WebMCP workspace remains usable         | Not performed here — current browser exposes WebMCP; controlled coverage passed before deployment |
+| Evidence links or attachments                       | [Vercel inspector](https://vercel.com/ongchinrong12-6627s-projects/your-last-coach/HoquHrqnk5XGPRrDHcvzyeEyEYky), [release-candidate ticket](https://github.com/crong12/your-last-coach/issues/18) |
 
 ## Enabled-host fallback verification
 
@@ -64,8 +64,8 @@ Reference the separate ready-for-human ticket created for the exact candidate co
 
 | Field                                | Evidence |
 | ------------------------------------ | -------- |
-| Ready-for-human ticket               | Pending  |
-| Exact candidate commit and URL match | Pending  |
+| Ready-for-human ticket               | [Verify the release candidate in enabled WebMCP hosts](https://github.com/crong12/your-last-coach/issues/32) |
+| Exact candidate commit and URL match | Pass — deployment metadata records `fdedfce77634da11cb13b87043a15a6751fff7da` at https://your-last-coach.vercel.app/ |
 | Enabled Chrome version               | Pending  |
 | Model Context Tool Inspector version | Pending  |
 | ChatGPT version and model            | Pending  |
@@ -95,9 +95,9 @@ Reference the separate ready-for-human ticket created for the exact candidate co
 
 ## Limitations and disposition
 
-- Known limitations: Pending
-- Failed or blocked checks: Pending
-- Follow-up references: Pending
-- Candidate disposition: Pending human acceptance
-- Reviewer: Pending
-- Review UTC timestamp: Pending
+- Known limitations: Exact in-app-browser build identifier was not exposed; unavailable-WebMCP and approved-state persistence require the separate enabled-host run.
+- Failed or blocked checks: Enabled Chrome and full ChatGPT fallback journey remain pending in issue #32.
+- Follow-up references: [Verify the release candidate in enabled WebMCP hosts](https://github.com/crong12/your-last-coach/issues/32)
+- Candidate disposition: Public production deployment accepted; enabled-host verification pending.
+- Reviewer: crong12 with Codex verification agent
+- Review UTC timestamp: 2026-08-29T07:25:00Z
