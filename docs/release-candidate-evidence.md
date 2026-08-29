@@ -12,7 +12,7 @@ Complete this record against one exact commit and its public deployment. Leave a
 | GitHub Actions run                              | [Successful push-to-main Verify run](https://github.com/crong12/your-last-coach/actions/runs/33224476541) |
 | Vercel deployment ID                            | `dpl_HoquHrqnk5XGPRrDHcvzyeEyEYky` |
 | Public HTTPS URL                                | https://your-last-coach.vercel.app/ |
-| Resolved Vercel Node version and build-log link | Node `22.x` from `package.json#engines` (overrides project default); [Vercel deployment inspector](https://vercel.com/ongchinrong12-6627s-projects/your-last-coach/HoquHrqnk5XGPRrDHcvzyeEyEYky) |
+| Resolved Vercel Node version and build-log link | Resolved major `22.x`: Vercel documents that `package.json#engines` overrides the project default. The exact patch version was not emitted in the build log. [Deployment inspector and build log](https://vercel.com/ongchinrong12-6627s-projects/your-last-coach/HoquHrqnk5XGPRrDHcvzyeEyEYky) |
 | Deployment UTC timestamp                        | 2026-08-29T07:09:33.275Z |
 
 ## Automated verification
@@ -45,15 +45,15 @@ Record the tester, UTC timestamp, command, exit status, and a link or attachment
 
 | Field                                               | Evidence      |
 | --------------------------------------------------- | ------------- |
-| Result                                              | Pass for public-load, Week/Month, reset, and reset-persistence checks; remaining host-specific checks moved to issue #32 |
+| Result                                              | Public accessibility, Week/Month, deterministic reset, and reset-state reload passed; approved-state persistence and unavailable-WebMCP checks remain pending in issue #32 |
 | Browser and version                                 | Codex in-app Browser; exact build identifier not exposed |
-| Browser profile/session                             | Public URL required no site authentication or Vercel session |
+| Browser profile/session                             | Cookie-free command-line HTTPS request proved unauthenticated public access; UI checks ran in the Codex in-app Browser |
 | Tester                                              | crong12 with Codex verification agent |
-| UTC start and end                                   | 2026-08-29T07:16:08Z to 2026-08-29T07:25:00Z |
+| UTC start and end                                   | 2026-08-29T07:16:08Z to 2026-08-29T07:33:09.667Z |
 | Public workspace loads                              | Pass — HTTP 200, title `Your Last Coach`, no browser errors |
 | Demo Guide and fallback tool list are accurate      | Pass — exactly six fallback tools |
 | Week and Month views work                           | Pass |
-| Reset restores plan version 1 and the fixed fixture | Pass — user confirmed reset; original Thursday/Saturday/Sunday workouts restored |
+| Reset restores plan version 1 and the fixed fixture | Pass — user performed reset; agent then observed plan version 1, Thursday 6 km recovery, Saturday 8 km easy with strides, and Sunday 18 km long run |
 | Reload preserves approved state when storage works  | Not performed here — approved-state flow belongs to enabled-host ticket #32 |
 | Unavailable-WebMCP workspace remains usable         | Not performed here — current browser exposes WebMCP; controlled coverage passed before deployment |
 | Evidence links or attachments                       | [Vercel inspector](https://vercel.com/ongchinrong12-6627s-projects/your-last-coach/HoquHrqnk5XGPRrDHcvzyeEyEYky), [release-candidate ticket](https://github.com/crong12/your-last-coach/issues/18) |
@@ -98,6 +98,6 @@ Reference the separate ready-for-human ticket created for the exact candidate co
 - Known limitations: Exact in-app-browser build identifier was not exposed; unavailable-WebMCP and approved-state persistence require the separate enabled-host run.
 - Failed or blocked checks: Enabled Chrome and full ChatGPT fallback journey remain pending in issue #32.
 - Follow-up references: [Verify the release candidate in enabled WebMCP hosts](https://github.com/crong12/your-last-coach/issues/32)
-- Candidate disposition: Public production deployment accepted; enabled-host verification pending.
+- Candidate disposition: Public deployment checks passed; candidate acceptance remains pending enabled-host verification.
 - Reviewer: crong12 with Codex verification agent
-- Review UTC timestamp: 2026-08-29T07:25:00Z
+- Review UTC timestamp: 2026-08-29T07:33:09.667Z
