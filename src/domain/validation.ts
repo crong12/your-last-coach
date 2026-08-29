@@ -455,6 +455,20 @@ function validateAdaptationReceipts(
       errors.push("Applied Plan Adaptation is invalid");
       continue;
     }
+    if (
+      !Array.isArray(receipt.evidenceRefs) ||
+      receipt.evidenceRefs.length === 0
+    ) {
+      errors.push(
+        "Applied Plan Adaptation evidence references must contain unique non-empty strings",
+      );
+    } else {
+      validateUniqueStrings(
+        receipt.evidenceRefs,
+        "Applied Plan Adaptation evidence references",
+        errors,
+      );
+    }
     const selected = receipt.selectedOption;
     const affected = receipt.affectedWorkouts;
     const validAffected =

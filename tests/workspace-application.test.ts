@@ -117,14 +117,24 @@ describe("Workspace application", () => {
       expectedPlanVersion: proposal.expectedPlanVersion,
       selectedOption: proposal.recommended,
     };
-    const first = await application.command(command);
-    const repeated = await application.command({
+    const approved = await application.command(command);
+    const replayed = await application.command({
       ...command,
       expectedPlanVersion: 999,
       selectedOption: null,
     });
 
-    expect(repeated).toEqual(first);
+    expect(approved).toMatchObject({
+      status: "approved",
+      evidenceRefs: proposal.evidenceRefs,
+    });
+    if (approved.status !== "approved") throw new Error("Expected approval");
+    expect(replayed).toEqual(approved);
+    expect(replayed).toMatchObject({
+      reviewId: approved.reviewId,
+      evidenceRefs: proposal.evidenceRefs,
+      planVersionAfter: approved.planVersionAfter,
+    });
     expect(saves).toHaveLength(1);
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
@@ -473,6 +483,7 @@ describe("Workspace application", () => {
         id: "athlete-feedback:hero-feedback-request",
         requestId: "hero-feedback-request",
         relatedWorkoutId: "planned-2026-08-26-threshold",
+        relatedWorkoutResultId: "result-2026-08-26-threshold",
         rawText,
         reported: {
           sessionRpe: 9,
@@ -798,6 +809,60 @@ describe("Workspace application", () => {
     expect(application.getState()).toEqual(exactFixture);
     expect(application.getState().trainingPlan.planVersion).toBe(1);
     expect(application.getState().mutationHistory).toEqual([]);
+    expect(application.getState().athleteFeedback).toEqual(
+      exactFixture.athleteFeedback,
+    );
+    expect(application.getState().coachingTopics).toEqual(
+      exactFixture.coachingTopics,
+    );
+    expect(application.getState().adaptationReceipts).toEqual([]);
+    expect(application.getState().athleteFeedback).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "feedback-before-reset" }),
+      ]),
+    );
     expect(cleared()).toBe(1);
+  });
+
+  it("restores seeded feedback and topics while clearing session evidence on reset", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+
+    const feedback = await application.command({
+      type: "record_athlete_feedback",
+      requestId: "session-feedback-before-reset",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      rawText: "The session felt heavy.",
+    });
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+    const approval = await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: proposal.expectedPlanVersion,
+      selectedOption: proposal.recommended,
+    });
+
+    expect(feedback).toMatchObject({ status: "ok" });
+    expect(approval).toMatchObject({ status: "approved" });
+    expect(application.getState().athleteFeedback).toHaveLength(2);
+    expect(application.getState().adaptationReceipts).toHaveLength(1);
+
+    await application.command({ type: "reset_demo" });
+    const exactFixture = await source.loadContext();
+
+    expect(application.getState()).toEqual(exactFixture);
+    expect(application.getState().athleteFeedback).toEqual(
+      exactFixture.athleteFeedback,
+    );
+    expect(application.getState().coachingTopics).toEqual(
+      exactFixture.coachingTopics,
+    );
+    expect(application.getState().adaptationReceipts).toEqual([]);
   });
 });

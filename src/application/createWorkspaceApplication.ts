@@ -622,10 +622,15 @@ export function createWorkspaceApplication(
         const normalized = normalizeReported(command.reported);
         if (normalized.error) return normalized.error;
 
+        const relatedWorkoutResultId = state.workoutResults.find(
+          ({ plannedWorkoutId }) =>
+            plannedWorkoutId === command.relatedWorkoutId,
+        )?.id;
         const feedback: AthleteFeedback = {
           id: `athlete-feedback:${command.requestId}`,
           requestId: command.requestId,
           relatedWorkoutId: command.relatedWorkoutId,
+          ...(relatedWorkoutResultId ? { relatedWorkoutResultId } : {}),
           rawText: command.rawText,
           ...(command.reported === undefined
             ? {}

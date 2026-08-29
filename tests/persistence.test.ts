@@ -391,6 +391,48 @@ describe("workspace initialization", () => {
     expect(initialized.notice).toBeNull();
   });
 
+  it("preserves profile, topics, result links, and receipt evidence through reload", async () => {
+    const envelope = await approvedEnvelope();
+    const persistedFeedback = {
+      id: "athlete-feedback:persisted-with-result",
+      requestId: "persisted-with-result",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      relatedWorkoutResultId: "result-2026-08-26-threshold",
+      rawText: "The threshold session felt heavy.",
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    };
+    envelope.state.athleteFeedback.push(persistedFeedback);
+    envelope.state.processedRequestIds.push(persistedFeedback.requestId);
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+    const repository = new BrowserWorkspaceRepository(() => storage);
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository,
+    });
+    const application = createWorkspaceApplication({
+      initialState: initialized.state,
+      fixtureSource: source,
+      repository,
+    });
+
+    expect(initialized.state.athlete.profile).toEqual(
+      envelope.state.athlete.profile,
+    );
+    expect(initialized.state.coachingTopics).toEqual(
+      envelope.state.coachingTopics,
+    );
+    expect(initialized.state.athleteFeedback).toContainEqual(persistedFeedback);
+    expect(initialized.state.adaptationReceipts).toEqual(
+      envelope.state.adaptationReceipts,
+    );
+    expect(application.getPlanApproval("review:persisted")).toMatchObject({
+      evidenceRefs: envelope.state.adaptationReceipts[0].evidenceRefs,
+    });
+  });
+
   it("restores sparse Athlete Feedback from the persisted envelope", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();
@@ -479,6 +521,34 @@ describe("workspace initialization", () => {
     },
   );
 
+  it.each(["athlete.profile", "coachingTopics"] as const)(
+    "restores the exact fixture when schema-v1 state is missing %s",
+    async (missingField) => {
+      const envelope = await fixtureEnvelope();
+      if (missingField === "athlete.profile") {
+        delete (envelope.state.athlete as unknown as Record<string, unknown>)
+          .profile;
+      } else {
+        delete (envelope.state as unknown as Record<string, unknown>)
+          .coachingTopics;
+      }
+      const storage = new ControlledStorage();
+      storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+      const repository = new BrowserWorkspaceRepository(() => storage);
+      const source = createDemoCoachingContextSource();
+
+      const initialized = await initializeWorkspace({
+        fixtureSource: source,
+        repository,
+      });
+
+      expect(initialized.state).toEqual(await source.loadContext());
+      expect(initialized.notice).toBe(
+        "Saved demo data could not be used, so the Training Plan was refreshed.",
+      );
+    },
+  );
+
   it.each(MALFORMED_STATE_CASES)(
     "replaces a saved workspace with %s",
     async (_case, corrupt) => {
@@ -500,4 +570,27 @@ describe("workspace initialization", () => {
       );
     },
   );
+
+  it.each([
+    ["an empty receipt evidence reference", [""]],
+    ["an empty receipt evidence list", []],
+    [
+      "duplicate receipt evidence references",
+      ["observation:training-load", "observation:training-load"],
+    ],
+  ])("refreshes persisted state containing %s", async (_case, evidenceRefs) => {
+    const envelope = await approvedEnvelope();
+    envelope.state.adaptationReceipts[0].evidenceRefs = evidenceRefs;
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.state).toEqual(await source.loadContext());
+    expect(initialized.notice).toContain("could not be used");
+  });
 });
