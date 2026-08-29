@@ -77,7 +77,7 @@ The Athlete's consent that authorizes a proposed Plan Adaptation to become part 
 _Avoid_: Confirmation
 
 **Adaptation History**:
-The durable record of approved Plan Adaptations, including the evidence and recommendation that led to each change and the resulting Training Plan version.
+Immutable receipts for approved Plan Adaptations: evidence references, selected option identity, affected before-and-after values, application time, and Training Plan versions.
 _Avoid_: Chat history, audit log, Agent memory
 
 ## Relationships
@@ -93,7 +93,7 @@ _Avoid_: Chat history, audit log, Agent memory
 
 > **Athlete:** “I finished today's run without pain, but my legs felt unusually heavy.”
 >
-> **Coach Agent:** “That updates the shin-discomfort **Coaching Topic** and adds new **Athlete Feedback**. Your **Coaching Briefing** also shows elevated recent load, so I recommend reviewing the rest of this week before changing the **Training Plan**.”
+> **Coach Agent:** “That adds new **Athlete Feedback** beside the stable shin-discomfort **Coaching Topic**. Your **Coaching Briefing** also shows elevated recent load, so I recommend reviewing the rest of this week before changing the **Training Plan**.”
 
 ## Flagged ambiguities
 

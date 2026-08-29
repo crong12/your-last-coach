@@ -451,12 +451,12 @@ Expected: the proposal is currently accepted.
 
 - [ ] **Step 3: Add the smallest typed Workout Change comparison**
 
-Compare only `workoutChanges`; explanations and labels do not make two adaptations different. The existing validator has already restricted every value to the typed `WorkoutChange` contract, so sort the individual typed changes and compare their serialized values. Do not add a general-purpose canonicalization abstraction.
+Compare only `workoutChanges`; explanations and labels do not make two adaptations different. The existing validator has already restricted every value to the typed `WorkoutChange` contract, so build a fixed-field-order fingerprint for each `create`, `update`, and `delete` variant, including the nested Planned Workout, prescription, and Workout Block fields. Sort the individual typed fingerprints so change-array order remains irrelevant. Do not add a general-purpose recursive canonicalizer or semantic coaching machinery.
 
 ```ts
 function workoutChangeSignature(changes: WorkoutChange[]): string {
   return changes
-    .map((change) => JSON.stringify(change))
+    .map((change) => JSON.stringify(workoutChangeFingerprint(change)))
     .sort()
     .join("|");
 }
