@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { initializeWorkspace } from "../src/application/initializeWorkspace";
 import { createWorkspaceApplication } from "../src/application/createWorkspaceApplication";
 import type { PersistedWorkspace } from "../src/application/ports";
+import type { AppliedPlanAdaptation } from "../src/domain/types";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
 import {
   BrowserWorkspaceRepository,
@@ -96,6 +97,12 @@ async function approvedEnvelope(): Promise<PersistedWorkspace> {
       appliedAt: "2026-08-26T20:15:00+01:00",
       planVersionBefore: 1,
       planVersionAfter: 2,
+      evidenceRefs: [
+        "planned-workout:planned-2026-08-26-threshold",
+        "workout-result:result-2026-08-26-threshold",
+        "observation:training-load",
+        "observation:recovery",
+      ],
     },
   ];
   envelope.state.mutationHistory = [
@@ -385,6 +392,76 @@ describe("workspace initialization", () => {
     expect(initialized.notice).toBeNull();
   });
 
+  it("preserves profile, topics, result links, and receipt evidence through reload", async () => {
+    const envelope = await approvedEnvelope();
+    const persistedFeedback = {
+      id: "athlete-feedback:persisted-with-result",
+      requestId: "persisted-with-result",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      relatedWorkoutResultId: "result-2026-08-26-threshold",
+      rawText: "The threshold session felt heavy.",
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    };
+    envelope.state.athleteFeedback.push(persistedFeedback);
+    envelope.state.processedRequestIds.push(persistedFeedback.requestId);
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+    const repository = new BrowserWorkspaceRepository(() => storage);
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository,
+    });
+    const application = createWorkspaceApplication({
+      initialState: initialized.state,
+      fixtureSource: source,
+      repository,
+    });
+
+    expect(initialized.state.athlete.profile).toEqual(
+      envelope.state.athlete.profile,
+    );
+    expect(initialized.state.coachingTopics).toEqual(
+      envelope.state.coachingTopics,
+    );
+    expect(initialized.state.athleteFeedback).toContainEqual(persistedFeedback);
+    expect(initialized.state.adaptationReceipts).toEqual(
+      envelope.state.adaptationReceipts,
+    );
+    expect(application.getPlanApproval("review:persisted")).toMatchObject({
+      evidenceRefs: envelope.state.adaptationReceipts[0].evidenceRefs,
+    });
+  });
+
+  it("accepts receipt evidence for a Planned Workout removed by the adaptation", async () => {
+    const envelope = await approvedEnvelope();
+    const removedWorkoutId = "planned-2026-08-27-recovery";
+    const removedWorkoutEvidenceRef = `planned-workout:${removedWorkoutId}`;
+    envelope.state.adaptationReceipts[0].evidenceRefs = [
+      removedWorkoutEvidenceRef,
+      ...envelope.state.adaptationReceipts[0].evidenceRefs,
+    ];
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(initialized.state.trainingPlan.plannedWorkouts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: removedWorkoutId }),
+      ]),
+    );
+    expect(initialized.state.adaptationReceipts[0].evidenceRefs).toContain(
+      removedWorkoutEvidenceRef,
+    );
+  });
+
   it("restores sparse Athlete Feedback from the persisted envelope", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();
@@ -406,6 +483,10 @@ describe("workspace initialization", () => {
 
     expect(initialized.state.athleteFeedback).toEqual([
       expect.objectContaining({
+        id: "athlete-feedback:seed-shin-discomfort",
+      }),
+      expect.objectContaining({
+        id: "athlete-feedback:persisted",
         rawText: "My legs felt heavy.",
         reported: { legFeel: "heavy" },
       }),
@@ -469,6 +550,34 @@ describe("workspace initialization", () => {
     },
   );
 
+  it.each(["athlete.profile", "coachingTopics"] as const)(
+    "restores the exact fixture when schema-v1 state is missing %s",
+    async (missingField) => {
+      const envelope = await fixtureEnvelope();
+      if (missingField === "athlete.profile") {
+        delete (envelope.state.athlete as unknown as Record<string, unknown>)
+          .profile;
+      } else {
+        delete (envelope.state as unknown as Record<string, unknown>)
+          .coachingTopics;
+      }
+      const storage = new ControlledStorage();
+      storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+      const repository = new BrowserWorkspaceRepository(() => storage);
+      const source = createDemoCoachingContextSource();
+
+      const initialized = await initializeWorkspace({
+        fixtureSource: source,
+        repository,
+      });
+
+      expect(initialized.state).toEqual(await source.loadContext());
+      expect(initialized.notice).toBe(
+        "Saved demo data could not be used, so the Training Plan was refreshed.",
+      );
+    },
+  );
+
   it.each(MALFORMED_STATE_CASES)(
     "replaces a saved workspace with %s",
     async (_case, corrupt) => {
@@ -482,6 +591,87 @@ describe("workspace initialization", () => {
       const initialized = await initializeWorkspace({
         fixtureSource: source,
         repository,
+      });
+
+      expect(initialized.state).toEqual(await source.loadContext());
+      expect(initialized.notice).toBe(
+        "Saved demo data could not be used, so the Training Plan was refreshed.",
+      );
+    },
+  );
+
+  it.each([
+    ["an empty receipt evidence reference", [""]],
+    ["an empty receipt evidence list", []],
+    [
+      "duplicate receipt evidence references",
+      ["observation:training-load", "observation:training-load"],
+    ],
+  ])("refreshes persisted state containing %s", async (_case, evidenceRefs) => {
+    const envelope = await approvedEnvelope();
+    envelope.state.adaptationReceipts[0].evidenceRefs = evidenceRefs;
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.state).toEqual(await source.loadContext());
+    expect(initialized.notice).toContain("could not be used");
+  });
+
+  it.each([
+    [
+      "an unsupported receipt-root rationale",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt, { rationale: "discarded explanation" });
+      },
+    ],
+    [
+      "an unsupported selected-option field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.selectedOption, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+    [
+      "an unsupported affected-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[0], { note: "discarded note" });
+      },
+    ],
+    [
+      "an unsupported before-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[0].before!, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+    [
+      "an unsupported after-workout field",
+      (receipt: AppliedPlanAdaptation) => {
+        Object.assign(receipt.affectedWorkouts[1].after!, {
+          rationale: "discarded explanation",
+        });
+      },
+    ],
+  ] as const)(
+    "restores the exact fixture when saved data contains %s",
+    async (_case, corrupt) => {
+      const envelope = await approvedEnvelope();
+      corrupt(envelope.state.adaptationReceipts[0]);
+      const storage = new ControlledStorage();
+      storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+      const source = createDemoCoachingContextSource();
+
+      const initialized = await initializeWorkspace({
+        fixtureSource: source,
+        repository: new BrowserWorkspaceRepository(() => storage),
       });
 
       expect(initialized.state).toEqual(await source.loadContext());

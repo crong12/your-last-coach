@@ -254,7 +254,7 @@ function createTools(
       name: "get_athlete_context",
       title: "Get athlete context",
       description:
-        "Read the Athlete, Target Race, Training Phase, recent training, load, recovery, sleep, HRV, resting heart rate, and stress context shown in the workspace.",
+        "Start here for a bounded Coaching Briefing. Identify the current planVersion, active topics, recent feedback, and evidence before proposing changes.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -269,7 +269,7 @@ function createTools(
       name: "get_training_plan",
       title: "Get training plan",
       description:
-        "Read the current Training Plan version and stable Planned Workout IDs for an inclusive date range shown in the workspace.",
+        "Retrieve the relevant date range from the current planVersion; use returned Planned Workout IDs in later calls and proposals.",
       inputSchema: {
         type: "object",
         properties: {
@@ -300,7 +300,7 @@ function createTools(
       name: "get_workout_context",
       title: "Get workout context",
       description:
-        "Read one Planned Workout with its separate Workout Result, recorded laps, related Athlete Feedback, provenance, and stable evidence references.",
+        "Inspect the prescription, result, and feedback for one returned Planned Workout ID before explaining what happened.",
       inputSchema: {
         type: "object",
         properties: {
@@ -327,7 +327,7 @@ function createTools(
     name: "record_athlete_feedback",
     title: "Record athlete feedback",
     description:
-      "Record the Athlete’s original report and only explicitly reported normalized fields for one Planned Workout. Retrying the same valid requestId returns the original record without recording twice.",
+      "Record the current Athlete message when it reports new workout experience; preserve the raw words and only explicitly stated structured fields before proposing related changes. Reusing the same requestId returns the original feedback without recording twice.",
     inputSchema: {
       type: "object",
       properties: {
@@ -380,7 +380,7 @@ function createTools(
       name: "review_workout_adaptation",
       title: "Review workout adaptation",
       description:
-        "Open one ranked Workout Adaptation review. The call remains pending while the Athlete compares the recommendation and alternative, and settles when they discuss further or dismiss this issue-14 review.",
+        "Submit evidence-grounded rationale and exactly two ranked, structurally different options for the on-page review; never apply a plan directly; the call remains pending until the Athlete chooses an outcome.",
       inputSchema: reviewProposalSchema,
       annotations: {
         readOnlyHint: false,
@@ -407,7 +407,7 @@ function createTools(
         name: "open_workout_adaptation_review",
         title: "Open workout adaptation review",
         description:
-          "Open one ranked Workout Adaptation review and return immediately while the Athlete decides in the workspace.",
+          "Submit evidence-grounded rationale and exactly two ranked, structurally different options; open the on-page review; never apply a plan directly; the call returns immediately.",
         inputSchema: reviewProposalSchema,
         annotations: {
           readOnlyHint: false,
@@ -425,7 +425,7 @@ function createTools(
         name: "read_workout_adaptation_decision",
         title: "Read workout adaptation decision",
         description:
-          "Read the completed fallback decision once, or report that the active review is not ready.",
+          "Use the same reviewId after opening; poll only as needed until approved, discuss_further, or cancelled; return the Athlete-controlled terminal outcome.",
         inputSchema: {
           type: "object",
           properties: { reviewId: { type: "string", minLength: 1 } },

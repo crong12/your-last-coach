@@ -564,7 +564,40 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
   ).toBe(beforeEnvelope);
 });
 
-test("applies Recovery first atomically through Adapt my plan", async ({
+test("shows the shared coaching briefing", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "Athlete Profile" }),
+  ).toBeVisible();
+  await expect(page.getByText("Preferred long run")).toBeVisible();
+  await expect(page.getByText("Sunday", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maximum weekday session")).toBeVisible();
+  await expect(page.getByText("60 minutes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
+  await expect(
+    page.getByText("Shin discomfort", { exact: true }),
+  ).toBeVisible();
+  const monitoring = page.getByRole("region", { name: "Monitoring" });
+  await expect(monitoring.locator(".monitoring-status")).toHaveText(
+    "Monitoring",
+  );
+  await expect(
+    monitoring.getByText(
+      "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+    ),
+  ).toBeVisible();
+  await expect(
+    monitoring.getByText("23 August 2026", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    monitoring.getByText("The next Athlete report about a run.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("persists feedback context and plan adaptations across reload and reset", async ({
   page,
 }) => {
   await installWebMcpHarness(page, "fallback");
@@ -656,6 +689,36 @@ test("applies Recovery first atomically through Adapt my plan", async ({
   await page.reload();
   await expect(page.getByText("Plan version 2")).toBeVisible();
   await expect(page.getByText("Adapted", { exact: true })).toHaveCount(2);
+
+  const history = page.getByRole("region", {
+    name: "Recent plan adaptations",
+  });
+  await expect(history).toBeVisible();
+  await expect(
+    history.getByText("Recovery first", { exact: true }),
+  ).toBeVisible();
+  await expect(history.getByText("Plan 1 → 2", { exact: true })).toBeVisible();
+  await expect(
+    history.getByText("26 August 2026", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    history.getByText("3 workouts affected", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Reset demo" }).click();
+  await page
+    .getByRole("dialog", { name: "Reset the demo?" })
+    .getByRole("button", { name: "Reset demo" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Recent plan adaptations" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Shin discomfort", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Athlete Profile" }),
+  ).toBeVisible();
 });
 
 test("shows the deterministic Week first and the same workouts in Month", async ({
@@ -841,6 +904,259 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   expect(signalsAborted).toBe(true);
 });
 
+test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/");
+  const runTool = (name: string, input: Record<string, unknown>) =>
+    page.evaluate(
+      async ({ name, input }) => {
+        const registrations = (
+          window as unknown as {
+            __webMcpHarness: {
+              registrations: Array<{
+                tool: {
+                  name: string;
+                  execute: (
+                    input: Record<string, unknown>,
+                    options: { signal: AbortSignal },
+                  ) => Promise<unknown>;
+                };
+              }>;
+            };
+          }
+        ).__webMcpHarness.registrations;
+        const tool = registrations.find(({ tool }) => tool.name === name)?.tool;
+        if (!tool) throw new Error(name + " was not registered");
+        return tool.execute(input, {
+          signal: new AbortController().signal,
+        });
+      },
+      { name, input },
+    );
+
+  const initialBriefing = (await runTool("get_athlete_context", {})) as {
+    status: string;
+    data: {
+      trainingPlan: {
+        currentWeekPlannedWorkouts: Array<{ id: string; date: string }>;
+      };
+    };
+  };
+  expect(initialBriefing).toMatchObject({
+    status: "ok",
+    data: {
+      athlete: {
+        profile: {
+          preferredLongRunDay: { value: "Sunday" },
+          maximumWeekdayTrainingDurationMinutes: { value: 60 },
+        },
+      },
+      trainingPlan: {
+        planVersion: 1,
+        currentWeek: { from: "2026-08-24", to: "2026-08-30" },
+      },
+      activeCoachingTopics: [
+        { id: "coaching-topic:shin-discomfort", status: "monitoring" },
+      ],
+      recentAthleteFeedback: [{ id: "athlete-feedback:seed-shin-discomfort" }],
+      recentAdaptationHistory: [],
+    },
+  });
+  const thresholdWorkoutId =
+    initialBriefing.data.trainingPlan.currentWeekPlannedWorkouts.find(
+      ({ date }) => date === "2026-08-26",
+    )?.id;
+  expect(thresholdWorkoutId).toBeDefined();
+  await expect(
+    page
+      .getByRole("region", { name: "Monitoring" })
+      .locator(".monitoring-status"),
+  ).toHaveText("Monitoring");
+
+  const rawText =
+    "That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn’t hold the pace. No pain. Can we make the rest of this week easier?";
+  const feedback = await runTool("record_athlete_feedback", {
+    requestId: "fresh-agent-threshold-feedback",
+    relatedWorkoutId: thresholdWorkoutId!,
+    rawText,
+    reported: {
+      sessionRpe: 9,
+      legFeel: "heavy from the warm-up",
+      painReported: false,
+      stoppedReason: "couldn’t hold the pace",
+    },
+  });
+  expect(feedback).toMatchObject({
+    status: "ok",
+    feedback: {
+      relatedWorkoutId: thresholdWorkoutId,
+      relatedWorkoutResultId: "result-2026-08-26-threshold",
+      rawText,
+      reported: {
+        painReported: false,
+      },
+    },
+  });
+
+  const plan = (await runTool("get_training_plan", {
+    from: "2026-08-24",
+    to: "2026-08-30",
+  })) as {
+    status: string;
+    data: {
+      planVersion: number;
+      plannedWorkouts: Array<{ id: string; date: string }>;
+    };
+    evidenceRefs: string[];
+  };
+  expect(plan.status).toBe("ok");
+  const thresholdWorkoutFromPlan = plan.data.plannedWorkouts.find(
+    ({ date }) => date === "2026-08-26",
+  )?.id;
+  expect(thresholdWorkoutFromPlan).toBe(thresholdWorkoutId);
+
+  const workout = (await runTool("get_workout_context", {
+    workoutId: thresholdWorkoutFromPlan!,
+  })) as {
+    status: string;
+    data: {
+      plannedWorkout: { id: string };
+      workoutResult: { id: string; status: string };
+    };
+    evidenceRefs: string[];
+  };
+  expect(workout).toMatchObject({
+    status: "ok",
+    data: {
+      plannedWorkout: { id: thresholdWorkoutId },
+      workoutResult: {
+        id: "result-2026-08-26-threshold",
+        status: "partial",
+      },
+    },
+  });
+
+  const proposal = acceptedReviewProposal();
+  proposal.reviewId = "review:fresh-agent-lifecycle";
+  proposal.sourceWorkoutId = thresholdWorkoutFromPlan!;
+  proposal.expectedPlanVersion = plan.data.planVersion;
+  proposal.evidenceRefs = [
+    ...new Set([...plan.evidenceRefs, ...workout.evidenceRefs]),
+  ];
+  expect(proposal.recommended.optionId).not.toBe(proposal.alternative.optionId);
+  expect(proposal.recommended.workoutChanges).not.toEqual(
+    proposal.alternative.workoutChanges,
+  );
+
+  await expect(
+    runTool("open_workout_adaptation_review", proposal),
+  ).resolves.toMatchObject({
+    status: "review_opened",
+    reviewId: proposal.reviewId,
+  });
+  const review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await expect(
+    review.getByRole("button", {
+      name: /Coach's recommendation — Recovery first/,
+    }),
+  ).toBeVisible();
+  await expect(
+    review.getByRole("button", {
+      name: /Alternative — Keep the rhythm/,
+    }),
+  ).toBeVisible();
+
+  await review
+    .getByRole("button", {
+      name: /Coach's recommendation — Recovery first/,
+    })
+    .click();
+  const planAfterSelection = await runTool("get_training_plan", {
+    from: "2026-08-24",
+    to: "2026-08-30",
+  });
+  expect(planAfterSelection).toMatchObject({
+    status: "ok",
+    data: { planVersion: 1 },
+  });
+
+  await review.getByRole("button", { name: "Adapt my plan" }).click();
+  await expect(review).toBeHidden();
+  await expect(page.getByText("Plan version 2")).toBeVisible();
+
+  const decision = await runTool("read_workout_adaptation_decision", {
+    reviewId: proposal.reviewId,
+  });
+  expect(decision).toMatchObject({
+    status: "approved",
+    reviewId: proposal.reviewId,
+    selectedOption: {
+      optionId: proposal.recommended.optionId,
+      label: proposal.recommended.label,
+    },
+    planVersionBefore: 1,
+    planVersionAfter: 2,
+    appliedAt: "2026-08-26T20:15:00+01:00",
+  });
+
+  await page.reload();
+  await expect(
+    page.getByRole("button", {
+      name: "Coach Agent connection: connected",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Plan version 2")).toBeVisible();
+  const reloadedBriefing = (await runTool("get_athlete_context", {})) as {
+    status: string;
+    data: {
+      trainingPlan: { planVersion: number };
+      recentAthleteFeedback: Array<{ requestId: string; rawText: string }>;
+      recentAdaptationHistory: Array<{
+        reviewId: string;
+        selectedOption: { optionId: string; label: string };
+        planVersionBefore: number;
+        planVersionAfter: number;
+        appliedAt: string;
+        evidenceRefs: string[];
+      }>;
+    };
+  };
+  expect(reloadedBriefing.status).toBe("ok");
+  expect(reloadedBriefing.data).toMatchObject({
+    trainingPlan: { planVersion: 2 },
+  });
+  expect(reloadedBriefing.data.recentAthleteFeedback).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ requestId: "fresh-agent-threshold-feedback" }),
+    ]),
+  );
+  expect(reloadedBriefing.data.recentAdaptationHistory).toHaveLength(1);
+  expect(reloadedBriefing.data.recentAdaptationHistory[0]).toMatchObject({
+    reviewId: proposal.reviewId,
+    selectedOption: {
+      optionId: proposal.recommended.optionId,
+      label: proposal.recommended.label,
+    },
+    planVersionBefore: 1,
+    planVersionAfter: 2,
+    appliedAt: "2026-08-26T20:15:00+01:00",
+    evidenceRefs: expect.arrayContaining(proposal.evidenceRefs),
+  });
+  const history = page.getByRole("region", {
+    name: "Recent plan adaptations",
+  });
+  await expect(history).toBeVisible();
+  await expect(
+    history.getByText(proposal.recommended.label, { exact: true }),
+  ).toBeVisible();
+  await expect(history.getByText("Plan 1 → 2", { exact: true })).toBeVisible();
+  await expect(
+    history.getByText("26 August 2026", { exact: true }),
+  ).toBeVisible();
+});
+
 test("records, persists, and resets Athlete Feedback through the injected host", async ({
   page,
 }) => {
@@ -907,9 +1223,13 @@ test("records, persists, and resets Athlete Feedback through the injected host",
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
+  const feedback = page.getByRole("region", { name: "Athlete Feedback" });
+  await expect(feedback).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Athlete Feedback" }),
-  ).toBeHidden();
+    feedback.getByText(
+      "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+    ),
+  ).toBeVisible();
   await expect(page.getByText(rawText)).toBeHidden();
 });
 

@@ -8,7 +8,7 @@ All Athlete, workout, recovery, and COROS-shaped observations are deterministic 
 
 ## Product surface
 
-The repository ships a client-only React, TypeScript, and Vite application. Its production WebMCP configuration uses the compatibility fallback selected by the ChatGPT host-reliability gate. When WebMCP is available, the Coach Agent receives these six tools:
+The repository ships a client-only React, TypeScript, and Vite application. When WebMCP is available, the Coach Agent receives these six fallback tools:
 
 - `get_athlete_context`
 - `get_training_plan`
@@ -17,7 +17,7 @@ The repository ships a client-only React, TypeScript, and Vite application. Its 
 - `open_workout_adaptation_review`
 - `read_workout_adaptation_decision`
 
-The normal workspace remains usable when WebMCP is unavailable. Primary and fallback review tools are never registered together.
+The tool descriptions provide the Agent’s workflow. A fresh generic Agent uses them to preserve the Athlete’s report, read the bounded Coaching Briefing, inspect the relevant Training Plan and Workout Result, and open a review. The normal workspace remains usable when WebMCP is unavailable.
 
 ## Local setup
 
@@ -56,18 +56,18 @@ The detailed boundaries are recorded in [Implementation and verification archite
 
    > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
 
-4. The Coach Agent records the Athlete Feedback and reads Athlete, Training Plan, workout, and recovery context.
-5. The Agent calls `open_workout_adaptation_review` with its recommendation and alternative.
-6. In the workspace, preview **Alternative — Keep the rhythm**, then return to **Coach's recommendation — Recovery first**.
+4. The Coach Agent follows the attached-site descriptions to record Athlete Feedback and read the Coaching Briefing and relevant context.
+5. The Agent calls `open_workout_adaptation_review` with two model-proposed, evidence-grounded options.
+6. In the workspace, preview the options before deciding.
 7. Press **Adapt my plan**. Selection alone does not mutate the Training Plan.
 8. The Agent calls `read_workout_adaptation_decision` to receive the structured result.
-9. Confirm that the plan advances to version 2, Thursday becomes rest, Saturday becomes 6 km easy without strides, and Sunday becomes a 14 km easy long run.
+9. Confirm that the selected proposal changes the visible plan and that the resulting Adaptation History receipt is available.
 
 The approved three-minute presentation contract is in [Three-minute judging story](docs/three-minute-judging-story.md).
 
 ## Reset and persistence
 
-**Reset demo** opens an in-page confirmation and restores `demo-athlete-v1`, its fixed clock, plan version 1, original Planned Workouts, and empty feedback and review state.
+**Reset demo** opens an in-page confirmation and restores `demo-athlete-v1`, its fixed clock, plan version 1, original Planned Workouts, seeded Athlete Feedback and Coaching Topic, and no session review or adaptation state.
 
 Approved state is stored in browser `localStorage` and normally survives reloads in the same browser profile. If storage is unavailable or rejects a write, the current page remains authoritative and displays a warning that changes will be lost on reload. Invalid or unsupported saved state is replaced with the validated fixture.
 

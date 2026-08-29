@@ -265,7 +265,10 @@ h1 {
 .plan-panel,
 .race-card,
 .evidence-card,
-.recent-training-card {
+.recent-training-card,
+.profile-card,
+.monitoring-card,
+.adaptation-history-card {
   border: 1px solid rgba(23, 51, 48, 0.12);
   background: rgba(248, 250, 246, 0.82);
   box-shadow: var(--shadow);
@@ -461,6 +464,115 @@ h1 {
   padding-top: 107px;
 }
 
+.profile-card,
+.monitoring-card,
+.adaptation-history-card {
+  overflow: hidden;
+}
+
+.profile-list {
+  display: grid;
+  margin: 0;
+  padding: 12px 20px 18px;
+}
+
+.profile-list div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-list div:last-child {
+  border-bottom: 0;
+}
+
+.profile-list dt {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.profile-list dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.monitoring-card {
+  padding-bottom: 20px;
+}
+
+.monitoring-topics {
+  display: grid;
+  gap: 12px;
+  padding: 14px 20px 0;
+}
+
+.monitoring-topic {
+  padding: 16px;
+  border: 1px solid rgba(111, 158, 152, 0.42);
+  border-radius: 16px;
+  background: #edf5f0;
+}
+
+.monitoring-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--deep-sea);
+  background: rgba(111, 158, 152, 0.2);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monitoring-topic h3 {
+  margin: 11px 0 7px;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.monitoring-topic blockquote {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.monitoring-meta {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.monitoring-meta div {
+  display: grid;
+  gap: 2px;
+}
+
+.monitoring-meta dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monitoring-meta dd {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .feedback-card {
   padding: 22px;
   border: 1px solid rgba(232, 120, 81, 0.35);
@@ -520,9 +632,52 @@ h1 {
   font-size: 14px;
   font-weight: 700;
 }
+
+.adaptation-history-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 20px 18px;
+  list-style: none;
+}
+
+.adaptation-history-list li {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.adaptation-history-list li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.adaptation-history-list strong {
+  color: var(--ink);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.adaptation-history-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adaptation-history-meta span:last-child {
+  grid-column: 1 / -1;
+  color: var(--ink-soft);
+}
+
 .race-card,
 .evidence-card,
-.recent-training-card {
+.recent-training-card,
+.profile-card,
+.monitoring-card,
+.adaptation-history-card {
   border-radius: 22px;
 }
 .race-card {

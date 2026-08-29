@@ -15,10 +15,48 @@ describe("demo-athlete-v1", () => {
     expect(state.athlete).toMatchObject({
       id: "athlete-sam",
       displayName: "Sam",
-      normalWeeklyVolumeKm: { min: 42, max: 48 },
-      recentHalfMarathonSeconds: 6_120,
-      thresholdPaceSecondsPerKm: 278,
+      profile: {
+        normalWeeklyVolumeKm: {
+          value: { min: 42, max: 48 },
+          provenance: "seeded_athlete_profile",
+        },
+        recentHalfMarathonSeconds: {
+          value: 6_120,
+          provenance: "seeded_athlete_profile",
+        },
+        thresholdPaceSecondsPerKm: {
+          value: 278,
+          provenance: "seeded_athlete_profile",
+        },
+      },
     });
+    expect(state.athlete.profile.preferredLongRunDay).toEqual({
+      value: "Sunday",
+      provenance: "seeded_athlete_profile",
+    });
+    expect(state.athlete.profile.maximumWeekdayTrainingDurationMinutes).toEqual(
+      {
+        value: 60,
+        provenance: "seeded_athlete_profile",
+      },
+    );
+    expect(state.athleteFeedback).toContainEqual(
+      expect.objectContaining({
+        id: "athlete-feedback:seed-shin-discomfort",
+        relatedWorkoutId: "planned-2026-08-23-long",
+        relatedWorkoutResultId: "result-2026-08-23",
+        rawText:
+          "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+      }),
+    );
+    expect(state.coachingTopics).toEqual([
+      expect.objectContaining({
+        id: "coaching-topic:shin-discomfort",
+        status: "monitoring",
+        firstReportedAt: "2026-08-23T10:00:00+01:00",
+        latestReportedAt: "2026-08-23T10:00:00+01:00",
+      }),
+    ]);
     expect(state.targetRace).toEqual({
       id: "race-brighton-marathon-2027",
       name: "Brighton Marathon",
@@ -133,6 +171,26 @@ describe("demo-athlete-v1", () => {
       "explicit distance units",
       (state: any) => {
         state.trainingPlan.plannedWorkouts[0].distanceKm = 0;
+      },
+    ],
+    ["missing Athlete Profile", (state: any) => delete state.athlete.profile],
+    [
+      "invalid weekday limit",
+      (state: any) => {
+        state.athlete.profile.maximumWeekdayTrainingDurationMinutes.value = 0;
+      },
+    ],
+    [
+      "feedback linked to another result",
+      (state: any) => {
+        state.athleteFeedback[0].relatedWorkoutResultId =
+          "result-2026-08-26-threshold";
+      },
+    ],
+    [
+      "topic with unknown evidence",
+      (state: any) => {
+        state.coachingTopics[0].evidenceRefs = ["workout-result:missing"];
       },
     ],
   ])(

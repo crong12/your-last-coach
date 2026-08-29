@@ -1,6 +1,8 @@
 import type {
+  AppliedPlanAdaptation,
   Athlete,
   AthleteFeedback,
+  CoachingTopic,
   IsoDate,
   PlannedWorkout,
   SyntheticCorosShapedSnapshot,
@@ -37,6 +39,16 @@ export interface AthleteContextData {
   trainingPhase: TrainingPhase;
   recentTraining: WorkoutResult[];
   observations: SyntheticCorosShapedSnapshot;
+  trainingPlan: {
+    planVersion: number;
+    currentWeek: { from: IsoDate; to: IsoDate };
+    currentWeekPlannedWorkouts: Array<
+      Pick<PlannedWorkout, "id" | "date" | "type" | "title" | "purpose">
+    >;
+  };
+  recentAthleteFeedback: AthleteFeedback[];
+  activeCoachingTopics: CoachingTopic[];
+  recentAdaptationHistory: AppliedPlanAdaptation[];
   sources: {
     athlete: EvidenceSource;
     targetRace: EvidenceSource;
@@ -96,14 +108,63 @@ function isIsoDate(value: unknown): value is IsoDate {
 export function selectAthleteContext(
   state: WorkspaceState,
 ): ReadSuccess<AthleteContextData> {
+  const plan = [...state.trainingPlan.plannedWorkouts].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  const today = state.clock.now.slice(0, 10) as IsoDate;
+  const currentDate = new Date(`${today}T00:00:00Z`);
+  const daysSinceMonday = (currentDate.getUTCDay() + 6) % 7;
+  const weekStart = new Date(currentDate);
+  weekStart.setUTCDate(currentDate.getUTCDate() - daysSinceMonday);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const from = weekStart.toISOString().slice(0, 10) as IsoDate;
+  const to = weekEnd.toISOString().slice(0, 10) as IsoDate;
+  const currentWeekPlannedWorkouts = plan
+    .filter(({ date }) => date >= from && date <= to)
+    .map(({ id, date, type, title, purpose }) => ({
+      id,
+      date,
+      type,
+      title,
+      purpose,
+    }));
+  const recentAthleteFeedback = [...state.athleteFeedback]
+    .sort(
+      (a, b) =>
+        Date.parse(b.recordedAt) - Date.parse(a.recordedAt) ||
+        b.id.localeCompare(a.id),
+    )
+    .slice(0, 5)
+    .map((feedback) => structuredClone(feedback));
+  const activeCoachingTopics = state.coachingTopics
+    .filter(({ status }) => status === "monitoring")
+    .map((topic) => structuredClone(topic));
+  const recentAdaptationHistory = [...state.adaptationReceipts]
+    .sort(
+      (a, b) =>
+        Date.parse(b.appliedAt) - Date.parse(a.appliedAt) ||
+        b.reviewId.localeCompare(a.reviewId),
+    )
+    .slice(0, 3)
+    .map((receipt) => structuredClone(receipt));
+
   return success(
     {
       asOf: state.observations.asOf,
-      athlete: state.athlete,
-      targetRace: state.targetRace,
-      trainingPhase: state.trainingPhase,
-      recentTraining: state.workoutResults,
-      observations: state.observations,
+      athlete: structuredClone(state.athlete),
+      targetRace: structuredClone(state.targetRace),
+      trainingPhase: structuredClone(state.trainingPhase),
+      recentTraining: structuredClone(state.workoutResults),
+      observations: structuredClone(state.observations),
+      trainingPlan: {
+        planVersion: state.trainingPlan.planVersion,
+        currentWeek: { from, to },
+        currentWeekPlannedWorkouts,
+      },
+      recentAthleteFeedback,
+      activeCoachingTopics,
+      recentAdaptationHistory,
       sources: {
         athlete: "athlete_owned",
         targetRace: "app_owned",
@@ -123,6 +184,13 @@ export function selectAthleteContext(
       "observation:resting-heart-rate",
       "observation:daily-stress",
       ...state.workoutResults.map(({ id }) => `workout-result:${id}`),
+      `training-plan:version:${state.trainingPlan.planVersion}`,
+      ...currentWeekPlannedWorkouts.map(({ id }) => `planned-workout:${id}`),
+      ...recentAthleteFeedback.map(({ id }) => `athlete-feedback:${id}`),
+      ...activeCoachingTopics.map(({ id }) => `coaching-topic:${id}`),
+      ...recentAdaptationHistory.map(
+        ({ reviewId }) => `plan-adaptation:${reviewId}`,
+      ),
     ],
   );
 }

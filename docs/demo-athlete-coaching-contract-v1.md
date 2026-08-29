@@ -2,7 +2,7 @@
 
 Status: Accepted target for the WebMCP Challenge proof of concept
 
-Contract version: `1.2`
+Contract version: `1.1`
 
 Fixture version: `demo-athlete-v1`
 
@@ -10,7 +10,7 @@ Fixed demo time: `2026-08-26T20:15:00+01:00` (`Europe/London`)
 
 This contract defines the deterministic fixture and Coach Agent–Shared Coaching Workspace boundary for the proof of concept. It is demo-oriented, not a production COROS integration contract.
 
-Version 1.2 gives a fresh Coach Agent a bounded Coaching Briefing and makes the fallback review journey discoverable from the registered tools. The runtime still exposes exactly one review mode, and all Athlete-visible and Coach-Agent-readable context comes from the same workspace state.
+Version 1.1 gives a fresh Coach Agent a bounded Coaching Briefing and makes the fallback review journey discoverable from the registered tools. The runtime exposes the six-tool fallback surface, and all Athlete-visible and Coach-Agent-readable context comes from the same workspace state.
 
 ## Demo Athlete
 
@@ -42,13 +42,13 @@ The August Planned Workouts before the detailed result window exist to make the 
 
 The fixture carries only slow-changing fields that can materially affect a nearby coaching decision.
 
-| Field | Value | Provenance | Effective time |
-|---|---|---|---|
-| Normal weekly volume | 42–48 km | Synthetic training-history estimate | As of the fixed demo time |
-| Recent half-marathon ability | Approximately 1:42 | Seeded Athlete Profile | Current at the fixed demo time |
-| Threshold pace | Approximately 4:38/km | Synthetic fitness estimate | As of the fixed demo time |
-| Preferred long-run day | Sunday | Athlete-stated preference | Current |
-| Maximum weekday training duration | 60 minutes | Athlete-stated recurring constraint | Current |
+| Field                             | Value                 | Provenance                          | Effective time                 |
+| --------------------------------- | --------------------- | ----------------------------------- | ------------------------------ |
+| Normal weekly volume              | 42–48 km              | Synthetic training-history estimate | As of the fixed demo time      |
+| Recent half-marathon ability      | Approximately 1:42    | Seeded Athlete Profile              | Current at the fixed demo time |
+| Threshold pace                    | Approximately 4:38/km | Synthetic fitness estimate          | As of the fixed demo time      |
+| Preferred long-run day            | Sunday                | Athlete-stated preference           | Current                        |
+| Maximum weekday training duration | 60 minutes            | Athlete-stated recurring constraint | Current                        |
 
 Height, weight, heart-rate zones, surface preference, and other possible profile fields are absent because they do not affect the judging decision. Missing profile values are not inferred.
 
@@ -56,18 +56,18 @@ Height, weight, heart-rate zones, surface preference, and other possible profile
 
 The fixture contains one ongoing matter:
 
-| Field | Value |
-|---|---|
-| Stable ID | `coaching-topic:shin-discomfort` |
-| Title | Shin discomfort |
-| Status | `monitoring` |
-| Athlete report | “My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.” |
-| First reported | Sunday 23 August 2026, after the long run |
-| Last reported | Sunday 23 August 2026, after the long run |
-| Evidence | One historical Athlete Feedback record linked to the 23 August Workout Result |
-| Follow-up condition | The next Athlete report about a run |
+| Field               | Value                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Stable ID           | `coaching-topic:shin-discomfort`                                                                                |
+| Title               | Shin discomfort                                                                                                 |
+| Status              | `monitoring`                                                                                                    |
+| Athlete report      | “My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.” |
+| First reported      | Sunday 23 August 2026, after the long run                                                                       |
+| Last reported       | Sunday 23 August 2026, after the long run                                                                       |
+| Evidence            | One historical Athlete Feedback record linked to the 23 August Workout Result                                   |
+| Follow-up condition | The next Athlete report about a run                                                                             |
 
-The topic preserves what the Athlete reported without diagnosing an injury. Silence does not resolve it. The judging message's “No pain” statement is relevant new evidence: the Coach Agent should acknowledge it briefly, while keeping accumulated fatigue as the main basis for the current recommendation.
+The topic preserves what the Athlete reported without diagnosing an injury. Silence does not resolve it. Recording new Athlete Feedback does not mutate or close this stable Coaching Topic. The judging message's “No pain” statement is relevant new evidence: it appears beside the topic in the Coaching Briefing, while accumulated fatigue remains the main basis for the current recommendation.
 
 ### Coaching Briefing
 
@@ -76,24 +76,27 @@ The topic preserves what the Athlete reported without diagnosing an injury. Sile
 - the Athlete, Target Race, and current Training Phase;
 - the Athlete Profile fields above;
 - the current load, recovery, and health snapshot;
-- the active Coaching Topic with its evidence reference and follow-up condition; and
-- recent Adaptation History when an approved adaptation exists.
+- a current-week Training Plan summary with `planVersion`, ISO Monday-to-Sunday bounds, and the Planned Workouts in that week;
+- `recentTraining`, which currently contains the complete `state.workoutResults` array (all ten fixture Workout Results); it is not separately truncated to exclude older results;
+- the five newest Athlete Feedback records;
+- the active monitoring Coaching Topics with their evidence references and follow-up conditions; and
+- the three newest Adaptation History receipts when approved adaptations exist.
 
-The Shared Coaching Workspace renders the same briefing from the same authoritative state. The briefing is a current projection, not a second source of truth or a transcript summary.
+The Shared Coaching Workspace renders the same briefing from the same authoritative state. The briefing is a current projection, not a second source of truth or a transcript summary. Its bounded fields are the current ISO week plan, newest five feedback records, monitoring topics, and newest three receipts; the current `recentTraining` behavior is the complete fixture result array described above.
 
 ## Recent training history
 
-| Date | Planned Workout / Workout Result | Distance |
-|---|---|---:|
-| Thu 13 Aug | Easy run | 8 km |
-| Sat 15 Aug | Easy run with strides | 8 km |
-| Sun 16 Aug | Long run | 18 km |
-| Tue 18 Aug | Easy run | 10 km |
-| Wed 19 Aug | Steady run including 5 km tempo | 12 km |
-| Fri 21 Aug | Easy run | 8 km |
-| Sat 22 Aug | Recovery run | 6 km |
-| Sun 23 Aug | Long run | 20 km |
-| Mon 24 Aug | Recovery run | 6 km |
+| Date       | Planned Workout / Workout Result     |  Distance |
+| ---------- | ------------------------------------ | --------: |
+| Thu 13 Aug | Easy run                             |      8 km |
+| Sat 15 Aug | Easy run with strides                |      8 km |
+| Sun 16 Aug | Long run                             |     18 km |
+| Tue 18 Aug | Easy run                             |     10 km |
+| Wed 19 Aug | Steady run including 5 km tempo      |     12 km |
+| Fri 21 Aug | Easy run                             |      8 km |
+| Sat 22 Aug | Recovery run                         |      6 km |
+| Sun 23 Aug | Long run                             |     20 km |
+| Mon 24 Aug | Recovery run                         |      6 km |
 | Wed 26 Aug | Partial `5 × 1 km threshold` workout | see below |
 
 The 18–23 August week totals 56 km, above the Athlete’s normal 42–48 km range. This establishes a credible heavy-week context without implying reckless training.
@@ -108,13 +111,13 @@ Planned structure:
 
 Recorded work repetitions:
 
-| Rep | Pace | Average heart rate |
-|---:|---:|---:|
-| 1 | 4:36/km | 165 bpm |
-| 2 | 4:39/km | 171 bpm |
-| 3 | 4:48/km | 176 bpm |
-| 4 | Not completed | — |
-| 5 | Not completed | — |
+| Rep |          Pace | Average heart rate |
+| --: | ------------: | -----------------: |
+|   1 |       4:36/km |            165 bpm |
+|   2 |       4:39/km |            171 bpm |
+|   3 |       4:48/km |            176 bpm |
+|   4 | Not completed |                  — |
+|   5 | Not completed |                  — |
 
 The Athlete completes approximately 1 km of easy cooldown after stopping. The Workout Result status is `partial`.
 
@@ -225,25 +228,20 @@ Uncertainty:
 
 ## WebMCP tool surface
 
-| Tool | Responsibility | Input | Output | Mutation boundary |
-|---|---|---|---|---|
-| `get_athlete_context` | Start a coaching interaction by reading the bounded Coaching Briefing | None | Athlete, Target Race, Training Phase, Athlete Profile, current health/load evidence, active Coaching Topics, recent Adaptation History, `asOf`, and provenance | Read-only |
-| `get_training_plan` | Read calendar state | `from`, `to` | `planVersion` and Planned Workouts in the requested range | Read-only |
-| `get_workout_context` | Read one workout and its evidence | `workoutId` | Planned Workout, optional Workout Result, and related Athlete Feedback | Read-only |
-| `record_athlete_feedback` | Record new Athlete-reported evidence before proposing an adaptation | `requestId`, `relatedWorkoutId`, `rawText`, optional `reported` | Newly recorded feedback or the existing result for a repeated `requestId` | Mutates Athlete Feedback and relevant Coaching Topic evidence only |
-| `review_workout_adaptation` | Primary imperative human review | Stable `reviewId`, evidence references, rationale, exactly two ranked options | Pending until `applied`, `discuss_further`, or `cancelled`; may return `busy` | Only the Athlete pressing **Adapt my plan** may mutate the Training Plan |
-| `open_workout_adaptation_review` | After recording and reading evidence, open the Athlete-facing review with one recommendation and one alternative | Same proposal payload | Immediate `review_opened` | The call itself does not mutate; later on-page approval may apply |
-| `read_workout_adaptation_decision` | After the Athlete decides on-page, retrieve the structured terminal result | `reviewId` | `not_ready` or stored terminal result, then cleared for delivery | Read-only; any application already occurred on-page |
+| Tool                               | Responsibility                                                                                                   | Input                                                           | Output                                                                                                                                                                                                                                         | Mutation boundary                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `get_athlete_context`              | Start a coaching interaction by reading the bounded Coaching Briefing                                            | None                                                            | Athlete, Target Race, Training Phase, Athlete Profile, current-week plan summary, complete fixture `recentTraining`, newest five Athlete Feedback records, monitoring topics, newest three Adaptation History receipts, `asOf`, and provenance | Read-only                                                                  |
+| `get_training_plan`                | Read calendar state                                                                                              | `from`, `to`                                                    | `planVersion` and Planned Workouts in the requested range                                                                                                                                                                                      | Read-only                                                                  |
+| `get_workout_context`              | Read one workout and its evidence                                                                                | `workoutId`                                                     | Planned Workout, optional Workout Result, and related Athlete Feedback                                                                                                                                                                         | Read-only                                                                  |
+| `record_athlete_feedback`          | Record new Athlete-reported evidence before proposing an adaptation                                              | `requestId`, `relatedWorkoutId`, `rawText`, optional `reported` | Newly recorded feedback or the existing result for a repeated `requestId`                                                                                                                                                                      | Mutates Athlete Feedback only; the stable Coaching Topic remains unchanged |
+| `open_workout_adaptation_review`   | After recording and reading evidence, open the Athlete-facing review with one recommendation and one alternative | Same proposal payload                                           | Immediate `review_opened`                                                                                                                                                                                                                      | The call itself does not mutate; later on-page approval may apply          |
+| `read_workout_adaptation_decision` | After the Athlete decides on-page, retrieve the structured terminal result                                       | `reviewId`                                                      | `not_ready` or stored terminal result, then cleared for delivery                                                                                                                                                                               | Read-only; any application already occurred on-page                        |
 
-The standing contract contains seven tools, but they are conditionally exposed.
+While a fallback review is pending, `read_workout_adaptation_decision` returns `not_ready`; after the Athlete's decision it returns exactly one terminal status: `approved`, `discuss_further`, or `cancelled`, then clears that result for delivery.
 
-- `primary` mode registers the three read tools, `record_athlete_feedback`, and `review_workout_adaptation`.
-- `fallback` mode registers the three read tools, `record_athlete_feedback`, `open_workout_adaptation_review`, and `read_workout_adaptation_decision`.
-- Primary and fallback review tools are never registered together.
+The shipped runtime exposes exactly the six fallback tools above. Tool descriptions communicate the review lifecycle to a fresh Agent without relying on repository instructions or a prior conversation. The fallback surface does not include `review_workout_adaptation`.
 
-The Challenge configuration registers the verified six-tool fallback surface. The primary review tool remains part of the standing contract but is not exposed in the judging runtime.
-
-The standing surface covers reading the Coaching Briefing, Training Plan, and workout context; recording Athlete Feedback; reviewing a Workout Adaptation; and receiving the Athlete's decision. Tool descriptions communicate this lifecycle to a fresh Agent without relying on repository instructions or a prior conversation. Additional tools require a separately recorded need.
+Controlled development harness only: a separate pending-call interface may be named `review_workout_adaptation` for settlement tests. It is outside the shipped six-tool contract, is not registered by the shipped runtime, and must not be counted as a standing or production tool. Any future pending-call or primary review experience remains future work and does not change the current v1.1 runtime surface.
 
 ## Review proposal
 
@@ -284,11 +282,11 @@ The named properties guarantee exactly one recommendation and one alternative. T
 - Selecting a card changes only the calendar preview.
 - Only **Adapt my plan** grants Plan Approval.
 - Approval atomically applies the selected Workout Adaptation, increments `planVersion`, stores the terminal outcome, and settles the review.
-- The applied result identifies the selected option, cited evidence, rationale, affected Planned Workouts, application time, and plan versions before and after. This becomes Adaptation History.
+- The applied result identifies the review, cited evidence references, selected option identity, affected Planned Workout before/after values, application time, and plan versions before and after. This becomes Adaptation History. It excludes proposal rationale, free-form reasoning, and the discarded alternative.
 - `reviewId` and `requestId` are idempotency keys; reuse cannot apply or record twice.
 - `None — discuss further`, cancellation, timeout, unload before approval, and reset discard the pending proposal without changing the Training Plan.
-- The primary pending-call path and compatibility open/read path use the same proposal, validation, preview, approval, application, and idempotency semantics. Only result delivery differs.
-- The configured review mode determines which path is registered; the Coach Agent never chooses between both paths in one session.
+- The shipped open/read fallback path uses the same proposal, validation, preview, approval, application, and idempotency semantics end to end.
+- A controlled development harness may exercise a pending-call path with the same application command for settlement tests; it is outside the shipped six-tool contract and is not a runtime registration choice.
 
 There is deliberately no agent-callable `apply_plan` tool. Training Plan mutation remains behind the Athlete’s explicit Plan Approval in the Shared Coaching Workspace.
 

@@ -50,9 +50,28 @@ export const DEMO_WORKSPACE_STATE = {
   athlete: {
     id: "athlete-sam",
     displayName: "Sam",
-    normalWeeklyVolumeKm: { min: 42, max: 48 },
-    recentHalfMarathonSeconds: 6_120,
-    thresholdPaceSecondsPerKm: 278,
+    profile: {
+      normalWeeklyVolumeKm: {
+        value: { min: 42, max: 48 },
+        provenance: "seeded_athlete_profile",
+      },
+      recentHalfMarathonSeconds: {
+        value: 6_120,
+        provenance: "seeded_athlete_profile",
+      },
+      thresholdPaceSecondsPerKm: {
+        value: 278,
+        provenance: "seeded_athlete_profile",
+      },
+      preferredLongRunDay: {
+        value: "Sunday",
+        provenance: "seeded_athlete_profile",
+      },
+      maximumWeekdayTrainingDurationMinutes: {
+        value: 60,
+        provenance: "seeded_athlete_profile",
+      },
+    },
   },
   targetRace: {
     id: "race-brighton-marathon-2027",
@@ -292,7 +311,36 @@ export const DEMO_WORKSPACE_STATE = {
       ],
     },
   ],
-  athleteFeedback: [],
+  athleteFeedback: [
+    {
+      id: "athlete-feedback:seed-shin-discomfort",
+      requestId: "seed-shin-discomfort",
+      relatedWorkoutId: "planned-2026-08-23-long",
+      relatedWorkoutResultId: "result-2026-08-23",
+      rawText:
+        "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+      reported: {
+        legFeel: "Right shin felt a little sore near the end.",
+      },
+      recordedAt: "2026-08-23T10:00:00+01:00",
+    },
+  ],
+  coachingTopics: [
+    {
+      id: "coaching-topic:shin-discomfort",
+      title: "Shin discomfort",
+      status: "monitoring",
+      athleteReport:
+        "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+      firstReportedAt: "2026-08-23T10:00:00+01:00",
+      latestReportedAt: "2026-08-23T10:00:00+01:00",
+      evidenceRefs: [
+        "athlete-feedback:athlete-feedback:seed-shin-discomfort",
+        "workout-result:result-2026-08-23",
+      ],
+      followUpCondition: "The next Athlete report about a run.",
+    },
+  ],
   processedRequestIds: [],
   appliedReviewIds: [],
   adaptationReceipts: [],

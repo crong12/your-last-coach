@@ -492,6 +492,9 @@ export function createWorkspaceApplication(
           };
         }
         const approvalGeneration = activePlanReview.generation;
+        const proposalEvidenceRefs = [
+          ...activePlanReview.proposal.evidenceRefs,
+        ];
         const promise = (async () => {
           const { plannedWorkouts, affectedWorkouts } = applyOption(
             state.trainingPlan.plannedWorkouts,
@@ -507,6 +510,7 @@ export function createWorkspaceApplication(
             appliedAt: state.clock.now,
             planVersionBefore: state.trainingPlan.planVersion,
             planVersionAfter: state.trainingPlan.planVersion + 1,
+            evidenceRefs: proposalEvidenceRefs,
           };
           const nextState = deepFreeze({
             ...state,
@@ -618,10 +622,15 @@ export function createWorkspaceApplication(
         const normalized = normalizeReported(command.reported);
         if (normalized.error) return normalized.error;
 
+        const relatedWorkoutResultId = state.workoutResults.find(
+          ({ plannedWorkoutId }) =>
+            plannedWorkoutId === command.relatedWorkoutId,
+        )?.id;
         const feedback: AthleteFeedback = {
           id: `athlete-feedback:${command.requestId}`,
           requestId: command.requestId,
           relatedWorkoutId: command.relatedWorkoutId,
+          ...(relatedWorkoutResultId ? { relatedWorkoutResultId } : {}),
           rawText: command.rawText,
           ...(command.reported === undefined
             ? {}

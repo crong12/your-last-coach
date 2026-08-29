@@ -363,6 +363,67 @@ function validateOption(
   });
 }
 
+function workoutBlockFingerprint(block: WorkoutBlock): readonly unknown[] {
+  if (block.kind === "repeat") {
+    return [
+      block.kind,
+      block.repetitions,
+      block.workDistanceKm,
+      block.targetPaceSecondsPerKm.min,
+      block.targetPaceSecondsPerKm.max,
+      block.recoverySeconds,
+    ];
+  }
+  return [block.kind, block.distanceKm];
+}
+
+function workoutPrescriptionFingerprint(
+  prescription: WorkoutPrescription,
+): readonly unknown[] {
+  return [prescription.blocks.map(workoutBlockFingerprint)];
+}
+
+function plannedWorkoutFingerprint(
+  workout: PlannedWorkout,
+): readonly unknown[] {
+  return [
+    workout.id,
+    workout.date,
+    workout.type,
+    workout.title,
+    workout.purpose,
+    workout.distanceKm,
+    workoutPrescriptionFingerprint(workout.prescription),
+  ];
+}
+
+function workoutChangeFingerprint(change: WorkoutChange): readonly unknown[] {
+  if (change.kind === "create") {
+    return [change.kind, plannedWorkoutFingerprint(change.workout)];
+  }
+  if (change.kind === "delete") {
+    return [change.kind, change.workoutId];
+  }
+  return [
+    change.kind,
+    change.workoutId,
+    change.changes.date ?? null,
+    change.changes.title ?? null,
+    change.changes.purpose ?? null,
+    change.changes.distanceKm ?? null,
+    change.changes.prescription === undefined
+      ? null
+      : workoutPrescriptionFingerprint(change.changes.prescription),
+  ];
+}
+
+function workoutChangeSignature(changes: WorkoutChange[]): string {
+  return changes
+    .map((change) => JSON.stringify(workoutChangeFingerprint(change)))
+    .sort()
+    .join("|");
+}
+
 export function validateAdaptationOption(
   value: unknown,
   plannedWorkouts: PlannedWorkout[],
@@ -528,8 +589,12 @@ export function validateReviewProposal(
       );
     }
   }
+  const recommendedIssuesBefore = issues.length;
   validateOption(value.recommended, "recommended", workoutIds, issues);
+  const recommendedShapeValid = issues.length === recommendedIssuesBefore;
+  const alternativeIssuesBefore = issues.length;
   validateOption(value.alternative, "alternative", workoutIds, issues);
+  const alternativeShapeValid = issues.length === alternativeIssuesBefore;
   if (
     isRecord(value.recommended) &&
     isRecord(value.alternative) &&
@@ -541,6 +606,23 @@ export function validateReviewProposal(
       "alternative.optionId",
       "Option IDs must be distinct.",
       "an identifier different from recommended.optionId",
+    );
+  }
+  if (
+    recommendedShapeValid &&
+    alternativeShapeValid &&
+    isRecord(value.recommended) &&
+    isRecord(value.alternative) &&
+    Array.isArray(value.recommended.workoutChanges) &&
+    Array.isArray(value.alternative.workoutChanges) &&
+    workoutChangeSignature(value.recommended.workoutChanges) ===
+      workoutChangeSignature(value.alternative.workoutChanges)
+  ) {
+    issue(
+      issues,
+      "alternative.workoutChanges",
+      "Alternative Workout Changes must differ from the recommendation.",
+      "a set of Workout Changes different from recommended.workoutChanges",
     );
   }
   return issues.length === 0

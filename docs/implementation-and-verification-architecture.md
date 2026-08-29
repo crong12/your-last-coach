@@ -38,7 +38,7 @@ Ticket 1's Month view and simple storage fallback remain in scope because implem
 
 ### Strengthen if time
 
-- the alternate review-delivery mode only if it is separately reverified and does not endanger the accepted fallback;
+- the controlled-development pending-call review mode, when needed for host tests;
 - broader Demo Guide and debugging affordances;
 - additional responsive/accessibility refinement beyond the polished baseline;
 - extra lifecycle end-to-end flows and exhaustive storage failure cases;
@@ -111,7 +111,7 @@ Owns only host mechanics:
 
 - capability detection;
 - tool names, descriptions, JSON input schemas, and annotations;
-- an explicit `primary` or `fallback` review mode;
+- the shipped `fallback` review mode and the controlled-development pending-call mode;
 - registration after successful application initialization;
 - translation between tool payloads and typed application commands/queries;
 - `AbortSignal`, unload, cleanup, and single-settlement behaviour;
@@ -120,7 +120,7 @@ Owns only host mechanics:
 
 It does not generate Coach Recommendations, interpret Athlete evidence, or mutate the Training Plan independently.
 
-The codebase owns a seven-tool contract, but a host never sees both review paths. In `primary` mode it registers the three read tools, Athlete Feedback, and `review_workout_adaptation`. In `fallback` mode it registers the three reads, Athlete Feedback, `open_workout_adaptation_review`, and `read_workout_adaptation_decision`.
+The shipped attached-site path exposes the six fallback tools documented in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md). Controlled development tests may exercise the pending-call review mode; the shipped app does not select it, and a host never sees both review paths.
 
 ### `ui`
 
@@ -138,11 +138,11 @@ Two deliberately small interfaces isolate the POC implementations:
 
 ```ts
 interface CoachingContextSource {
-  loadContext(): Promise<CoachingContext>;
+  loadContext(): Promise<WorkspaceState>;
 }
 
 interface WorkspaceRepository {
-  load(): Promise<PersistedWorkspace | null>;
+  load(): Promise<unknown | null>;
   save(workspace: PersistedWorkspace): Promise<Durability>;
   clear(): Promise<void>;
 }
@@ -167,7 +167,6 @@ One reducer-owned serializable `WorkspaceState` is authoritative for Athlete-vis
 ```ts
 type WorkspaceState = {
   athlete: Athlete;
-  athleteProfile: AthleteProfile;
   targetRace: TargetRace;
   trainingPhase: TrainingPhase;
   observations: SyntheticCorosShapedSnapshot;
@@ -180,23 +179,42 @@ type WorkspaceState = {
   coachingTopics: CoachingTopic[];
   processedRequestIds: string[];
   appliedReviewIds: string[];
-  adaptationReceipts: AdaptationReceipt[];
+  adaptationReceipts: AppliedPlanAdaptation[];
+  mutationHistory: WorkspaceMutation[];
 };
 ```
 
-The persisted envelope contains the complete serializable snapshot:
+The Athlete Profile is nested at `state.athlete.profile`; there is no
+top-level `athleteProfile` field.
+
+The architecture document's version is independent from the browser storage
+schema. The shipped storage schema remains version `1`. The persisted envelope
+contains the complete serializable snapshot:
 
 ```ts
 type PersistedWorkspace = {
-  schemaVersion: 2;
+  schemaVersion: 1;
   seedVersion: "demo-athlete-v1";
   savedAt: string;
   state: WorkspaceState;
-  undeliveredFallbackResult?: AdaptationDecision;
+  undeliveredFallbackResult?: PersistedFallbackResult;
 };
 ```
 
+There is no schema migration. An incomplete or invalid schema-v1 snapshot is
+rejected and replaced with the exact demo fixture through the existing refresh
+path.
+
 All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
+
+The shipped read and state path is:
+
+```text
+WorkspaceState
+  -> validate / persist / reset
+  -> selectAthleteContext (Coaching Briefing)
+  -> React ContextRail + get_athlete_context
+```
 
 ## Coaching Briefing projection
 
@@ -205,10 +223,13 @@ The application owns a deterministic selector that assembles the context a fresh
 - identity, Target Race, and current Training Phase;
 - the small Athlete Profile fields that can affect the decision;
 - the current health and load snapshot with freshness and provenance;
+- a current ISO Monday-to-Sunday week summary with its plan version and Planned Workouts;
+- the complete `state.workoutResults` array as `recentTraining` (currently all ten fixture results; the selector does not apply a separate older-result cutoff);
+- the five newest Athlete Feedback records;
 - active Coaching Topics with status, timestamps, evidence references, and follow-up conditions; and
-- recent Adaptation History when present.
+- the three newest Adaptation History receipts when present.
 
-The selector is bounded by contract rather than token count. It does not copy every Workout Result or conversation into one payload; `get_training_plan` and `get_workout_context` remain the deeper evidence reads. The UI renders the same projection so the Athlete can inspect what the Coach Agent is expected to know.
+The selector is bounded by contract rather than token count. Its explicit bounds are the current ISO week plan, newest five feedback records, monitoring topics, and newest three receipts; `recentTraining` currently projects the complete fixture result array. `get_training_plan` and `get_workout_context` remain the deeper evidence reads. The UI renders the same projection so the Athlete can inspect what the Coach Agent is expected to know.
 
 For `demo-athlete-v1`, the selector always returns the seeded profile and shin-discomfort topic. Relevance is expressed by the topic's follow-up condition. The Coach Agent may acknowledge the topic when the Athlete reports on a run, but cannot diagnose, silently resolve, or allow it to override stronger current evidence.
 
@@ -225,11 +246,11 @@ The review coordinator exclusively owns:
 - the active `reviewId`;
 - the proposal and expected `planVersion`;
 - the selected option and derived preview;
-- the primary tool Promise resolver;
+- the controlled-development pending-call resolver;
 - abort and unload cleanup;
 - exactly-once terminal settlement.
 
-An unfinished primary review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery.
+An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery. The exact fallback terminal statuses and approved receipt payload are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
 
 ## Planned Workout and Workout Result
 
@@ -283,7 +304,7 @@ type WorkoutChange =
   | { kind: "delete"; workoutId: string };
 ```
 
-Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. Distance and a replacement prescription are validated independently; focused fixture tests prove that supplied pairs carry the accepted coherent values without deriving distance from arbitrary Workout Blocks. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. The applied receipt records cited evidence, rationale, selected option, affected workouts, application time, and plan versions before and after so it can serve as bounded Adaptation History.
+Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. Distance and a replacement prescription are validated independently; focused fixture tests prove that supplied pairs carry the accepted coherent values without deriving distance from arbitrary Workout Blocks. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. The applied receipt records its review identity, cited evidence, selected option identity, affected before/after workouts, application time, and plan versions before and after so it can serve as bounded Adaptation History. It does not retain rationale, free-form reasoning, or the discarded alternative.
 
 Every proposed option records the `planVersion` on which it was based. A mismatch returns `stale_plan` without applying or merging changes.
 
@@ -320,11 +341,11 @@ The application command:
 2. validates every Workout Change against the current Training Plan;
 3. produces the entire next Training Plan or rejects without mutation;
 4. increments `planVersion`;
-5. records the `reviewId` and complete Adaptation History receipt atomically in state;
+5. records the `reviewId` and the durable Adaptation History receipt atomically in state; the receipt contains evidence references, selected option identity, affected before/after values, application time, and plan versions;
 6. attempts to persist the complete resulting snapshot;
-7. produces the terminal result for the pending primary call or stored fallback delivery.
+7. produces the terminal result for the controlled-development pending call or stored fallback delivery.
 
-The primary and fallback paths invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
+The controlled-development pending-call path and shipped fallback path invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
 
 Repeated `reviewId` or `requestId` values return their existing outcome and cannot apply or record twice.
 
@@ -337,16 +358,16 @@ Initialization order:
 3. Restore `demo-athlete-v1` when state is missing, invalid, or unsupported.
 4. Construct the application core and review coordinator.
 5. Mount the Shared Coaching Workspace.
-6. Register exactly one active review-mode tool set when `document.modelContext` is available; never expose primary and fallback review tools together.
+6. Register the six fallback tools when `document.modelContext` is available. The pending-call review mode is limited to controlled development tests and is not selected by the shipped app.
 7. Publish `connected`, `unavailable`, or `error` status to the UI.
 
-An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. A migration switch remains available when a second schema version actually exists.
+An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. The current schema has no migration path; a future schema version would require an explicit migration decision.
 
 **Reset demo** uses a lightweight in-page confirmation. Approval of reset:
 
 - cancels an active review with reason `reset`;
 - clears the persisted envelope and undelivered fallback result;
-- clears new Athlete Feedback, topic updates, plan changes, idempotency records, receipts, selection, and preview;
+- clears new Athlete Feedback, plan changes, idempotency records, receipts, selection, and preview;
 - restores the exact seeded Athlete Profile, Coaching Topic, fixed clock, and initial `planVersion`;
 - leaves browser capability detection and tool definitions available.
 
@@ -391,7 +412,7 @@ Every release candidate must pass the highest practical behavior seams:
 1. TypeScript type-check.
 2. Production Vite build.
 3. Focused Vitest domain/application coverage for fixture and profile/topic validation, Coaching Briefing selection, Workout Changes, atomicity, plan-version rejection, Athlete Feedback/review idempotency, Adaptation History, preview-before-mutation, selected review-mode settlement, and deterministic reset.
-4. Focused adapter coverage for persistence migration or reset, happy path and lightweight memory-only fallback, active-mode tool registration and descriptions, structured results/errors, absent WebMCP behavior, and cleanup.
+4. Focused adapter coverage for persistence recovery/reset, happy path and lightweight memory-only fallback, active-mode tool registration and descriptions, structured results/errors, absent WebMCP behavior, and cleanup.
 5. Playwright for one complete hero flow plus critical reset and non-mutation behavior.
 
 Additional lifecycle combinations, storage quota permutations, and duplicate end-to-end flows strengthen the release when time permits; they are not allowed to delay a working, manually verified hero flow. Automated tests use a controllable host harness. Real ChatGPT attachment and timeout behavior remains manual evidence.
@@ -415,9 +436,10 @@ The checklist verifies:
 - shared Coaching Briefing, Training Plan, Workout Result, and health/load reads;
 - visible and WebMCP-readable Athlete Profile and active Coaching Topic;
 - Athlete Feedback recording;
-- the open/read fallback review through Plan Approval;
+- `open_workout_adaptation_review` opens the review and returns immediately;
+- the Athlete decides on-page and **Adapt my plan** applies the selected option;
+- `read_workout_adaptation_decision` uses the same `reviewId` to return the stored terminal result;
 - preview-before-mutation and visible calendar updates;
-- the stored compatibility fallback;
 - cancellation, stale/duplicate protection, reload, and reset;
 - consistent evidence for the Athlete and Coach Agent;
 - accurate behaviour when WebMCP is unavailable.

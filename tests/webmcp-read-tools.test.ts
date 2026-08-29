@@ -219,6 +219,64 @@ describe("WebMCP coaching tools", () => {
     }
   });
 
+  it("teaches the fallback tools the six-step coaching lifecycle", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+    });
+
+    expect(registrations.map(({ tool }) => tool.name)).toEqual([
+      "get_athlete_context",
+      "get_training_plan",
+      "get_workout_context",
+      "record_athlete_feedback",
+      "open_workout_adaptation_review",
+      "read_workout_adaptation_decision",
+    ]);
+    expect(registrations).toHaveLength(6);
+
+    const descriptionFor = (name: string) =>
+      registrations.find(({ tool }) => tool.name === name)!.tool.description;
+    expect(descriptionFor("get_athlete_context")).toMatch(/start here/i);
+    expect(descriptionFor("record_athlete_feedback")).toMatch(
+      /record.*before.*propos/i,
+    );
+    expect(descriptionFor("get_training_plan")).toMatch(/planVersion/i);
+    expect(descriptionFor("get_workout_context")).toMatch(
+      /Planned Workout ID/i,
+    );
+    expect(descriptionFor("open_workout_adaptation_review")).toMatch(
+      /exactly two.*on-page review/i,
+    );
+    const decisionDescription = descriptionFor(
+      "read_workout_adaptation_decision",
+    );
+    expect(decisionDescription).toMatch(
+      /same reviewId.*approved.*discuss_further.*cancelled.*terminal/i,
+    );
+    expect(decisionDescription).not.toMatch(/until applied/i);
+
+    const feedbackTool = registrations.find(
+      ({ tool }) => tool.name === "record_athlete_feedback",
+    )!.tool;
+    const properties = (
+      feedbackTool.inputSchema as {
+        properties: Record<string, unknown>;
+      }
+    ).properties;
+    expect(Object.keys(properties)).toEqual([
+      "requestId",
+      "relatedWorkoutId",
+      "rawText",
+      "reported",
+    ]);
+    expect(properties).not.toHaveProperty("relatedWorkoutResultId");
+  });
+
   it("opens a fallback review immediately and reports not_ready while it is active", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
