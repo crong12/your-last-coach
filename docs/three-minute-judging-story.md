@@ -1,7 +1,9 @@
 # Three-minute judging story
 
-Status: approved Wayfinder decision  
-Story version: `judging-story-v1`  
+Status: approved Wayfinder decision
+
+Story version: `judging-story-v2`
+
 Companion decisions:
 
 - [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md)
@@ -14,7 +16,7 @@ This guide defines the public WebMCP Challenge demonstration for **Your Last Coa
 
 The video should make four things obvious:
 
-1. **WebMCP leverage:** the Coach Agent reads structured state and negotiates an app-owned change through the same Shared Coaching Workspace the Athlete can see.
+1. **WebMCP leverage:** a fresh Coach Agent reads a structured Coaching Briefing, retrieves deeper evidence, and negotiates an app-owned change through the same Shared Coaching Workspace the Athlete can see.
 2. **Execution:** the Athlete reviews a polished calendar preview and explicitly approves the change.
 3. **Potential impact:** recreational runners can receive bespoke, evidence-aware adaptations instead of following a static plan when real training diverges from it.
 4. **Creativity and ambition:** the web page is not another chatbot; it is shared visual working space for a human and an agent.
@@ -66,16 +68,18 @@ Use the cost line once in the Devpost description or near the close, not as a pr
 - Do not switch between unrelated windows during the hero flow.
 - The presenter writes the final narration. The timings and beats below are the content boundary.
 
-## Early ChatGPT host gate
+## Verified host path
 
-Before production review work begins, run the corrected disposable prototype in ChatGPT's enabled in-app browser:
+The fallback review flow has been verified in both enabled Chrome and ChatGPT's in-app browser. The submission build exposes six tools:
 
-- three consecutive pending-call approvals;
-- one **None — discuss further** outcome;
-- one cancellation or reset;
-- recorded attachment steps, registered tools, approximate durations, host version, timestamps, and results.
+- `get_athlete_context`;
+- `get_training_plan`;
+- `get_workout_context`;
+- `record_athlete_feedback`;
+- `open_workout_adaptation_review`; and
+- `read_workout_adaptation_decision`.
 
-Reliable results select `primary` mode. Any timeout or inconsistency selects `fallback` mode. The configured app exposes only that review path; it never asks the Coach Agent to choose between primary and fallback tools.
+A context-aware release must repeat the judge flow from a fresh conversation against the exact deployed commit. Mechanical tool availability alone is insufficient: the Coach Agent must discover and complete the lifecycle without a corrective prompt.
 
 ## Pre-recording state
 
@@ -84,8 +88,11 @@ Reset the Shared Coaching Workspace to `demo-athlete-v1` and the fixed clock:
 - Wednesday 26 August 2026, 20:15
 - Europe/London
 - one unchanged August Training Plan
-- no Athlete Feedback for the threshold workout
+- no Athlete Feedback for the 26 August threshold workout
 - no active or stored adaptation review
+- one seeded Athlete Profile with Sunday as the preferred long-run day and a 60-minute weekday limit
+- one active `monitoring` Coaching Topic for mild right-shin discomfort reported after the 23 August long run
+- no Adaptation History
 
 The visible weekly calendar should show the original rest-of-week plan:
 
@@ -95,8 +102,10 @@ The visible weekly calendar should show the original rest-of-week plan:
 | Saturday 29 August | 8 km easy with strides |
 | Sunday 30 August | 18 km long run |
 
-The workspace should also make the failed workout and restrained, mixed evidence inspectable:
+The workspace should also make the Coaching Briefing and restrained, mixed evidence inspectable:
 
+- preferred long-run day: Sunday; maximum weekday duration: 60 minutes;
+- shin discomfort: active monitoring topic, last reported after Sunday's long run;
 - previous week: 56 km against a usual 42–48 km;
 - partial `5 × 1 km threshold`: three completed repetitions at 4:36, 4:39, and 4:48 per kilometre;
 - average repetition heart rates: 165, 171, and 176 bpm;
@@ -126,24 +135,25 @@ The runtime Coach Agent is not assumed to read this repository or its `AGENTS.md
 | Time | Visual and interaction | Broad narration point |
 |---|---|---|
 | 0:00–0:25 | ChatGPT and workspace visible side by side | Brighton 2027 motivation; static or generic plans struggle when actual training diverges; introduce the shared workspace idea. |
-| 0:25–0:40 | Original week, failed workout, and health context visible | This is a synthetic Athlete and synthetic COROS-shaped snapshot for a truthful, reproducible demo. Human and agent can inspect the same underlying state. |
-| 0:40–1:20 | Send the natural Athlete message; ChatGPT invokes tools | The Agent records what the Athlete reported and retrieves structured athlete, plan, workout, and health context instead of guessing from prose or scraping the rendered page. |
-| 1:20–1:45 | Coaching explanation and two ranked options appear | Evidence suggests accumulated fatigue with moderate confidence, while normal sleep and recovery indicators provide counter-evidence. The Agent recommends rather than diagnoses. |
-| 1:45–2:18 | Review modal; briefly preview Alternative, return to Coach's recommendation, press **Adapt my plan** | Selecting a card previews only. The consequential Training Plan change requires explicit Athlete approval. |
-| 2:18–2:35 | Modal closes; calendar updates; structured tool result appears in ChatGPT | Narrate one or two visible before-and-after changes. Human and agent now see the same approved plan version. |
-| 2:35–2:48 | Updated calendar remains visible | Close on the broader product vision and, if useful, the qualified incremental-cost line. |
+| 0:25–0:43 | Original week and Coaching Briefing visible | This is a truthful, reproducible synthetic Athlete. Human and agent can inspect the same profile, active topic, and current evidence. |
+| 0:43–1:20 | Send the natural Athlete message; ChatGPT invokes tools | From a fresh conversation, the Agent records the report and retrieves the briefing, plan, and workout evidence through WebMCP instead of relying on hidden memory or scraping the page. |
+| 1:20–1:48 | Coaching explanation and two ranked options appear | The Agent briefly recognizes that today's no-pain report follows the shin topic, then bases its moderate-confidence recommendation on accumulated fatigue and names the counter-evidence. |
+| 1:48–2:18 | Review modal; briefly preview Alternative, return to Coach's recommendation, press **Adapt my plan** | Selecting a card previews only. The consequential Training Plan change requires explicit Athlete approval. |
+| 2:18–2:36 | Modal closes; calendar updates; structured tool result appears in ChatGPT | Narrate one or two visible changes and the resulting Adaptation History. Human and agent now see the same approved plan version. |
+| 2:36–2:48 | Updated calendar remains visible | Close on the broader product vision and, if useful, the qualified incremental-cost line. |
 
 Do not artificially hold the post-approval UI. Let the polished product transition occur normally and narrate the updated calendar while it is visible.
 
 ## Expected WebMCP trace
 
-The exact conversational ordering may vary when the Agent asks a justified clarification, but the successful demo should expose these responsibilities:
+The exact ordering of the first four calls may vary, but a successful fresh-conversation demo completes all six responsibilities without corrective prompting:
 
 1. `record_athlete_feedback`
 2. `get_athlete_context`
 3. `get_training_plan`
 4. `get_workout_context`
-5. `review_workout_adaptation` in primary mode, or `open_workout_adaptation_review` followed later by `read_workout_adaptation_decision` in fallback mode
+5. `open_workout_adaptation_review`
+6. `read_workout_adaptation_decision` after the Athlete decides on-page
 
 The ChatGPT trace may be inspected or narrated to show structured tool use. The video need not dwell on raw payloads.
 
@@ -170,28 +180,21 @@ Only **Adapt my plan** may mutate the Training Plan. After approval:
 - `planVersion` increments;
 - the modal closes normally;
 - the calendar shows the changed workouts;
-- the pending tool returns the structured outcome to ChatGPT.
+- the applied receipt becomes Adaptation History; and
+- `read_workout_adaptation_decision` returns the structured outcome to ChatGPT.
 
 Cancellation, timeout, unload before approval, reset, and **None — discuss further** must not change the Training Plan.
 
-## Primary and fallback host paths
+## Review delivery path
 
-Confirm the early ChatGPT gate result against the final release before recording. Expose only the selected review mode.
-
-### Primary path
-
-Use `review_workout_adaptation` when the host keeps the tool call pending during the on-page decision and returns the structured result after approval. If the early and final gates succeed, use it in the video and do not register or mention the fallback.
-
-### Compatibility fallback
-
-If the intended host cannot reliably keep the call pending:
+The submission uses the verified compatibility fallback:
 
 1. the Agent calls `open_workout_adaptation_review`;
 2. the modal opens and the call immediately returns;
 3. the Athlete decides on-page;
 4. the Agent calls `read_workout_adaptation_decision` to retrieve the stored result.
 
-Explain the split in one short line only if it is the path actually used. Both paths preserve the same preview, explicit approval, idempotence, and mutation semantics. Primary and fallback tools are never offered together.
+Explain the split in one short line only if needed. It preserves preview, explicit approval, idempotence, and structured result delivery without relying on a long-running browser tool call.
 
 ## Synthetic-data disclosure
 
@@ -209,10 +212,10 @@ A future scheduled COROS MCP extraction and workspace hydration process remains 
 1. Open the deployed workspace inside ChatGPT's in-app browser and attach/connect it to the conversation as required by the current host.
 2. Reset to `demo-athlete-v1`.
 3. Confirm the WebMCP/status control reports that the tools are available.
-4. Confirm the original Thursday, Saturday, and Sunday workouts.
+4. Confirm the original Thursday, Saturday, and Sunday workouts and the visible Coaching Briefing.
 5. Copy or type the suggested Athlete message.
 6. Allow the Agent to record feedback and inspect the relevant context.
-7. Confirm the explanation retains the mixed evidence and avoids injury or overtraining diagnosis.
+7. Confirm the explanation briefly recognizes the prior shin report, retains the stronger mixed fatigue evidence, and avoids injury or overtraining diagnosis.
 8. Open the adaptation review.
 9. Optionally preview the Alternative, then choose the recommendation.
 10. Press **Adapt my plan**.
@@ -240,6 +243,7 @@ Conversation stays in ChatGPT while the calendar-first web interface handles vis
 ### What humans and agents can do together
 
 - inspect athlete, race, training, workout, and recovery context;
+- carry forward relevant profile constraints, active Coaching Topics, and approved Adaptation History into a fresh conversation;
 - preserve subjective Athlete Feedback separately from device-shaped observations;
 - produce two ranked Workout Adaptations with rationale, trade-offs, counter-evidence, and uncertainty;
 - preview changes on the calendar;
@@ -248,7 +252,7 @@ Conversation stays in ChatGPT while the calendar-first web interface handles vis
 
 ### Implementation
 
-Describe the client-only React/TypeScript/Vite application, deterministic versioned browser-local state, typed application core, synthetic COROS-shaped data adapter, WebMCP adapter, atomic plan operations, primary pending review, compatibility fallback, automated tests, and manual host verification.
+Describe the client-only React/TypeScript/Vite application, deterministic versioned browser-local state, shared Coaching Briefing selector, typed application core, synthetic COROS-shaped data adapter, WebMCP adapter, atomic plan operations, compatibility fallback, automated tests, and manual host verification.
 
 A separate “Future” section is optional, not required. Do not imply that real COROS synchronization, full plan generation, authentication, or production persistence already exists.
 
@@ -268,6 +272,8 @@ A separate “Future” section is optional, not required. Do not imply that rea
 - [ ] Automated unit, contract, component, and end-to-end checks pass.
 - [ ] Production build passes.
 - [ ] Fresh-browser hydration and reset are deterministic.
+- [ ] Athlete-visible and WebMCP-readable Coaching Briefings agree.
+- [ ] A fresh Agent recognizes the active shin topic only when relevant and does not diagnose it.
 - [ ] Weekly and monthly calendars show the intended August plan.
 - [ ] ChatGPT in-app-browser attachment and all read tools pass manually.
 - [ ] Feedback recording is idempotent and preserves sparse, explicitly reported fields.
@@ -275,8 +281,10 @@ A separate “Future” section is optional, not required. Do not imply that rea
 - [ ] Selecting each option produces the correct preview without mutation.
 - [ ] **Adapt my plan** applies once and increments `planVersion`.
 - [ ] **None — discuss further**, cancellation, timeout, unload, and reset do not mutate.
-- [ ] The final host exposes only the review mode selected by the verified ChatGPT gate.
+- [ ] The final host exposes the verified six-tool fallback surface.
+- [ ] At least three clean fresh-conversation trials complete the six-tool journey without corrective prompting.
 - [ ] Human and Agent read the same post-approval Training Plan.
+- [ ] The applied receipt is available as Adaptation History.
 - [ ] Synthetic provenance and limitations remain truthful.
 
 ### Recording checks

@@ -1,7 +1,9 @@
 # Implementation and verification architecture
 
-Status: Accepted for the WebMCP Challenge proof of concept  
-Architecture version: `1.1`  
+Status: Accepted target for the WebMCP Challenge proof of concept
+
+Architecture version: `1.2`
+
 Fixture contract: [`demo-athlete-v1`](demo-athlete-coaching-contract-v1.md)
 
 This document defines the module boundaries, state ownership, adapter seams, deterministic lifecycle, verification layers, and release evidence for the Shared Coaching Workspace. It is an architecture decision artifact, not a production implementation specification.
@@ -10,6 +12,7 @@ This document defines the module boundaries, state ownership, adapter seams, det
 
 - Keep the proof of concept small enough to deliver before the Challenge deadline.
 - Ensure the Athlete and Coach Agent read and mutate one authoritative Training Plan.
+- Give a fresh Coach Agent a bounded Coaching Briefing without relying on prior conversation history.
 - Isolate emerging WebMCP host behaviour from ordinary application logic.
 - Make Plan Approval explicit, previewable, atomic, and idempotent.
 - Preserve a direct transition from synthetic data to a bespoke Brighton 2027 product.
@@ -23,6 +26,7 @@ Architecture preserves the future product; hackathon acceptance is tiered.
 
 - the shared Week experience and accepted fixture;
 - Athlete-visible workout/health evidence and Coach-Agent-readable context;
+- one seeded Athlete Profile, one active Coaching Topic, and one shared Coaching Briefing projection;
 - Athlete Feedback;
 - one host-verified review mode;
 - two ranked Workout Adaptations, calendar preview, explicit Plan Approval, and visible update;
@@ -34,11 +38,11 @@ Ticket 1's Month view and simple storage fallback remain in scope because implem
 
 ### Strengthen if time
 
-- the alternate review-delivery mode when the primary mode is reliable;
+- the alternate review-delivery mode only if it is separately reverified and does not endanger the accepted fallback;
 - broader Demo Guide and debugging affordances;
 - additional responsive/accessibility refinement beyond the polished baseline;
 - extra lifecycle end-to-end flows and exhaustive storage failure cases;
-- richer Adaptation Receipt presentation.
+- richer Adaptation History presentation beyond the applied receipt required by the judge flow.
 
 ### Post-hackathon
 
@@ -48,10 +52,13 @@ Real COROS hydration, server persistence, full Training Plan generation, Phase T
 
 ```mermaid
 flowchart TD
-    S["Demo / future COROS source"] --> A["Application core"]
+    S["Demo / future COROS source"] --> A["Authoritative workspace state"]
     R["localStorage / future server repository"] <--> A
-    U["React workspace"] <--> A
-    W["WebMCP adapter"] <--> A
+    A --> B["Coaching Briefing selector"]
+    A <--> U["React workspace"]
+    B --> U
+    B --> W["WebMCP adapter"]
+    W --> A
 ```
 
 The application is a client-only React, TypeScript, and Vite SPA. The application core is framework-independent and exposes ordinary typed commands and queries. UI and adapters depend on the application core; the core does not depend on React, WebMCP, browser storage, or a hosting provider.
@@ -72,13 +79,13 @@ src/
 
 ### `domain`
 
-Owns the canonical application vocabulary and data structures for Athlete, Target Race, Training Plan, Planned Workout, Workout Result, Athlete Feedback, Coach Recommendation, Workout Adaptation, Plan Approval, plan versions, and idempotency receipts.
+Owns the canonical application vocabulary and data structures for Athlete, Athlete Profile, Target Race, Training Plan, Planned Workout, Workout Result, Athlete Feedback, Coaching Topic, Coaching Briefing, Coach Recommendation, Workout Adaptation, Plan Approval, Adaptation History, plan versions, and idempotency receipts.
 
 It contains no browser, storage, framework, WebMCP, or fixture code.
 
 ### `demo`
 
-Owns the immutable `demo-athlete-v1` seed, fixed clock, source-labelled synthetic observations, and runtime fixture validation. It may create the initial `WorkspaceState`, but it does not own subsequent mutations.
+Owns the immutable `demo-athlete-v1` seed, fixed clock, source-labelled Athlete Profile, one active Coaching Topic, synthetic observations, and runtime fixture validation. It may create the initial `WorkspaceState`, but it does not own subsequent mutations.
 
 ### `application`
 
@@ -86,7 +93,7 @@ Owns:
 
 - the pure workspace reducer;
 - typed commands and queries;
-- selectors used by both UI and WebMCP reads;
+- selectors used by both UI and WebMCP reads, including the bounded Coaching Briefing;
 - validation of Plan Approval and Workout Changes;
 - plan-version and idempotency checks;
 - the transient review state machine;
@@ -117,7 +124,7 @@ The codebase owns a seven-tool contract, but a host never sees both review paths
 
 ### `ui`
 
-Renders the weekly and monthly Training Plan views, workout detail, shared evidence, Athlete Feedback, temporary review modal, calendar preview, adapted-state receipts, Demo Guide, WebMCP connection status, persistence warnings, and reset flow.
+Renders the weekly and monthly Training Plan views, workout detail, the bounded Athlete Profile and active Coaching Topics, shared evidence, Athlete Feedback, temporary review modal, calendar preview, Adaptation History, Demo Guide, WebMCP connection status, persistence warnings, and reset flow.
 
 Presentation components consume selectors and dispatch application commands. Component-local state is limited to non-authoritative presentation concerns.
 
@@ -149,7 +156,7 @@ For the POC:
 For the future product:
 
 - a separate scheduled process can query COROS MCP and hydrate a normalized context source;
-- a server-backed repository can persist Training Plan, Athlete Feedback, and applied decisions.
+- a server-backed repository can persist Athlete Profile, Coaching Evidence, Coaching Topics, Training Plan, Athlete Feedback, and Adaptation History.
 
 Current COROS MCP data remains read-only for this POC. The application does not claim COROS wire-format compatibility. Future authenticated schemas map through an adapter rather than replacing the domain model.
 
@@ -160,6 +167,7 @@ One reducer-owned serializable `WorkspaceState` is authoritative for Athlete-vis
 ```ts
 type WorkspaceState = {
   athlete: Athlete;
+  athleteProfile: AthleteProfile;
   targetRace: TargetRace;
   trainingPhase: TrainingPhase;
   observations: SyntheticCorosShapedSnapshot;
@@ -169,6 +177,7 @@ type WorkspaceState = {
     plannedWorkouts: PlannedWorkout[];
   };
   athleteFeedback: AthleteFeedback[];
+  coachingTopics: CoachingTopic[];
   processedRequestIds: string[];
   appliedReviewIds: string[];
   adaptationReceipts: AdaptationReceipt[];
@@ -179,7 +188,7 @@ The persisted envelope contains the complete serializable snapshot:
 
 ```ts
 type PersistedWorkspace = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   seedVersion: "demo-athlete-v1";
   savedAt: string;
   state: WorkspaceState;
@@ -187,7 +196,21 @@ type PersistedWorkspace = {
 };
 ```
 
-All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan is authoritative.
+All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
+
+## Coaching Briefing projection
+
+The application owns a deterministic selector that assembles the context a fresh Coach Agent needs for the current judging interaction. It contains:
+
+- identity, Target Race, and current Training Phase;
+- the small Athlete Profile fields that can affect the decision;
+- the current health and load snapshot with freshness and provenance;
+- active Coaching Topics with status, timestamps, evidence references, and follow-up conditions; and
+- recent Adaptation History when present.
+
+The selector is bounded by contract rather than token count. It does not copy every Workout Result or conversation into one payload; `get_training_plan` and `get_workout_context` remain the deeper evidence reads. The UI renders the same projection so the Athlete can inspect what the Coach Agent is expected to know.
+
+For `demo-athlete-v1`, the selector always returns the seeded profile and shin-discomfort topic. Relevance is expressed by the topic's follow-up condition. The Coach Agent may acknowledge the topic when the Athlete reports on a run, but cannot diagnose, silently resolve, or allow it to override stronger current evidence.
 
 ## Transient review state
 
@@ -260,7 +283,7 @@ type WorkoutChange =
   | { kind: "delete"; workoutId: string };
 ```
 
-Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. Distance and a replacement prescription are validated independently; focused fixture tests prove that supplied pairs carry the accepted coherent values without deriving distance from arbitrary Workout Blocks. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. A lightweight applied marker may show that the rest day came from Plan Approval. Rich Adaptation Receipt history is not required for the hackathon release.
+Read operations remain in `get_training_plan` and `get_workout_context`. IDs are immutable. Distance and a replacement prescription are validated independently; focused fixture tests prove that supplied pairs carry the accepted coherent values without deriving distance from arbitrary Workout Blocks. A nested prescription is replaced as one complete validated value; arbitrary JSON Patch paths are not accepted. Deleting the only Planned Workout on a date leaves that date as rest. The applied receipt records cited evidence, rationale, selected option, affected workouts, application time, and plan versions before and after so it can serve as bounded Adaptation History.
 
 Every proposed option records the `planVersion` on which it was based. A mismatch returns `stale_plan` without applying or merging changes.
 
@@ -297,7 +320,7 @@ The application command:
 2. validates every Workout Change against the current Training Plan;
 3. produces the entire next Training Plan or rejects without mutation;
 4. increments `planVersion`;
-5. records the `reviewId` and a lightweight applied outcome atomically in state;
+5. records the `reviewId` and complete Adaptation History receipt atomically in state;
 6. attempts to persist the complete resulting snapshot;
 7. produces the terminal result for the pending primary call or stored fallback delivery.
 
@@ -323,8 +346,8 @@ An invalid saved snapshot is replaced rather than heuristically repaired. The UI
 
 - cancels an active review with reason `reset`;
 - clears the persisted envelope and undelivered fallback result;
-- clears Athlete Feedback, plan changes, idempotency records, receipts, selection, and preview;
-- restores the exact fixture, fixed clock, and initial `planVersion`;
+- clears new Athlete Feedback, topic updates, plan changes, idempotency records, receipts, selection, and preview;
+- restores the exact seeded Athlete Profile, Coaching Topic, fixed clock, and initial `planVersion`;
 - leaves browser capability detection and tool definitions available.
 
 ## Structured outcomes
@@ -367,8 +390,8 @@ Every release candidate must pass the highest practical behavior seams:
 
 1. TypeScript type-check.
 2. Production Vite build.
-3. Focused Vitest domain/application coverage for fixture validation, Workout Changes, atomicity, plan-version rejection, Athlete Feedback/review idempotency, preview-before-mutation, selected review-mode settlement, and deterministic reset.
-4. Focused adapter coverage for persistence happy path and lightweight memory-only fallback, active-mode tool registration, structured results/errors, absent WebMCP behavior, and cleanup.
+3. Focused Vitest domain/application coverage for fixture and profile/topic validation, Coaching Briefing selection, Workout Changes, atomicity, plan-version rejection, Athlete Feedback/review idempotency, Adaptation History, preview-before-mutation, selected review-mode settlement, and deterministic reset.
+4. Focused adapter coverage for persistence migration or reset, happy path and lightweight memory-only fallback, active-mode tool registration and descriptions, structured results/errors, absent WebMCP behavior, and cleanup.
 5. Playwright for one complete hero flow plus critical reset and non-mutation behavior.
 
 Additional lifecycle combinations, storage quota permutations, and duplicate end-to-end flows strengthen the release when time permits; they are not allowed to delay a working, manually verified hero flow. Automated tests use a controllable host harness. Real ChatGPT attachment and timeout behavior remains manual evidence.
@@ -388,17 +411,20 @@ The exact production URL and release commit require headed smoke testing in:
 
 The checklist verifies:
 
-- discovery of all seven tools;
-- shared Athlete, Training Plan, Workout Result, and health/load reads;
+- discovery of the configured six-tool fallback surface;
+- shared Coaching Briefing, Training Plan, Workout Result, and health/load reads;
+- visible and WebMCP-readable Athlete Profile and active Coaching Topic;
 - Athlete Feedback recording;
-- the pending imperative review through Plan Approval;
+- the open/read fallback review through Plan Approval;
 - preview-before-mutation and visible calendar updates;
 - the stored compatibility fallback;
 - cancellation, stale/duplicate protection, reload, and reset;
 - consistent evidence for the Athlete and Coach Agent;
 - accurate behaviour when WebMCP is unavailable.
 
-ChatGPT-specific attachment and timeout behaviour cannot be inferred from the successful Chrome prototype and remains submission-blocking manual evidence.
+The released fallback flow has been verified in enabled Chrome and ChatGPT hosts. Any release that changes the context schema, selectors, tool descriptions, or judging path must repeat the exact fresh-conversation host checks against the deployed commit.
+
+For the context-aware release, record at least three clean fresh-conversation trials, including the deployed commit, host, model, observed tool trace, outcome, and any corrective prompting. A corrected second attempt does not count as first-pass success.
 
 ## Acceptance evidence
 
@@ -410,10 +436,11 @@ A version-controlled release checklist records:
 - Chrome and ChatGPT versions;
 - tester and UTC timestamp;
 - each manual scenario result;
+- each fresh-conversation context trial and tool trace;
 - known limitations.
 
 The README links to this checklist and identifies the exact judge flow. The public video, Devpost entry, tested commit, and production deployment must describe the same release. The tested release is frozen for judging after submission.
 
 ## Scope boundary
 
-This architecture does not implement real COROS authentication or synchronization, a scheduled hydration process, server persistence, accounts, full plan generation, Phase Transition logic, injury diagnosis, multiple Athletes, or in-app chat. The ports make later replacement possible; they do not expand the POC.
+This architecture does not implement real COROS authentication or synchronization, a scheduled hydration process, server persistence, conversational Athlete Profile building, general-purpose Agent memory, accounts, full plan generation, Phase Transition logic, injury diagnosis, multiple Athletes, or in-app chat. The ports make later replacement possible; they do not expand the POC.
