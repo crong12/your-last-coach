@@ -441,7 +441,7 @@ expect(validateReviewProposal(proposal, context)).toEqual({
 });
 ```
 
-Also reverse the alternative change order and object property order to prove normalization catches semantic identity.
+Also reverse the alternative change order to prove array ordering does not make the same set of changes distinct.
 
 - [ ] **Step 2: Run the focused test and confirm failure**
 
@@ -449,26 +449,16 @@ Run: `npm test -- tests/review-coordinator.test.ts`
 
 Expected: the proposal is currently accepted.
 
-- [ ] **Step 3: Add a stable Workout Change signature**
+- [ ] **Step 3: Add the smallest typed Workout Change comparison**
 
-Add a private canonical JSON helper that recursively sorts object keys, canonicalizes arrays, and sorts the resulting Workout Change strings before joining them. Compare only `workoutChanges`; explanations and labels do not make two adaptations different.
+Compare only `workoutChanges`; explanations and labels do not make two adaptations different. The existing validator has already restricted every value to the typed `WorkoutChange` contract, so sort the individual typed changes and compare their serialized values. Do not add a general-purpose canonicalization abstraction.
 
 ```ts
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`);
-    return `{${entries.join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "undefined";
-}
-
-function workoutChangeSignature(changes: unknown[]): string {
-  return changes.map(stableJson).sort().join("|");
+function workoutChangeSignature(changes: WorkoutChange[]): string {
+  return changes
+    .map((change) => JSON.stringify(change))
+    .sort()
+    .join("|");
 }
 ```
 
