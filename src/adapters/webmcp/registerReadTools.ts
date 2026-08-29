@@ -36,7 +36,7 @@ export const WEBMCP_TOOL_NAMES = [
 function safeExecution(
   execute: (
     input: Record<string, unknown>,
-    options: { signal: AbortSignal },
+    options?: { signal: AbortSignal },
   ) => unknown | Promise<unknown>,
 ): WebMcpTool["execute"] {
   return async (input, options) => {
@@ -390,7 +390,7 @@ function createTools(
         const opened = options.reviewCoordinator.open(
           normalizeHostValue(input),
           "primary",
-          execution.signal,
+          execution?.signal,
         ) as {
           status: string;
           reviewId?: string;
@@ -417,7 +417,7 @@ function createTools(
           options.reviewCoordinator.open(
             normalizeHostValue(input),
             "fallback",
-            execution.signal,
+            execution?.signal,
           ),
         ),
       },

@@ -16,7 +16,7 @@ export interface WebMcpTool {
   };
   execute(
     input: Record<string, unknown>,
-    options: { signal: AbortSignal },
+    options?: { signal: AbortSignal },
   ): Promise<unknown>;
 }
 
