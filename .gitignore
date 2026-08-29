@@ -3,4 +3,5 @@ dist/
 playwright-report/
 test-results/
 docs/superpowers/
+.DS_Store
 *.tsbuildinfo
