@@ -19,9 +19,13 @@ describe("shared coaching read selectors", () => {
     expect(result.data.athlete).toMatchObject({
       id: "athlete-sam",
       displayName: "Sam",
-      normalWeeklyVolumeKm: { min: 42, max: 48 },
-      recentHalfMarathonSeconds: 6_120,
-      thresholdPaceSecondsPerKm: 278,
+      profile: {
+        normalWeeklyVolumeKm: { value: { min: 42, max: 48 } },
+        recentHalfMarathonSeconds: { value: 6_120 },
+        thresholdPaceSecondsPerKm: { value: 278 },
+        preferredLongRunDay: { value: "Sunday" },
+        maximumWeekdayTrainingDurationMinutes: { value: 60 },
+      },
     });
     expect(result.data.targetRace).toMatchObject({
       id: "race-brighton-marathon-2027",

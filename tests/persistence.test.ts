@@ -96,6 +96,12 @@ async function approvedEnvelope(): Promise<PersistedWorkspace> {
       appliedAt: "2026-08-26T20:15:00+01:00",
       planVersionBefore: 1,
       planVersionAfter: 2,
+      evidenceRefs: [
+        "planned-workout:planned-2026-08-26-threshold",
+        "workout-result:result-2026-08-26-threshold",
+        "observation:training-load",
+        "observation:recovery",
+      ],
     },
   ];
   envelope.state.mutationHistory = [
@@ -406,6 +412,10 @@ describe("workspace initialization", () => {
 
     expect(initialized.state.athleteFeedback).toEqual([
       expect.objectContaining({
+        id: "athlete-feedback:seed-shin-discomfort",
+      }),
+      expect.objectContaining({
+        id: "athlete-feedback:persisted",
         rawText: "My legs felt heavy.",
         reported: { legFeel: "heavy" },
       }),

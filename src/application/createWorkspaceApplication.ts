@@ -492,6 +492,9 @@ export function createWorkspaceApplication(
           };
         }
         const approvalGeneration = activePlanReview.generation;
+        const proposalEvidenceRefs = [
+          ...activePlanReview.proposal.evidenceRefs,
+        ];
         const promise = (async () => {
           const { plannedWorkouts, affectedWorkouts } = applyOption(
             state.trainingPlan.plannedWorkouts,
@@ -507,6 +510,7 @@ export function createWorkspaceApplication(
             appliedAt: state.clock.now,
             planVersionBefore: state.trainingPlan.planVersion,
             planVersionAfter: state.trainingPlan.planVersion + 1,
+            evidenceRefs: proposalEvidenceRefs,
           };
           const nextState = deepFreeze({
             ...state,

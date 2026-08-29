@@ -76,6 +76,7 @@ describe("Workspace application", () => {
       appliedAt: "2026-08-26T20:15:00+01:00",
       planVersionBefore: 1,
       planVersionAfter: 2,
+      evidenceRefs: proposal.evidenceRefs,
       durability: "persistent",
     });
     expect(application.getState().trainingPlan).toMatchObject({
@@ -267,12 +268,18 @@ describe("Workspace application", () => {
     await expect(feedback).resolves.toMatchObject({ status: "ok" });
     expect(application.getState()).toMatchObject({
       trainingPlan: { planVersion: 2 },
-      athleteFeedback: [{ requestId: "during-approval" }],
+      athleteFeedback: [
+        { id: "athlete-feedback:seed-shin-discomfort" },
+        { requestId: "during-approval" },
+      ],
     });
     expect(saves[1]).toMatchObject({
       state: {
         trainingPlan: { planVersion: 2 },
-        athleteFeedback: [{ requestId: "during-approval" }],
+        athleteFeedback: [
+          { id: "athlete-feedback:seed-shin-discomfort" },
+          { requestId: "during-approval" },
+        ],
       },
     });
   });
@@ -478,6 +485,9 @@ describe("Workspace application", () => {
       durability: "persistent",
     });
     expect(application.getState().athleteFeedback).toEqual([
+      expect.objectContaining({
+        id: "athlete-feedback:seed-shin-discomfort",
+      }),
       outcome.status === "ok" ? outcome.feedback : null,
     ]);
     expect(application.getState().processedRequestIds).toEqual([
@@ -487,7 +497,12 @@ describe("Workspace application", () => {
     expect(saves[0]).toMatchObject({
       savedAt: "2026-08-26T20:15:00+01:00",
       state: {
-        athleteFeedback: [outcome.status === "ok" ? outcome.feedback : null],
+        athleteFeedback: [
+          expect.objectContaining({
+            id: "athlete-feedback:seed-shin-discomfort",
+          }),
+          outcome.status === "ok" ? outcome.feedback : null,
+        ],
       },
     });
   });
@@ -547,7 +562,7 @@ describe("Workspace application", () => {
       status: "ok",
       durability: "memory_only",
     });
-    expect(application.getState().athleteFeedback).toHaveLength(1);
+    expect(application.getState().athleteFeedback).toHaveLength(2);
   });
 
   it("returns a valid duplicate request before validating its divergent body", async () => {
@@ -574,7 +589,7 @@ describe("Workspace application", () => {
     });
 
     expect(repeated).toEqual(first);
-    expect(application.getState().athleteFeedback).toHaveLength(1);
+    expect(application.getState().athleteFeedback).toHaveLength(2);
     expect(saves).toHaveLength(1);
   });
 
