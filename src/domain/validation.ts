@@ -30,6 +30,12 @@ const isPositiveInteger = (value: unknown): value is number =>
 const isTimestamp = (value: unknown): value is string =>
   isNonEmptyString(value) && Number.isFinite(Date.parse(value));
 
+const isIsoTimestamp = (value: unknown): value is string =>
+  isTimestamp(value) &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+    value,
+  );
+
 const isIsoDate = (value: unknown): value is string => {
   if (!isNonEmptyString(value) || !/^\d{4}-\d{2}-\d{2}$/.test(value))
     return false;
@@ -93,18 +99,45 @@ function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
   );
 }
 
+function isValidProfileValue(
+  value: unknown,
+  valueValidator: (value: unknown) => boolean,
+): boolean {
+  return (
+    isRecord(value) &&
+    value.provenance === "seeded_athlete_profile" &&
+    (value.effectiveAt === undefined || isIsoTimestamp(value.effectiveAt)) &&
+    valueValidator(value.value)
+  );
+}
+
+function isValidWeeklyVolume(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isPositiveNumber(value.min) &&
+    isPositiveNumber(value.max) &&
+    Number(value.min) < Number(value.max)
+  );
+}
+
 function validateAthlete(value: unknown, errors: string[]) {
+  const profile = isRecord(value) ? value.profile : undefined;
   if (
     !isRecord(value) ||
     !isNonEmptyString(value.id) ||
     !isNonEmptyString(value.displayName) ||
-    !isPositiveNumber(value.recentHalfMarathonSeconds) ||
-    !isPositiveNumber(value.thresholdPaceSecondsPerKm) ||
-    !isRecord(value.normalWeeklyVolumeKm) ||
-    !isPositiveNumber(value.normalWeeklyVolumeKm.min) ||
-    !isPositiveNumber(value.normalWeeklyVolumeKm.max) ||
-    Number(value.normalWeeklyVolumeKm.min) >=
-      Number(value.normalWeeklyVolumeKm.max)
+    !isRecord(profile) ||
+    !isValidProfileValue(profile.normalWeeklyVolumeKm, isValidWeeklyVolume) ||
+    !isValidProfileValue(profile.recentHalfMarathonSeconds, isPositiveNumber) ||
+    !isValidProfileValue(profile.thresholdPaceSecondsPerKm, isPositiveNumber) ||
+    !isValidProfileValue(
+      profile.preferredLongRunDay,
+      (profileValue) => profileValue === "Sunday",
+    ) ||
+    !isValidProfileValue(
+      profile.maximumWeekdayTrainingDurationMinutes,
+      isPositiveInteger,
+    )
   ) {
     errors.push("Athlete context is invalid");
   }
@@ -195,10 +228,11 @@ function validateWorkoutResults(
   value: unknown,
   workoutIds: Set<string>,
   errors: string[],
-) {
+): Map<string, string | undefined> {
+  const resultToPlannedWorkoutId = new Map<string, string | undefined>();
   if (!Array.isArray(value)) {
     errors.push("Workout Results must be an array");
-    return;
+    return resultToPlannedWorkoutId;
   }
 
   const resultIds = new Set<string>();
@@ -211,6 +245,12 @@ function validateWorkoutResults(
       errors.push(`Duplicate Workout Result: ${result.id}`);
     }
     resultIds.add(result.id);
+    resultToPlannedWorkoutId.set(
+      result.id,
+      isNonEmptyString(result.plannedWorkoutId)
+        ? result.plannedWorkoutId
+        : undefined,
+    );
 
     const summary = result.summary;
     const validSummary =
@@ -260,11 +300,13 @@ function validateWorkoutResults(
       lapIds.add(lap.id);
     }
   }
+  return resultToPlannedWorkoutId;
 }
 
 function validateAthleteFeedback(
   value: unknown,
   workoutIds: Set<string>,
+  resultToPlannedWorkoutId: Map<string, string | undefined>,
   errors: string[],
 ) {
   if (!Array.isArray(value)) {
@@ -273,7 +315,8 @@ function validateAthleteFeedback(
   }
   const feedbackIds = new Set<string>();
   const requestIds = new Set<string>();
-  for (const feedback of value) {
+  for (const [index, feedback] of value.entries()) {
+    const path = `athleteFeedback[${index}]`;
     const reported = isRecord(feedback) ? feedback.reported : undefined;
     const validReported =
       reported === undefined ||
@@ -294,6 +337,18 @@ function validateAthleteFeedback(
           typeof reported.painReported === "boolean") &&
         (reported.stoppedReason === undefined ||
           isNonEmptyString(reported.stoppedReason)));
+    const hasWorkoutResultReference =
+      isRecord(feedback) && feedback.relatedWorkoutResultId !== undefined;
+    const validWorkoutResultReference =
+      !hasWorkoutResultReference ||
+      (isNonEmptyString(feedback.relatedWorkoutResultId) &&
+        resultToPlannedWorkoutId.get(feedback.relatedWorkoutResultId) ===
+          feedback.relatedWorkoutId);
+    if (hasWorkoutResultReference && !validWorkoutResultReference) {
+      errors.push(
+        `${path}.relatedWorkoutResultId must reference a Workout Result for relatedWorkoutId.`,
+      );
+    }
     if (
       !isRecord(feedback) ||
       !isNonEmptyString(feedback.id) ||
@@ -302,15 +357,64 @@ function validateAthleteFeedback(
       requestIds.has(feedback.requestId) ||
       !isNonEmptyString(feedback.relatedWorkoutId) ||
       !workoutIds.has(feedback.relatedWorkoutId) ||
+      (feedback.relatedWorkoutResultId !== undefined &&
+        !isNonEmptyString(feedback.relatedWorkoutResultId)) ||
       !isNonEmptyString(feedback.rawText) ||
       !validReported ||
-      !isTimestamp(feedback.recordedAt)
+      !isTimestamp(feedback.recordedAt) ||
+      !validWorkoutResultReference
     ) {
       errors.push("Athlete Feedback entry is invalid");
       continue;
     }
     feedbackIds.add(feedback.id);
     requestIds.add(feedback.requestId);
+  }
+}
+
+function validateCoachingTopics(
+  value: unknown,
+  evidenceRefs: Set<string>,
+  errors: string[],
+) {
+  if (!Array.isArray(value)) {
+    errors.push("Coaching Topics must be an array");
+    return;
+  }
+
+  const topicIds = new Set<string>();
+  for (const [index, topic] of value.entries()) {
+    const path = `coachingTopics[${index}]`;
+    const firstReportedAt = isRecord(topic) ? topic.firstReportedAt : undefined;
+    const latestReportedAt = isRecord(topic)
+      ? topic.latestReportedAt
+      : undefined;
+    const topicEvidenceRefs = isRecord(topic) ? topic.evidenceRefs : undefined;
+    const validTimestamps =
+      isIsoTimestamp(firstReportedAt) &&
+      isIsoTimestamp(latestReportedAt) &&
+      Date.parse(firstReportedAt) <= Date.parse(latestReportedAt);
+    const validEvidenceRefs =
+      Array.isArray(topicEvidenceRefs) &&
+      topicEvidenceRefs.every(
+        (ref) => isNonEmptyString(ref) && evidenceRefs.has(ref),
+      ) &&
+      new Set(topicEvidenceRefs).size === topicEvidenceRefs.length;
+    if (
+      !isRecord(topic) ||
+      !isNonEmptyString(topic.id) ||
+      topicIds.has(topic.id) ||
+      !isNonEmptyString(topic.title) ||
+      topic.status !== "monitoring" ||
+      !isNonEmptyString(topic.athleteReport) ||
+      !validTimestamps ||
+      !validEvidenceRefs ||
+      !isNonEmptyString(topic.followUpCondition)
+    ) {
+      errors.push(`${path} is invalid`);
+      continue;
+    }
+    topicIds.add(topic.id);
   }
 }
 
@@ -423,8 +527,30 @@ export function validateWorkspaceState(value: unknown): {
   }
   validateObservations(value.observations, errors);
   const workoutIds = validateTrainingPlan(value.trainingPlan, errors);
-  validateWorkoutResults(value.workoutResults, workoutIds, errors);
-  validateAthleteFeedback(value.athleteFeedback, workoutIds, errors);
+  const resultToPlannedWorkoutId = validateWorkoutResults(
+    value.workoutResults,
+    workoutIds,
+    errors,
+  );
+  validateAthleteFeedback(
+    value.athleteFeedback,
+    workoutIds,
+    resultToPlannedWorkoutId,
+    errors,
+  );
+  const topicEvidenceRefs = new Set<string>(
+    [...resultToPlannedWorkoutId.keys()].map(
+      (resultId) => `workout-result:${resultId}`,
+    ),
+  );
+  if (Array.isArray(value.athleteFeedback)) {
+    for (const feedback of value.athleteFeedback) {
+      if (isRecord(feedback) && isNonEmptyString(feedback.id)) {
+        topicEvidenceRefs.add(`athlete-feedback:${feedback.id}`);
+      }
+    }
+  }
+  validateCoachingTopics(value.coachingTopics, topicEvidenceRefs, errors);
   validateUniqueStrings(
     value.processedRequestIds,
     "Processed request identifiers",

@@ -1,11 +1,21 @@
+export interface AthleteProfileValue<T> {
+  value: T;
+  provenance: "seeded_athlete_profile";
+  effectiveAt?: string;
+}
+
 export type IsoDate = `${number}-${number}-${number}`;
 
 export interface Athlete {
   id: string;
   displayName: string;
-  normalWeeklyVolumeKm: { min: number; max: number };
-  recentHalfMarathonSeconds: number;
-  thresholdPaceSecondsPerKm: number;
+  profile: {
+    normalWeeklyVolumeKm: AthleteProfileValue<{ min: number; max: number }>;
+    recentHalfMarathonSeconds: AthleteProfileValue<number>;
+    thresholdPaceSecondsPerKm: AthleteProfileValue<number>;
+    preferredLongRunDay: AthleteProfileValue<"Sunday">;
+    maximumWeekdayTrainingDurationMinutes: AthleteProfileValue<number>;
+  };
 }
 
 export interface TargetRace {
@@ -82,6 +92,7 @@ export interface AthleteFeedback {
   id: string;
   requestId: string;
   relatedWorkoutId: string;
+  relatedWorkoutResultId?: string;
   rawText: string;
   reported?: {
     sessionRpe?: number;
@@ -109,6 +120,18 @@ export interface AppliedPlanAdaptation {
   appliedAt: string;
   planVersionBefore: number;
   planVersionAfter: number;
+  evidenceRefs: string[];
+}
+
+export interface CoachingTopic {
+  id: string;
+  title: string;
+  status: "monitoring";
+  athleteReport: string;
+  firstReportedAt: string;
+  latestReportedAt: string;
+  evidenceRefs: string[];
+  followUpCondition: string;
 }
 
 export interface WorkspaceState {
@@ -124,6 +147,7 @@ export interface WorkspaceState {
     plannedWorkouts: PlannedWorkout[];
   };
   athleteFeedback: AthleteFeedback[];
+  coachingTopics: CoachingTopic[];
   processedRequestIds: string[];
   appliedReviewIds: string[];
   adaptationReceipts: AppliedPlanAdaptation[];
