@@ -117,6 +117,132 @@ describe("shared coaching read selectors", () => {
     expect(result.data.activeCoachingTopics[0]).toEqual(seededTopic);
   });
 
+  it("bounds recent evidence newest-first and isolates every projected value", () => {
+    const state = structuredClone(createDemoWorkspaceState());
+    const feedbackRecords = Array.from({ length: 7 }, (_, index) => {
+      const sequence = index + 1;
+      return {
+        id: `athlete-feedback:history-${sequence}`,
+        requestId: `history-${sequence}`,
+        relatedWorkoutId: "planned-2026-08-26-threshold",
+        rawText: `History feedback ${sequence}`,
+        reported: { sessionRpe: sequence },
+        recordedAt: `2026-08-26T20:0${sequence}:00+01:00`,
+      };
+    });
+    state.athleteFeedback.push(...feedbackRecords);
+
+    const sourceWorkout = state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-26-threshold",
+    )!;
+    const receipts = Array.from({ length: 5 }, (_, index) => {
+      const sequence = index + 1;
+      const reviewId = `review:history-${sequence}`;
+      const before = structuredClone(sourceWorkout);
+      const after = {
+        ...structuredClone(before),
+        title: `History adaptation ${sequence}`,
+      };
+      return {
+        reviewId,
+        selectedOption: {
+          optionId: `history-option-${sequence}`,
+          label: `History option ${sequence}`,
+        },
+        affectedWorkouts: [
+          {
+            workoutId: sourceWorkout.id,
+            before,
+            after,
+          },
+        ],
+        appliedAt: `2026-08-26T21:0${sequence}:00+01:00`,
+        planVersionBefore: sequence,
+        planVersionAfter: sequence + 1,
+        evidenceRefs: [`receipt-evidence:${sequence}`],
+      };
+    });
+    state.trainingPlan.planVersion = 6;
+    state.adaptationReceipts.push(...receipts);
+    state.appliedReviewIds.push(...receipts.map(({ reviewId }) => reviewId));
+
+    const result = selectAthleteContext(state);
+    const currentWeekPlannedWorkoutEvidenceRefs = [
+      "planned-workout:planned-2026-08-24-recovery",
+      "planned-workout:planned-2026-08-26-threshold",
+      "planned-workout:planned-2026-08-27-recovery",
+      "planned-workout:planned-2026-08-29-strides",
+      "planned-workout:planned-2026-08-30-long",
+    ];
+    const recentFeedbackIds = result.data.recentAthleteFeedback.map(
+      ({ id }) => id,
+    );
+    const recentReceiptIds = result.data.recentAdaptationHistory.map(
+      ({ reviewId }) => reviewId,
+    );
+
+    expect(recentFeedbackIds).toEqual(
+      feedbackRecords
+        .slice(-5)
+        .reverse()
+        .map(({ id }) => id),
+    );
+    expect(recentReceiptIds).toEqual(
+      receipts
+        .slice(-3)
+        .reverse()
+        .map(({ reviewId }) => reviewId),
+    );
+    expect(result.evidenceRefs).toEqual(
+      expect.arrayContaining([
+        `training-plan:version:${state.trainingPlan.planVersion}`,
+        `coaching-topic:${state.coachingTopics[0].id}`,
+        ...currentWeekPlannedWorkoutEvidenceRefs,
+        ...recentFeedbackIds.map((id) => `athlete-feedback:${id}`),
+        ...recentReceiptIds.map((reviewId) => `plan-adaptation:${reviewId}`),
+      ]),
+    );
+    expect(result.evidenceRefs).not.toContain(
+      `athlete-feedback:${feedbackRecords[0].id}`,
+    );
+    expect(result.evidenceRefs).not.toContain(
+      `athlete-feedback:${state.athleteFeedback[0].id}`,
+    );
+    expect(result.evidenceRefs).not.toContain(
+      `plan-adaptation:${receipts[0].reviewId}`,
+    );
+    expect(result.evidenceRefs).not.toContain(
+      "planned-workout:planned-2026-08-23-long",
+    );
+
+    const stateBeforeMutation = structuredClone(state);
+    const originalFeedbackSessionRpe = state.athleteFeedback.find(
+      ({ id }) => id === recentFeedbackIds[0],
+    )!.reported!.sessionRpe;
+    const originalTopicEvidenceRef = state.coachingTopics[0].evidenceRefs[0];
+    result.data.athlete.profile.thresholdPaceSecondsPerKm.value = 999;
+    result.data.trainingPlan.currentWeekPlannedWorkouts[0].title =
+      "Mutated summary";
+    result.data.recentAthleteFeedback[0].rawText = "Mutated feedback";
+    result.data.recentAthleteFeedback[0].reported!.sessionRpe = 999;
+    result.data.activeCoachingTopics[0].title = "Mutated topic";
+    result.data.activeCoachingTopics[0].evidenceRefs[0] =
+      "Mutated topic evidence";
+    result.data.recentAdaptationHistory[0].selectedOption.label =
+      "Mutated receipt";
+    result.data.recentAdaptationHistory[0].affectedWorkouts[0].before!.title =
+      "Mutated receipt workout";
+
+    expect(
+      state.athleteFeedback.find(({ id }) => id === recentFeedbackIds[0])!
+        .reported!.sessionRpe,
+    ).toBe(originalFeedbackSessionRpe);
+    expect(state.coachingTopics[0].evidenceRefs[0]).toBe(
+      originalTopicEvidenceRef,
+    );
+    expect(state).toEqual(stateBeforeMutation);
+  });
+
   it("returns an inclusive date range with the current plan version and stable IDs", () => {
     const result = selectTrainingPlan(createDemoWorkspaceState(), {
       from: "2026-08-24",
