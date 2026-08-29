@@ -3,6 +3,7 @@ import type { ReviewCoordinator } from "../../application/createReviewCoordinato
 import type {
   CoachAgentConnection,
   ModelContextHost,
+  ToolActivity,
   WebMcpRegistration,
   WebMcpTool,
 } from "./types";
@@ -41,6 +42,75 @@ export type ReviewMode = "primary" | "fallback";
 interface RegisterWebMcpOptions {
   reviewMode: ReviewMode;
   reviewCoordinator: ReviewCoordinator;
+  onActivity?: (activity: ToolActivity) => void;
+}
+
+const TOOL_ACTIVITY_LABELS: Record<string, string> = {
+  get_athlete_context: "reading the athlete context",
+  get_training_plan: "reading the Training Plan",
+  get_workout_context: "reading the workout context",
+  record_athlete_feedback: "recording Athlete Feedback",
+  review_workout_adaptation: "opening the adaptation review",
+  open_workout_adaptation_review: "opening the adaptation review",
+  read_workout_adaptation_decision: "reading your adaptation decision",
+};
+
+function withActivity(
+  tool: WebMcpTool,
+  onActivity?: (activity: ToolActivity) => void,
+): WebMcpTool {
+  if (!onActivity) return tool;
+  const activityLabel =
+    TOOL_ACTIVITY_LABELS[tool.name] ?? "using the workspace";
+  const publish = (activity: ToolActivity) => {
+    try {
+      onActivity(activity);
+    } catch {
+      // UI observation must never alter the public tool result.
+    }
+  };
+  return {
+    ...tool,
+    async execute(input, execution) {
+      publish({
+        status: "running",
+        toolName: tool.name,
+        message: `Coach Agent is ${activityLabel}.`,
+      });
+      const result = await tool.execute(input, execution);
+      const status =
+        typeof result === "object" && result !== null && "status" in result
+          ? String(result.status)
+          : "ok";
+      if (status === "error") {
+        publish({
+          status: "error",
+          toolName: tool.name,
+          message:
+            "The request could not be completed. Your Training Plan was not changed.",
+        });
+      } else if (status === "not_ready") {
+        publish({
+          status: "waiting",
+          toolName: tool.name,
+          message: "Waiting for your decision.",
+        });
+      } else if (status === "review_opened") {
+        publish({
+          status: "success",
+          toolName: tool.name,
+          message: "Review opened in the workspace.",
+        });
+      } else {
+        publish({
+          status: "success",
+          toolName: tool.name,
+          message: `${tool.title} completed.`,
+        });
+      }
+      return result;
+    },
+  };
 }
 
 const reviewProposalSchema: WebMcpTool["inputSchema"] = {
@@ -384,7 +454,9 @@ export async function registerWebMcpTools(
 
   const controller = new AbortController();
   try {
-    const tools = createTools(application, options);
+    const tools = createTools(application, options).map((tool) =>
+      withActivity(tool, options?.onActivity),
+    );
     for (const tool of tools) {
       await host.registerTool(tool, { signal: controller.signal });
     }

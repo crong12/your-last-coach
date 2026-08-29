@@ -1,6 +1,8 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { CoachAgentConnection } from "../adapters/webmcp/types";
+import type { DemoGuidePreference } from "../adapters/persistence/demoGuidePreference";
+import type { ToolActivityStore } from "../adapters/webmcp/toolActivityStore";
 import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
@@ -10,6 +12,7 @@ import type {
   PlannedWorkout,
   WorkoutResult,
 } from "../domain/types";
+import { useModalFocus } from "./useModalFocus";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -17,6 +20,8 @@ interface WorkspaceAppProps {
   initialNotice: string | null;
   initialDurability: Durability;
   coachAgentConnection: CoachAgentConnection;
+  demoGuidePreference: DemoGuidePreference;
+  toolActivityStore: ToolActivityStore;
 }
 
 type PlanView = "week" | "month";
@@ -249,17 +254,13 @@ function WorkoutDetails({
   result?: WorkoutResult;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalFocus(dialogRef, onClose);
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="detail-dialog"
         role="dialog"
         aria-modal="true"
@@ -270,6 +271,7 @@ function WorkoutDetails({
           className="icon-button"
           onClick={onClose}
           aria-label="Close workout details"
+          data-initial-focus
         >
           ×
         </button>
@@ -343,9 +345,12 @@ function ResetDialog({
   onCancel: () => void;
   onReset: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalFocus(dialogRef, onCancel);
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onCancel}>
       <section
+        ref={dialogRef}
         className="reset-dialog"
         role="dialog"
         aria-modal="true"
@@ -359,11 +364,153 @@ function ResetDialog({
           changes.
         </p>
         <div className="dialog-actions">
-          <button className="button button--quiet" onClick={onCancel}>
+          <button
+            className="button button--quiet"
+            onClick={onCancel}
+            data-initial-focus
+          >
             Keep current plan
           </button>
           <button className="button button--danger" onClick={onReset}>
             Reset demo
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const SUGGESTED_PROMPT =
+  "That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.";
+
+function DemoGuide({
+  connection,
+  latestActivity,
+  onContinue,
+  onReset,
+}: {
+  connection: CoachAgentConnection;
+  latestActivity: ReturnType<ToolActivityStore["getSnapshot"]>;
+  onContinue: () => void;
+  onReset: () => void;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useModalFocus(dialogRef, onContinue);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(SUGGESTED_PROMPT);
+      setCopyNotice("Prompt copied.");
+    } catch {
+      setCopyNotice("Select the prompt and copy it from this guide.");
+    }
+  };
+  const connectionHeading =
+    connection.status === "connected"
+      ? "Coach Agent connected"
+      : connection.status === "error"
+        ? "Coach Agent couldn’t connect"
+        : "Coach Agent unavailable";
+  const connectionCopy =
+    connection.status === "connected"
+      ? "The fallback review tools are ready in this browser."
+      : connection.status === "error"
+        ? "Reload this page and try again. Your Training Plan was not changed."
+        : "Coach Agent tools aren’t available in this browser. You can still explore the workspace.";
+
+  return (
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={onContinue}
+    >
+      <section
+        ref={dialogRef}
+        className="guide-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guide-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button
+          className="icon-button"
+          onClick={onContinue}
+          aria-label="Close Demo Guide"
+          data-initial-focus
+        >
+          ×
+        </button>
+        <div className="guide-scroll">
+          <span className="eyebrow">Judge briefing</span>
+          <h2 id="guide-title">Demo Guide</h2>
+          <p className="guide-intro">
+            Sam is a fictional runner preparing for Brighton Marathon. This
+            reproducible scenario uses seeded synthetic COROS-shaped
+            observations and does not connect to a COROS account.
+          </p>
+
+          <section className="guide-prompt" aria-labelledby="prompt-title">
+            <div>
+              <span className="eyebrow">Suggested message</span>
+              <h3 id="prompt-title">Ask the Coach Agent</h3>
+            </div>
+            <blockquote>{SUGGESTED_PROMPT}</blockquote>
+            <button className="button button--quiet" onClick={copyPrompt}>
+              Copy prompt
+            </button>
+            {copyNotice && (
+              <p className="guide-copy-notice" role="status">
+                {copyNotice}
+              </p>
+            )}
+          </section>
+
+          <div className="guide-grid">
+            <section aria-labelledby="connection-title">
+              <span className="eyebrow">Connection</span>
+              <h3 id="connection-title">{connectionHeading}</h3>
+              <p>{connectionCopy}</p>
+              {connection.toolNames.length > 0 && (
+                <ul className="guide-tools" aria-label="Registered tools">
+                  {connection.toolNames.map((toolName) => (
+                    <li key={toolName}>{toolName}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+            <section aria-labelledby="activity-title">
+              <span className="eyebrow">Latest tool outcome</span>
+              <h3 id="activity-title">Coach Agent activity</h3>
+              <p>
+                {latestActivity?.message ?? "No Coach Agent tool has run yet."}
+              </p>
+              <p>
+                This demo uses a reliable two-step review: the Coach Agent opens
+                a review here, then reads your decision after you approve or
+                discuss further.
+              </p>
+            </section>
+          </div>
+
+          <section
+            className="guide-troubleshooting"
+            aria-labelledby="troubleshooting-title"
+          >
+            <span className="eyebrow">Troubleshooting</span>
+            <h3 id="troubleshooting-title">If tools are unavailable</h3>
+            <p>
+              Open this page in ChatGPT’s in-app browser and attach it to the
+              conversation. Reload the page if the status does not update. Reset
+              restores the scenario; it does not enable browser tools.
+            </p>
+          </section>
+        </div>
+        <div className="dialog-actions guide-actions">
+          <button className="button button--quiet" onClick={onReset}>
+            Reset demo
+          </button>
+          <button className="button button--primary" onClick={onContinue}>
+            Continue to workspace
           </button>
         </div>
       </section>
@@ -550,16 +697,12 @@ export function ReviewModal({
     coordinator.getState,
     coordinator.getState,
   );
-
-  useEffect(() => {
-    if (review.status !== "reviewing") return;
-    const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape")
-        void coordinator.dismiss("athlete_dismissed", review.generation);
-    };
-    window.addEventListener("keydown", dismissOnEscape);
-    return () => window.removeEventListener("keydown", dismissOnEscape);
-  }, [coordinator, review]);
+  const dialogRef = useRef<HTMLElement>(null);
+  const dismiss = () => {
+    if (review.status === "reviewing")
+      void coordinator.dismiss("athlete_dismissed", review.generation);
+  };
+  useModalFocus(dialogRef, dismiss, review.status === "reviewing");
 
   if (review.status !== "reviewing") return null;
   const { proposal } = review;
@@ -588,6 +731,7 @@ export function ReviewModal({
         className={`review-option review-option--${role} ${selected ? "review-option--selected" : ""}`}
         aria-pressed={selected}
         aria-label={`${prefix} — ${option.label}`}
+        {...(role === "recommendation" ? { "data-initial-focus": true } : {})}
         onClick={() => coordinator.select(option.optionId, review.generation)}
       >
         <span className="eyebrow">{prefix}</span>
@@ -607,6 +751,7 @@ export function ReviewModal({
       }
     >
       <section
+        ref={dialogRef}
         className="review-dialog"
         role="dialog"
         aria-modal="true"
@@ -686,20 +831,39 @@ export function WorkspaceApp({
   initialNotice,
   initialDurability,
   coachAgentConnection,
+  demoGuidePreference,
+  toolActivityStore,
 }: WorkspaceAppProps) {
   const state = useSyncExternalStore(
     application.subscribe,
     application.getState,
     application.getState,
   );
+  const reviewState = useSyncExternalStore(
+    reviewCoordinator.subscribe,
+    reviewCoordinator.getState,
+    reviewCoordinator.getState,
+  );
   const [view, setView] = useState<PlanView>("week");
   const [selectedWorkout, setSelectedWorkout] = useState<PlannedWorkout | null>(
     null,
   );
   const [resetOpen, setResetOpen] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(() =>
+    demoGuidePreference.shouldOpen(),
+  );
   const [notice, setNotice] = useState(initialNotice);
   const [durability, setDurability] = useState(initialDurability);
+  const latestToolActivity = useSyncExternalStore(
+    toolActivityStore.subscribe,
+    toolActivityStore.getSnapshot,
+    toolActivityStore.getSnapshot,
+  );
+  useEffect(() => {
+    if (reviewState.status !== "reviewing") return;
+    setSelectedWorkout(null);
+    setGuideOpen(false);
+  }, [reviewState.status]);
   const latestAdaptation = state.adaptationReceipts.at(-1);
   const adaptedWorkoutIds = new Set(
     latestAdaptation?.affectedWorkouts
@@ -739,7 +903,15 @@ export function WorkspaceApp({
     setView("week");
     setSelectedWorkout(null);
     setResetOpen(false);
+    demoGuidePreference.reset();
+    toolActivityStore.clear();
+    setGuideOpen(true);
     setNotice("Demo restored to its starting Training Plan.");
+  };
+
+  const continueToWorkspace = () => {
+    demoGuidePreference.markSeen();
+    setGuideOpen(false);
   };
 
   return (
@@ -760,33 +932,14 @@ export function WorkspaceApp({
             <button
               className="status-button"
               aria-label={`Coach Agent connection: ${connectionLabel}`}
-              aria-expanded={statusOpen}
-              onClick={() => setStatusOpen((open) => !open)}
+              aria-haspopup="dialog"
+              onClick={() => setGuideOpen(true)}
             >
               <span
                 className={`status-dot status-dot--${coachAgentConnection.status}`}
               />
               Coach Agent {connectionLabel}
             </button>
-            {statusOpen && (
-              <section className="status-popover">
-                <strong>
-                  {coachAgentConnection.status === "connected"
-                    ? "Shared context connected"
-                    : "Human workspace ready"}
-                </strong>
-                <p>{coachAgentConnection.message}</p>
-                {coachAgentConnection.toolNames.length > 0 && (
-                  <small className="registered-tools">
-                    {coachAgentConnection.toolNames.join(" · ")}
-                  </small>
-                )}
-                <small>
-                  Seeded synthetic COROS-shaped observations; no authenticated
-                  COROS sync.
-                </small>
-              </section>
-            )}
           </div>
           <button
             className="button button--quiet"
@@ -865,17 +1018,28 @@ export function WorkspaceApp({
         />
       </main>
 
-      {selectedWorkout && (
+      {!resetOpen && reviewState.status !== "reviewing" && selectedWorkout && (
         <WorkoutDetails
           workout={selectedWorkout}
           result={selectedResult}
           onClose={() => setSelectedWorkout(null)}
         />
       )}
-      {resetOpen && (
+      {resetOpen ? (
         <ResetDialog onCancel={() => setResetOpen(false)} onReset={resetDemo} />
-      )}
-      <ReviewModal coordinator={reviewCoordinator} onApproved={setDurability} />
+      ) : reviewState.status === "reviewing" ? (
+        <ReviewModal
+          coordinator={reviewCoordinator}
+          onApproved={setDurability}
+        />
+      ) : !selectedWorkout && guideOpen ? (
+        <DemoGuide
+          connection={coachAgentConnection}
+          latestActivity={latestToolActivity}
+          onContinue={continueToWorkspace}
+          onReset={() => setResetOpen(true)}
+        />
+      ) : null}
     </div>
   );
 }

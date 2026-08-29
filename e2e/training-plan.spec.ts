@@ -1,5 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const key = "your-last-coach.demo-guide.v1";
+    if (window.location.search.includes("fresh-guide")) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, "seen");
+    }
+  });
+});
+
 async function installWebMcpHarness(
   page: Page,
   reviewMode: "primary" | "fallback" = "fallback",
@@ -131,6 +142,320 @@ function acceptedReviewProposal() {
     },
   };
 }
+
+test("shows a calm loading state while Coach Agent tools register", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        async registerTool() {
+          await new Promise((resolve) => window.setTimeout(resolve, 80));
+        },
+      },
+    });
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Opening your Training Plan…")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your Training Plan" }),
+  ).toBeVisible();
+});
+
+test("opens the Demo Guide once, keeps it reachable, and reopens it after reset", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/?fresh-guide");
+
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  await expect(guide).toBeVisible();
+  await expect(
+    guide.getByText(/fictional runner preparing for Brighton Marathon/i),
+  ).toBeVisible();
+  await expect(
+    guide.getByText(/seeded synthetic COROS-shaped observations/i),
+  ).toBeVisible();
+  await expect(guide.getByText("open_workout_adaptation_review")).toBeVisible();
+  await expect(
+    guide.getByText("read_workout_adaptation_decision"),
+  ).toBeVisible();
+  await expect(
+    guide.getByText("No Coach Agent tool has run yet."),
+  ).toBeVisible();
+
+  await guide.getByRole("button", { name: "Continue to workspace" }).click();
+  await expect(guide).toBeHidden();
+  await page.goto("/");
+  await expect(guide).toBeHidden();
+
+  await page.evaluate(async () => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    await registrations
+      .find(({ tool }) => tool.name === "get_training_plan")!
+      .tool.execute(
+        { from: "2026-08-24", to: "2026-08-30" },
+        { signal: new AbortController().signal },
+      );
+  });
+
+  await page
+    .getByRole("button", { name: "Coach Agent connection: connected" })
+    .click();
+  await expect(guide).toBeVisible();
+  await expect(guide.getByText("Get training plan completed.")).toBeVisible();
+  await guide.getByRole("button", { name: "Reset demo" }).click();
+  const reset = page.getByRole("dialog", { name: "Reset the demo?" });
+  await expect(reset).toBeVisible();
+  await reset.getByRole("button", { name: "Reset demo" }).click();
+  await expect(guide).toBeVisible();
+  await expect(
+    guide.getByText("No Coach Agent tool has run yet."),
+  ).toBeVisible();
+});
+
+test("contains and restores focus for guide, workout details, and reset", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const status = page.getByRole("button", {
+    name: "Coach Agent connection: unavailable",
+  });
+  await status.focus();
+  await status.press("Enter");
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  await expect(
+    guide.getByRole("button", { name: "Close Demo Guide" }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    guide.getByRole("button", { name: "Continue to workspace" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(status).toBeFocused();
+
+  const workout = page.getByRole("button", { name: /5 × 1 km threshold/ });
+  await workout.focus();
+  await workout.press("Enter");
+  const details = page.getByRole("dialog", { name: "5 × 1 km threshold" });
+  await expect(
+    details.getByRole("button", { name: "Close workout details" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(workout).toBeFocused();
+
+  const resetButton = page.getByRole("button", { name: "Reset demo" });
+  await resetButton.focus();
+  await resetButton.press("Enter");
+  const reset = page.getByRole("dialog", { name: "Reset the demo?" });
+  await expect(
+    reset.getByRole("button", { name: "Keep current plan" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(resetButton).toBeFocused();
+});
+
+test("an external review displaces an unseen Demo Guide without marking or reopening it", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/?fresh-guide");
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  await expect(guide).toBeVisible();
+
+  await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )!.tool;
+    await tool.execute(proposal, { signal: new AbortController().signal });
+  }, acceptedReviewProposal());
+
+  const review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await expect(review).toBeVisible();
+  await expect(guide).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(review).toBeHidden();
+  await expect(guide).toBeHidden();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("your-last-coach.demo-guide.v1"),
+    ),
+  ).toBeNull();
+
+  await page.reload();
+  await expect(guide).toBeVisible();
+});
+
+test("reset temporarily owns an active review and either restores or cancels it", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/");
+  const openReview = () =>
+    page.evaluate(async (proposal) => {
+      const registrations = (
+        window as unknown as {
+          __webMcpHarness: {
+            registrations: Array<{
+              tool: {
+                name: string;
+                execute: (
+                  input: Record<string, unknown>,
+                  options: { signal: AbortSignal },
+                ) => Promise<unknown>;
+              };
+            }>;
+          };
+        }
+      ).__webMcpHarness.registrations;
+      await registrations
+        .find(({ tool }) => tool.name === "open_workout_adaptation_review")!
+        .tool.execute(proposal, { signal: new AbortController().signal });
+    }, acceptedReviewProposal());
+  await openReview();
+
+  const review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  const openReset = () =>
+    page.evaluate(() =>
+      (
+        document.querySelector(".topbar-actions .button") as HTMLButtonElement
+      ).click(),
+    );
+  await openReset();
+  const reset = page.getByRole("dialog", { name: "Reset the demo?" });
+  await expect(reset).toBeVisible();
+  await expect(review).toBeHidden();
+  await reset.getByRole("button", { name: "Keep current plan" }).click();
+  await expect(review).toBeVisible();
+
+  await openReset();
+  await reset.getByRole("button", { name: "Reset demo" }).click();
+  await expect(review).toBeHidden();
+  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
+});
+
+test("completes fallback discussion, approval, view changes, and reset by keyboard", async ({
+  page,
+}) => {
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/");
+  const runTool = (name: string, input: Record<string, unknown>) =>
+    page.evaluate(
+      async ({ name, input }) => {
+        const registrations = (
+          window as unknown as {
+            __webMcpHarness: {
+              registrations: Array<{
+                tool: {
+                  name: string;
+                  execute: (
+                    input: Record<string, unknown>,
+                    options: { signal: AbortSignal },
+                  ) => Promise<unknown>;
+                };
+              }>;
+            };
+          }
+        ).__webMcpHarness.registrations;
+        return registrations
+          .find(({ tool }) => tool.name === name)!
+          .tool.execute(input, { signal: new AbortController().signal });
+      },
+      { name, input },
+    );
+
+  await runTool("open_workout_adaptation_review", acceptedReviewProposal());
+  let review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await expect(
+    review.getByRole("button", { name: /Coach's recommendation/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+  await expect(review).toBeHidden();
+  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await runTool("read_workout_adaptation_decision", {
+    reviewId: "review:playwright",
+  });
+
+  await runTool("open_workout_adaptation_review", {
+    ...acceptedReviewProposal(),
+    reviewId: "review:keyboard-approval",
+  });
+  review = page.getByRole("dialog", { name: "Review Workout Adaptations" });
+  const recommendation = review.getByRole("button", {
+    name: /Coach's recommendation/,
+  });
+  await expect(recommendation).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(recommendation).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(
+    review.getByRole("button", { name: "Adapt my plan" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(review).toBeHidden();
+  await expect(page.getByText("Plan version 2")).toBeVisible();
+
+  const month = page.getByRole("button", { name: "Month" });
+  await month.focus();
+  await month.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "August 2026" }),
+  ).toBeVisible();
+  const week = page.getByRole("button", { name: "Week" });
+  await week.focus();
+  await week.press("Enter");
+  await expect(page.getByText("24–30 August")).toBeVisible();
+
+  const resetButton = page.getByRole("button", { name: "Reset demo" });
+  await resetButton.focus();
+  await resetButton.press("Enter");
+  const reset = page.getByRole("dialog", { name: "Reset the demo?" });
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
+});
 
 test("reviews both ranked Workout Adaptations and leaves every exit non-mutating", async ({
   page,
@@ -617,6 +942,7 @@ test("persists the seeded envelope across reload and resets with in-page approva
     page.getByText("Demo restored to its starting Training Plan."),
   ).toBeVisible();
   await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
 test("replaces invalid saved data and explains the refresh", async ({
@@ -633,6 +959,7 @@ test("replaces invalid saved data and explains the refresh", async ({
     ),
   ).toBeVisible();
   await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
 test("renders context from a valid modified saved workspace", async ({
@@ -716,6 +1043,14 @@ test("remains usable without WebMCP and warns when storage is memory-only", asyn
   await expect(
     page.getByText("Changes will last only until this page is reloaded."),
   ).toBeVisible();
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  await expect(guide).toBeVisible();
+  await expect(
+    guide.getByText(
+      "Coach Agent tools aren’t available in this browser. You can still explore the workspace.",
+    ),
+  ).toBeVisible();
+  await guide.getByRole("button", { name: "Continue to workspace" }).click();
   await page.getByRole("button", { name: "Month" }).click();
   await expect(
     page.getByRole("heading", { name: "August 2026" }),
@@ -733,4 +1068,74 @@ test("keeps the Training Plan readable beside ChatGPT", async ({ page }) => {
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(720);
   await expect(page.getByRole("button", { name: "Month" })).toBeVisible();
+});
+
+test("keeps the guide and fallback review contained at a narrow viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installWebMcpHarness(page, "fallback");
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Coach Agent connection: connected" })
+    .press("Enter");
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  await expect(guide).toBeVisible();
+  const guideContinue = guide.getByRole("button", {
+    name: "Continue to workspace",
+  });
+  const continueBox = await guideContinue.boundingBox();
+  expect(continueBox!.y + continueBox!.height).toBeLessThanOrEqual(844);
+  const [scrollBox, actionsBox] = await Promise.all([
+    guide.locator(".guide-scroll").boundingBox(),
+    guide.locator(".guide-actions").boundingBox(),
+  ]);
+  expect(scrollBox!.y + scrollBox!.height).toBeLessThanOrEqual(actionsBox!.y);
+  expect(
+    await guide.evaluate((element) => element.getBoundingClientRect().width),
+  ).toBeLessThanOrEqual(390);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.keyboard.press("Escape");
+
+  await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    await registrations
+      .find(({ tool }) => tool.name === "open_workout_adaptation_review")!
+      .tool.execute(proposal, { signal: new AbortController().signal });
+  }, acceptedReviewProposal());
+  const review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  const recommendation = review.getByRole("button", {
+    name: /Coach's recommendation/,
+  });
+  const alternative = review.getByRole("button", { name: /Alternative/ });
+  await expect(review).toBeVisible();
+  const [reviewBox, recommendationBox, alternativeBox] = await Promise.all([
+    review.boundingBox(),
+    recommendation.boundingBox(),
+    alternative.boundingBox(),
+  ]);
+  expect(reviewBox!.width).toBeLessThanOrEqual(390);
+  expect(reviewBox!.height).toBeLessThanOrEqual(844);
+  expect(alternativeBox!.y).toBeGreaterThan(recommendationBox!.y);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
 });
