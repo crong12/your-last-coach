@@ -7,7 +7,10 @@ import type {
   WorkspaceRepository,
 } from "../src/application/ports";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
-import type { ReviewProposal } from "../src/domain/review";
+import {
+  validateReviewProposal,
+  type ReviewProposal,
+} from "../src/domain/review";
 
 const easyPrescription = (distanceKm: number) => ({
   blocks: [{ kind: "easy" as const, distanceKm }],
@@ -333,6 +336,28 @@ describe("Workout Adaptation review coordinator", () => {
     });
     expect(application.getState()).toEqual(before);
     expect(saved).toHaveLength(0);
+  });
+
+  it("rejects alternatives with identical Workout Changes regardless of order", async () => {
+    const { application } = await setup();
+    const proposal = structuredClone(acceptedProposal());
+    proposal.alternative.workoutChanges = structuredClone(
+      proposal.recommended.workoutChanges,
+    ).reverse();
+    const workspace = application.getState();
+
+    expect(
+      validateReviewProposal(proposal, {
+        planVersion: workspace.trainingPlan.planVersion,
+        plannedWorkouts: workspace.trainingPlan.plannedWorkouts,
+        evidenceRefs: new Set(proposal.evidenceRefs),
+      }),
+    ).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: "alternative.workoutChanges" }),
+      ]),
+    });
   });
 
   it("rejects malformed, stale, unknown, and ambiguous proposals with field-specific corrections", async () => {

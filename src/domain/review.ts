@@ -363,6 +363,13 @@ function validateOption(
   });
 }
 
+function workoutChangeSignature(changes: WorkoutChange[]): string {
+  return changes
+    .map((change) => JSON.stringify(change))
+    .sort()
+    .join("|");
+}
+
 export function validateAdaptationOption(
   value: unknown,
   plannedWorkouts: PlannedWorkout[],
@@ -528,8 +535,12 @@ export function validateReviewProposal(
       );
     }
   }
+  const recommendedIssuesBefore = issues.length;
   validateOption(value.recommended, "recommended", workoutIds, issues);
+  const recommendedShapeValid = issues.length === recommendedIssuesBefore;
+  const alternativeIssuesBefore = issues.length;
   validateOption(value.alternative, "alternative", workoutIds, issues);
+  const alternativeShapeValid = issues.length === alternativeIssuesBefore;
   if (
     isRecord(value.recommended) &&
     isRecord(value.alternative) &&
@@ -541,6 +552,23 @@ export function validateReviewProposal(
       "alternative.optionId",
       "Option IDs must be distinct.",
       "an identifier different from recommended.optionId",
+    );
+  }
+  if (
+    recommendedShapeValid &&
+    alternativeShapeValid &&
+    isRecord(value.recommended) &&
+    isRecord(value.alternative) &&
+    Array.isArray(value.recommended.workoutChanges) &&
+    Array.isArray(value.alternative.workoutChanges) &&
+    workoutChangeSignature(value.recommended.workoutChanges) ===
+      workoutChangeSignature(value.alternative.workoutChanges)
+  ) {
+    issue(
+      issues,
+      "alternative.workoutChanges",
+      "Alternative Workout Changes must differ from the recommendation.",
+      "a set of Workout Changes different from recommended.workoutChanges",
     );
   }
   return issues.length === 0
