@@ -96,11 +96,11 @@ Reset the Shared Coaching Workspace to `demo-athlete-v1` and the fixed clock:
 
 The visible weekly calendar should show the original rest-of-week plan:
 
-| Date | Before approval |
-|---|---|
-| Thursday 27 August | 6 km recovery |
+| Date               | Before approval        |
+| ------------------ | ---------------------- |
+| Thursday 27 August | 6 km recovery          |
 | Saturday 29 August | 8 km easy with strides |
-| Sunday 30 August | 18 km long run |
+| Sunday 30 August   | 18 km long run         |
 
 The workspace should also make the Coaching Briefing and restrained, mixed evidence inspectable:
 
@@ -132,15 +132,15 @@ The runtime Coach Agent is not assumed to read this repository or its `AGENTS.md
 
 ## Timed story
 
-| Time | Visual and interaction | Broad narration point |
-|---|---|---|
-| 0:00–0:25 | ChatGPT and workspace visible side by side | Brighton 2027 motivation; static or generic plans struggle when actual training diverges; introduce the shared workspace idea. |
-| 0:25–0:43 | Original week and Coaching Briefing visible | This is a truthful, reproducible synthetic Athlete. Human and agent can inspect the same profile, active topic, and current evidence. |
-| 0:43–1:20 | Send the natural Athlete message; ChatGPT invokes tools | From a fresh conversation, the Agent records the report and retrieves the briefing, plan, and workout evidence through WebMCP instead of relying on hidden memory or scraping the page. |
-| 1:20–1:48 | Coaching explanation and two ranked options appear | The Agent briefly recognizes that today's no-pain report follows the shin topic, then bases its moderate-confidence recommendation on accumulated fatigue and names the counter-evidence. |
-| 1:48–2:18 | Review modal; briefly preview Alternative, return to Coach's recommendation, press **Adapt my plan** | Selecting a card previews only. The consequential Training Plan change requires explicit Athlete approval. |
-| 2:18–2:36 | Modal closes; calendar updates; structured tool result appears in ChatGPT | Narrate one or two visible changes and the resulting Adaptation History. Human and agent now see the same approved plan version. |
-| 2:36–2:48 | Updated calendar remains visible | Close on the broader product vision and, if useful, the qualified incremental-cost line. |
+| Time      | Visual and interaction                                                                               | Broad narration point                                                                                                                                                                     |
+| --------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:25 | ChatGPT and workspace visible side by side                                                           | Brighton 2027 motivation; static or generic plans struggle when actual training diverges; introduce the shared workspace idea.                                                            |
+| 0:25–0:43 | Original week and Coaching Briefing visible                                                          | This is a truthful, reproducible synthetic Athlete. Human and agent can inspect the same profile, active topic, and current evidence.                                                     |
+| 0:43–1:20 | Send the natural Athlete message; ChatGPT invokes tools                                              | From a fresh conversation, the Agent records the report and retrieves the briefing, plan, and workout evidence through WebMCP instead of relying on hidden memory or scraping the page.   |
+| 1:20–1:48 | Coaching explanation and two ranked options appear                                                   | The Agent briefly recognizes that today's no-pain report follows the shin topic, then bases its moderate-confidence recommendation on accumulated fatigue and names the counter-evidence. |
+| 1:48–2:18 | Review modal; briefly preview Alternative, return to Coach's recommendation, press **Adapt my plan** | Selecting a card previews only. The consequential Training Plan change requires explicit Athlete approval.                                                                                |
+| 2:18–2:36 | Modal closes; calendar updates; structured tool result appears in ChatGPT                            | Narrate one or two visible changes and the resulting Adaptation History. Human and agent now see the same approved plan version.                                                          |
+| 2:36–2:48 | Updated calendar remains visible                                                                     | Close on the broader product vision and, if useful, the qualified incremental-cost line.                                                                                                  |
 
 Do not artificially hold the post-approval UI. Let the polished product transition occur normally and narrate the updated calendar while it is visible.
 
