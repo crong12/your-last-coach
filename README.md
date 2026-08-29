@@ -1,13 +1,110 @@
 # Your Last Coach
 
-A shared human–agent workspace for planning, adapting, and understanding marathon training toward the Brighton Marathon on 4 April 2027.
+Your Last Coach is a Shared Coaching Workspace where a recreational Athlete and a Coach Agent inspect the same training evidence, compare Workout Adaptations, and update a visible Training Plan through explicit Athlete approval.
 
-The product direction is a WebMCP-enabled coaching dashboard where the runner and an agent can work through the same interface: reviewing training, discussing feedback, adapting the plan, and acting on schedules and workout data.
+The demonstration follows Sam, a fictional runner preparing for a 3:40 Brighton Marathon on 4 April 2027. After an incomplete threshold workout, the Coach Agent can read the seeded training context, record Sam's feedback, propose two ranked adaptations, and open a review in the workspace. Selecting an option previews the calendar change. Only **Adapt my plan** changes the Training Plan.
 
-## Status
+All Athlete, workout, recovery, and COROS-shaped observations are deterministic synthetic data. The application does not connect to COROS, diagnose injury, generate a complete training season, or provide authenticated multi-user persistence.
 
-Discovery and wayfinding. The application stack and production architecture are intentionally undecided until the product, integration, and hackathon constraints have been resolved.
+## Product surface
 
-## Development workflow
+The repository ships a client-only React, TypeScript, and Vite application. Its production WebMCP configuration uses the compatibility fallback selected by the ChatGPT host-reliability gate. When WebMCP is available, the Coach Agent receives these six tools:
 
-GitHub issues are the source of truth for decisions, specifications, and implementation tickets. The project follows the Matt Skills Curated engineering workflow; repository-specific conventions are linked from [AGENTS.md](AGENTS.md).
+- `get_athlete_context`
+- `get_training_plan`
+- `get_workout_context`
+- `record_athlete_feedback`
+- `open_workout_adaptation_review`
+- `read_workout_adaptation_decision`
+
+The normal workspace remains usable when WebMCP is unavailable. Primary and fallback review tools are never registered together.
+
+## Local setup
+
+The exact repository and CI Node.js version is `22.23.2`, recorded in [`.nvmrc`](.nvmrc). Vercel selects the compatible `22.x` runtime family from `package.json` because its build platform supports Node versions at major-version granularity.
+
+With a version manager that reads `.nvmrc`:
+
+```bash
+nvm install
+nvm use
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite. The Shared Coaching Workspace works as a human interface in an ordinary browser; a WebMCP host is required only for Coach Agent tools.
+
+## Architecture
+
+The application keeps one authoritative, application-owned workspace state. React and WebMCP use the same application commands and selectors.
+
+- `src/domain/` owns coaching types, invariants, Plan Approval, and Workout Adaptation validation.
+- `src/demo/` owns the immutable `demo-athlete-v1` fixture and fixed clock.
+- `src/application/` owns commands, queries, plan versions, idempotency, and the review lifecycle.
+- `src/adapters/persistence/` stores a versioned browser envelope and falls back to page memory when storage is unavailable.
+- `src/adapters/webmcp/` owns tool registration and host mechanics without making coaching judgments.
+- `src/ui/` renders the Training Plan, evidence, Demo Guide, adaptation review, and reset flow.
+- `src/main.tsx` initializes the fixture, repository, application, fallback WebMCP tools, and UI.
+
+The detailed boundaries are recorded in [Implementation and verification architecture](docs/implementation-and-verification-architecture.md). The fixture and tool schemas are recorded in [Demo Athlete and coaching tool contract](docs/demo-athlete-coaching-contract-v1.md).
+
+## Judge flow
+
+1. Open the workspace and use **Reset demo** to restore the fixed state.
+2. Keep the Week view visible. The original plan shows Thursday's 6 km recovery run, Saturday's 8 km easy run with strides, and Sunday's 18 km long run.
+3. In ChatGPT with the site attached, send:
+
+   > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
+
+4. The Coach Agent records the Athlete Feedback and reads Athlete, Training Plan, workout, and recovery context.
+5. The Agent calls `open_workout_adaptation_review` with its recommendation and alternative.
+6. In the workspace, preview **Alternative — Keep the rhythm**, then return to **Coach's recommendation — Recovery first**.
+7. Press **Adapt my plan**. Selection alone does not mutate the Training Plan.
+8. The Agent calls `read_workout_adaptation_decision` to receive the structured result.
+9. Confirm that the plan advances to version 2, Thursday becomes rest, Saturday becomes 6 km easy without strides, and Sunday becomes a 14 km easy long run.
+
+The approved three-minute presentation contract is in [Three-minute judging story](docs/three-minute-judging-story.md).
+
+## Reset and persistence
+
+**Reset demo** opens an in-page confirmation and restores `demo-athlete-v1`, its fixed clock, plan version 1, original Planned Workouts, and empty feedback and review state.
+
+Approved state is stored in browser `localStorage` and normally survives reloads in the same browser profile. If storage is unavailable or rejects a write, the current page remains authoritative and displays a warning that changes will be lost on reload. Invalid or unsupported saved state is replaced with the validated fixture.
+
+The application has no account, server database, cross-device synchronization, or production COROS integration. Browser data belongs to the current browser profile and can be restored with **Reset demo**.
+
+## Automated verification
+
+Run the full local gate from a clean install:
+
+```bash
+npm ci
+npm run format:check && \
+  npm run typecheck && \
+  npm test && \
+  npm run build && \
+  npm run test:e2e && \
+  npm run test:static
+```
+
+`npm run test:e2e` exercises the application and both review semantics through a controlled WebMCP harness. `npm run test:static` serves the existing production build from `dist/` and verifies that the public fallback workspace loads without WebMCP or external runtime requests. Neither test substitutes for manual verification in an enabled WebMCP host.
+
+GitHub Actions runs the same stages for pull requests targeting `main` and pushes to `main`. See the [verification workflow](.github/workflows/ci.yml) and the [release-candidate evidence template](docs/release-candidate-evidence.md).
+
+## Vercel deployment
+
+[`vercel.json`](vercel.json) declares the Vite build, lockfile-only install, `dist/` output, and `Origin-Agent-Cluster: ?1` response header. It does not link this repository to a Vercel project or authorize deployment.
+
+For an authorized release candidate:
+
+1. Select the exact commit whose GitHub Actions verification succeeded.
+2. Import or deploy the repository root as a Vite project without adding application credentials.
+3. Keep the committed install, build, output, Node `22.x`, and header configuration.
+4. Record the immutable commit, deployment identifier, public HTTPS URL, CI run, resolved Vercel Node version from the build log, and UTC deployment time in the evidence template.
+5. Verify the public URL signed out, inspect the response header, and complete the separate enabled-host WebMCP checks before accepting the candidate.
+
+No deployment URL or manual-host result is claimed by this repository documentation.
+
+## Licence
+
+Your Last Coach is available under the [MIT License](LICENSE).
