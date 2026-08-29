@@ -433,6 +433,34 @@ describe("workspace initialization", () => {
     });
   });
 
+  it("accepts receipt evidence for a Planned Workout removed by the adaptation", async () => {
+    const envelope = await approvedEnvelope();
+    const removedWorkoutId = "planned-2026-08-27-recovery";
+    const removedWorkoutEvidenceRef = `planned-workout:${removedWorkoutId}`;
+    envelope.state.adaptationReceipts[0].evidenceRefs = [
+      removedWorkoutEvidenceRef,
+      ...envelope.state.adaptationReceipts[0].evidenceRefs,
+    ];
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+    const source = createDemoCoachingContextSource();
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: source,
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(initialized.state.trainingPlan.plannedWorkouts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: removedWorkoutId }),
+      ]),
+    );
+    expect(initialized.state.adaptationReceipts[0].evidenceRefs).toContain(
+      removedWorkoutEvidenceRef,
+    );
+  });
+
   it("restores sparse Athlete Feedback from the persisted envelope", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();
