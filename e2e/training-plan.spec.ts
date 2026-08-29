@@ -564,7 +564,37 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
   ).toBe(beforeEnvelope);
 });
 
-test("applies Recovery first atomically through Adapt my plan", async ({
+test("shows the shared coaching briefing", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "Athlete Profile" }),
+  ).toBeVisible();
+  await expect(page.getByText("Preferred long run")).toBeVisible();
+  await expect(page.getByText("Sunday", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maximum weekday session")).toBeVisible();
+  await expect(page.getByText("60 minutes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
+  await expect(
+    page.getByText("Shin discomfort", { exact: true }),
+  ).toBeVisible();
+  const monitoring = page.getByRole("region", { name: "Monitoring" });
+  await expect(
+    monitoring.getByText(
+      "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+    ),
+  ).toBeVisible();
+  await expect(
+    monitoring.getByText("23 August 2026", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    monitoring.getByText("The next Athlete report about a run.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("persists feedback context and plan adaptations across reload and reset", async ({
   page,
 }) => {
   await installWebMcpHarness(page, "fallback");
@@ -656,6 +686,36 @@ test("applies Recovery first atomically through Adapt my plan", async ({
   await page.reload();
   await expect(page.getByText("Plan version 2")).toBeVisible();
   await expect(page.getByText("Adapted", { exact: true })).toHaveCount(2);
+
+  const history = page.getByRole("region", {
+    name: "Recent plan adaptations",
+  });
+  await expect(history).toBeVisible();
+  await expect(
+    history.getByText("Recovery first", { exact: true }),
+  ).toBeVisible();
+  await expect(history.getByText("Plan 1 → 2", { exact: true })).toBeVisible();
+  await expect(
+    history.getByText("26 August 2026", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    history.getByText("3 workouts affected", { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Reset demo" }).click();
+  await page
+    .getByRole("dialog", { name: "Reset the demo?" })
+    .getByRole("button", { name: "Reset demo" })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Recent plan adaptations" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Shin discomfort", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Athlete Profile" }),
+  ).toBeVisible();
 });
 
 test("shows the deterministic Week first and the same workouts in Month", async ({
@@ -907,9 +967,13 @@ test("records, persists, and resets Athlete Feedback through the injected host",
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
+  const feedback = page.getByRole("region", { name: "Athlete Feedback" });
+  await expect(feedback).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Athlete Feedback" }),
-  ).toBeHidden();
+    feedback.getByText(
+      "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+    ),
+  ).toBeVisible();
   await expect(page.getByText(rawText)).toBeHidden();
 });
 

@@ -7,11 +7,7 @@ import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
-import type {
-  AthleteFeedback,
-  PlannedWorkout,
-  WorkoutResult,
-} from "../domain/types";
+import type { PlannedWorkout, WorkoutResult } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 
 interface WorkspaceAppProps {
@@ -521,13 +517,12 @@ function DemoGuide({
 function ContextRail({
   context,
   plannedWorkouts,
-  athleteFeedback,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
-  athleteFeedback: AthleteFeedback[];
 }) {
   const { observations } = context;
+  const profile = context.athlete.profile;
   const priorWeekDistanceKm = context.recentTraining
     .filter(({ startedAt }) => {
       const date = startedAt.slice(0, 10);
@@ -547,6 +542,76 @@ function ContextRail({
           </strong>
         </div>
       </section>
+      <section className="profile-card" aria-labelledby="profile-title">
+        <div className="section-heading section-heading--small">
+          <div>
+            <span className="eyebrow">Shared profile</span>
+            <h2 id="profile-title">Athlete Profile</h2>
+          </div>
+        </div>
+        <dl className="profile-list">
+          <div>
+            <dt>Normal weekly volume</dt>
+            <dd>
+              {profile.normalWeeklyVolumeKm.value.min}–
+              {profile.normalWeeklyVolumeKm.value.max} km
+            </dd>
+          </div>
+          <div>
+            <dt>Recent half-marathon</dt>
+            <dd>{formatObjective(profile.recentHalfMarathonSeconds.value)}</dd>
+          </div>
+          <div>
+            <dt>Threshold pace</dt>
+            <dd>{formatPace(profile.thresholdPaceSecondsPerKm.value)}/km</dd>
+          </div>
+          <div>
+            <dt>Preferred long run</dt>
+            <dd>{profile.preferredLongRunDay.value}</dd>
+          </div>
+          <div>
+            <dt>Maximum weekday session</dt>
+            <dd>
+              {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
+            </dd>
+          </div>
+        </dl>
+      </section>
+      {context.activeCoachingTopics.length > 0 && (
+        <section className="monitoring-card" aria-labelledby="monitoring-title">
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">Longitudinal context</span>
+              <h2 id="monitoring-title">Monitoring</h2>
+            </div>
+          </div>
+          <div className="monitoring-topics">
+            {context.activeCoachingTopics.map((topic) => (
+              <article className="monitoring-topic" key={topic.id}>
+                <span className="monitoring-status">
+                  {formatClassification(topic.status)}
+                </span>
+                <h3>{topic.title}</h3>
+                <blockquote>{topic.athleteReport}</blockquote>
+                <dl className="monitoring-meta">
+                  <div>
+                    <dt>Recorded</dt>
+                    <dd>
+                      <time dateTime={topic.latestReportedAt}>
+                        {formatDate(topic.latestReportedAt.slice(0, 10))}
+                      </time>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Follow-up</dt>
+                    <dd>{topic.followUpCondition}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <section className="evidence-card">
         <div className="section-heading section-heading--small">
           <div>
@@ -602,7 +667,7 @@ function ContextRail({
           Seeded synthetic observations
         </small>
       </section>
-      {athleteFeedback.length > 0 && (
+      {context.recentAthleteFeedback.length > 0 && (
         <section className="feedback-card" aria-labelledby="feedback-title">
           <div className="section-heading section-heading--small">
             <div>
@@ -611,7 +676,7 @@ function ContextRail({
             </div>
           </div>
           <ol className="feedback-list">
-            {athleteFeedback.map((feedback) => (
+            {context.recentAthleteFeedback.map((feedback) => (
               <li key={feedback.id}>
                 <blockquote>{feedback.rawText}</blockquote>
                 {feedback.reported && (
@@ -646,6 +711,38 @@ function ContextRail({
                     )}
                   </dl>
                 )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {context.recentAdaptationHistory.length > 0 && (
+        <section
+          className="adaptation-history-card"
+          aria-labelledby="adaptation-history-title"
+        >
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">App-owned changes</span>
+              <h2 id="adaptation-history-title">Recent plan adaptations</h2>
+            </div>
+          </div>
+          <ol className="adaptation-history-list">
+            {context.recentAdaptationHistory.map((receipt) => (
+              <li key={receipt.reviewId}>
+                <strong>{receipt.selectedOption.label}</strong>
+                <div className="adaptation-history-meta">
+                  <span>
+                    Plan {receipt.planVersionBefore} →{" "}
+                    {receipt.planVersionAfter}
+                  </span>
+                  <time dateTime={receipt.appliedAt}>
+                    {formatDate(receipt.appliedAt.slice(0, 10))}
+                  </time>
+                  <span>
+                    {receipt.affectedWorkouts.length} workouts affected
+                  </span>
+                </div>
               </li>
             ))}
           </ol>
@@ -1013,8 +1110,7 @@ export function WorkspaceApp({
         </section>
         <ContextRail
           context={athleteContext.data}
-          plannedWorkouts={state.trainingPlan.plannedWorkouts}
-          athleteFeedback={state.athleteFeedback}
+          plannedWorkouts={month.plannedWorkouts}
         />
       </main>
 
