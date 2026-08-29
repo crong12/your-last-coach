@@ -6,7 +6,9 @@ import "@fontsource/manrope/latin-700.css";
 import "@fontsource/newsreader/latin-500.css";
 
 import { BrowserWorkspaceRepository } from "./adapters/persistence/BrowserWorkspaceRepository";
+import { createDemoGuidePreference } from "./adapters/persistence/demoGuidePreference";
 import { registerWebMcpTools } from "./adapters/webmcp/registerReadTools";
+import { createToolActivityStore } from "./adapters/webmcp/toolActivityStore";
 import type { ModelContextHost } from "./adapters/webmcp/types";
 import { createWorkspaceApplication } from "./application/createWorkspaceApplication";
 import { createReviewCoordinator } from "./application/createReviewCoordinator";
@@ -26,6 +28,11 @@ async function bootstrap() {
     initialUndeliveredFallbackResult: initialized.undeliveredFallbackResult,
   });
   const reviewCoordinator = createReviewCoordinator({ application });
+  const demoGuidePreference = createDemoGuidePreference(
+    () => window.localStorage,
+  );
+  if (initialized.notice !== null) demoGuidePreference.reset();
+  const toolActivityStore = createToolActivityStore();
   const modelContext = (
     document as Document & { readonly modelContext?: ModelContextHost }
   ).modelContext;
@@ -41,7 +48,11 @@ async function bootstrap() {
   const webMcpRegistration = await registerWebMcpTools(
     modelContext,
     application,
-    { reviewMode, reviewCoordinator },
+    {
+      reviewMode,
+      reviewCoordinator,
+      onActivity: toolActivityStore.publish,
+    },
   );
   const cleanup = () => {
     window.removeEventListener("pagehide", cleanup);
@@ -58,6 +69,8 @@ async function bootstrap() {
         initialNotice={initialized.notice}
         initialDurability={initialized.durability}
         coachAgentConnection={webMcpRegistration}
+        demoGuidePreference={demoGuidePreference}
+        toolActivityStore={toolActivityStore}
       />
     </React.StrictMode>,
   );

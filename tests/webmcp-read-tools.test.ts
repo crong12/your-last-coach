@@ -131,6 +131,69 @@ function createRecordingHost() {
 }
 
 describe("WebMCP coaching tools", () => {
+  it("publishes safe ephemeral activity without exposing tool data or errors", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    const activity: Array<{
+      status: string;
+      toolName: string;
+      message: string;
+    }> = [];
+
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+      onActivity: (event) => activity.push(event),
+    });
+    const planTool = registrations.find(
+      ({ tool }) => tool.name === "get_training_plan",
+    )!.tool;
+
+    await planTool.execute(
+      { from: "invalid private input", to: "2026-08-30" },
+      { signal: new AbortController().signal },
+    );
+
+    expect(activity).toEqual([
+      {
+        status: "running",
+        toolName: "get_training_plan",
+        message: "Coach Agent is reading the Training Plan.",
+      },
+      {
+        status: "error",
+        toolName: "get_training_plan",
+        message:
+          "The request could not be completed. Your Training Plan was not changed.",
+      },
+    ]);
+    expect(JSON.stringify(activity)).not.toContain("invalid private input");
+  });
+
+  it("keeps tool behavior independent from the UI activity observer", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+      onActivity: () => {
+        throw new Error("UI observer failed");
+      },
+    });
+    const planTool = registrations.find(
+      ({ tool }) => tool.name === "get_training_plan",
+    )!.tool;
+
+    await expect(
+      planTool.execute(
+        { from: "2026-08-24", to: "2026-08-30" },
+        { signal: new AbortController().signal },
+      ),
+    ).resolves.toMatchObject({ status: "ok", data: { planVersion: 2 } });
+  });
+
   it("keeps primary and fallback review registrations mutually exclusive", async () => {
     for (const mode of ["primary", "fallback"] as const) {
       const application = await createApplication();

@@ -20,6 +20,12 @@ export interface WebMcpTool {
   ): Promise<unknown>;
 }
 
+export interface ToolActivity {
+  status: "running" | "success" | "waiting" | "error";
+  toolName: string;
+  message: string;
+}
+
 export interface ModelContextHost {
   registerTool(
     tool: WebMcpTool,
