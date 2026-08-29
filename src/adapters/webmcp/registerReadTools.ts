@@ -10,6 +10,22 @@ import type {
 
 export type { ModelContextHost, WebMcpTool } from "./types";
 
+function normalizeHostValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeHostValue);
+  }
+  if (value !== null && typeof value === "object") {
+    const normalized: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      normalized[key] = normalizeHostValue(
+        (value as Record<string, unknown>)[key],
+      );
+    }
+    return normalized;
+  }
+  return value;
+}
+
 export const WEBMCP_TOOL_NAMES = [
   "get_athlete_context",
   "get_training_plan",
@@ -372,7 +388,7 @@ function createTools(
       },
       execute: safeExecution(async (input, execution) => {
         const opened = options.reviewCoordinator.open(
-          input,
+          normalizeHostValue(input),
           "primary",
           execution.signal,
         ) as {
@@ -398,7 +414,11 @@ function createTools(
           untrustedContentHint: false,
         },
         execute: safeExecution((input, execution) =>
-          options.reviewCoordinator.open(input, "fallback", execution.signal),
+          options.reviewCoordinator.open(
+            normalizeHostValue(input),
+            "fallback",
+            execution.signal,
+          ),
         ),
       },
       {
