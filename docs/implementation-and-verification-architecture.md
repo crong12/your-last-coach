@@ -38,7 +38,7 @@ Ticket 1's Month view and simple storage fallback remain in scope because implem
 
 ### Strengthen if time
 
-- the alternate review-delivery mode only if it is separately reverified and does not endanger the accepted fallback;
+- the controlled-development pending-call review mode, when needed for host tests;
 - broader Demo Guide and debugging affordances;
 - additional responsive/accessibility refinement beyond the polished baseline;
 - extra lifecycle end-to-end flows and exhaustive storage failure cases;
@@ -111,7 +111,7 @@ Owns only host mechanics:
 
 - capability detection;
 - tool names, descriptions, JSON input schemas, and annotations;
-- an explicit `primary` or `fallback` review mode;
+- the shipped `fallback` review mode and the controlled-development pending-call mode;
 - registration after successful application initialization;
 - translation between tool payloads and typed application commands/queries;
 - `AbortSignal`, unload, cleanup, and single-settlement behaviour;
@@ -120,7 +120,7 @@ Owns only host mechanics:
 
 It does not generate Coach Recommendations, interpret Athlete evidence, or mutate the Training Plan independently.
 
-The codebase owns a seven-tool contract, but a host never sees both review paths. In `primary` mode it registers the three read tools, Athlete Feedback, and `review_workout_adaptation`. In `fallback` mode it registers the three reads, Athlete Feedback, `open_workout_adaptation_review`, and `read_workout_adaptation_decision`.
+The shipped attached-site path exposes the six fallback tools documented in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md). Controlled development tests may exercise the pending-call review mode; the shipped app does not select it, and a host never sees both review paths.
 
 ### `ui`
 
@@ -225,11 +225,11 @@ The review coordinator exclusively owns:
 - the active `reviewId`;
 - the proposal and expected `planVersion`;
 - the selected option and derived preview;
-- the primary tool Promise resolver;
+- the pending review Promise resolver;
 - abort and unload cleanup;
 - exactly-once terminal settlement.
 
-An unfinished primary review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery.
+An unfinished pending review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery. The exact fallback terminal statuses and approved receipt payload are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
 
 ## Planned Workout and Workout Result
 
@@ -322,9 +322,9 @@ The application command:
 4. increments `planVersion`;
 5. records the `reviewId` and complete Adaptation History receipt atomically in state;
 6. attempts to persist the complete resulting snapshot;
-7. produces the terminal result for the pending primary call or stored fallback delivery.
+7. produces the terminal result for the pending review call or stored fallback delivery.
 
-The primary and fallback paths invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
+The controlled-development pending-call path and shipped fallback path invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
 
 Repeated `reviewId` or `requestId` values return their existing outcome and cannot apply or record twice.
 
@@ -337,7 +337,7 @@ Initialization order:
 3. Restore `demo-athlete-v1` when state is missing, invalid, or unsupported.
 4. Construct the application core and review coordinator.
 5. Mount the Shared Coaching Workspace.
-6. Register exactly one active review-mode tool set when `document.modelContext` is available; never expose primary and fallback review tools together.
+6. Register the six fallback tools when `document.modelContext` is available. The pending-call review mode is limited to controlled development tests and is not selected by the shipped app.
 7. Publish `connected`, `unavailable`, or `error` status to the UI.
 
 An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. A migration switch remains available when a second schema version actually exists.
