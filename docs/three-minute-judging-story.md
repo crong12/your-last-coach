@@ -181,7 +181,7 @@ Only **Adapt my plan** may mutate the Training Plan. After approval:
 - the modal closes normally;
 - the calendar shows the changed workouts;
 - the applied receipt becomes Adaptation History; and
-- `read_workout_adaptation_decision` returns the structured outcome to ChatGPT.
+- `open_workout_adaptation_review` returns immediately; after Athlete approval, the Agent calls `read_workout_adaptation_decision` with the same `reviewId` to receive the structured approved result.
 
 Cancellation, timeout, unload before approval, reset, and **None — discuss further** must not change the Training Plan.
 

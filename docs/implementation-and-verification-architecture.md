@@ -225,11 +225,11 @@ The review coordinator exclusively owns:
 - the active `reviewId`;
 - the proposal and expected `planVersion`;
 - the selected option and derived preview;
-- the pending review Promise resolver;
+- the controlled-development pending-call resolver;
 - abort and unload cleanup;
 - exactly-once terminal settlement.
 
-An unfinished pending review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery. The exact fallback terminal statuses and approved receipt payload are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
+An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery. The exact fallback terminal statuses and approved receipt payload are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
 
 ## Planned Workout and Workout Result
 
@@ -322,7 +322,7 @@ The application command:
 4. increments `planVersion`;
 5. records the `reviewId` and complete Adaptation History receipt atomically in state;
 6. attempts to persist the complete resulting snapshot;
-7. produces the terminal result for the pending review call or stored fallback delivery.
+7. produces the terminal result for the controlled-development pending call or stored fallback delivery.
 
 The controlled-development pending-call path and shipped fallback path invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
 
@@ -415,9 +415,10 @@ The checklist verifies:
 - shared Coaching Briefing, Training Plan, Workout Result, and health/load reads;
 - visible and WebMCP-readable Athlete Profile and active Coaching Topic;
 - Athlete Feedback recording;
-- the open/read fallback review through Plan Approval;
+- `open_workout_adaptation_review` opens the review and returns immediately;
+- the Athlete decides on-page and **Adapt my plan** applies the selected option;
+- `read_workout_adaptation_decision` uses the same `reviewId` to return the stored terminal result;
 - preview-before-mutation and visible calendar updates;
-- the stored compatibility fallback;
 - cancellation, stale/duplicate protection, reload, and reset;
 - consistent evidence for the Athlete and Coach Agent;
 - accurate behaviour when WebMCP is unavailable.
