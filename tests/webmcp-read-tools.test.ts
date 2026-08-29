@@ -253,6 +253,38 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
+  it("opens a fallback review from a JSON-compatible host-shaped nested input", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+    });
+    const tools = Object.fromEntries(
+      registrations.map(({ tool }) => [tool.name, tool]),
+    );
+    const execution = { signal: new AbortController().signal };
+    const proposal = reviewProposal() as unknown as Record<string, unknown>;
+    proposal.recommended = new Proxy(
+      proposal.recommended as Record<string, unknown>,
+      {},
+    );
+
+    expect(() => structuredClone(proposal)).toThrow();
+    await expect(
+      tools.open_workout_adaptation_review.execute(proposal, execution),
+    ).resolves.toEqual({
+      status: "review_opened",
+      reviewId: "review:webmcp",
+    });
+    expect(coordinator.getState()).toMatchObject({
+      status: "reviewing",
+      proposal: { reviewId: "review:webmcp" },
+    });
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
   it("stores one non-mutating fallback cancellation when the host aborts", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
