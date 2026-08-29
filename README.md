@@ -1,14 +1,14 @@
 # Your Last Coach
 
-Your Last Coach is a Shared Coaching Workspace where a recreational Athlete and a Coach Agent inspect the same training evidence, compare Workout Adaptations, and update a visible Training Plan through explicit Athlete approval.
+Your Last Coach is a personal Shared Coaching Workspace where an Athlete and a Coach Agent inspect the same training evidence, compare Workout Adaptations, and update a visible Training Plan through explicit Athlete approval.
 
-The demonstration follows Sam, a fictional runner preparing for a 3:40 Brighton Marathon on 4 April 2027. After an incomplete threshold workout, the Coach Agent can read the seeded training context, record Sam's feedback, propose two ranked adaptations, and open a review in the workspace. Selecting an option previews the calendar change. Only **Adapt my plan** changes the Training Plan.
+The deterministic demonstration follows Sam, a fictional runner preparing for a 3:40 Brighton Marathon on 4 April 2027. After a partial threshold Workout Result, an attached Agent can read the shared context, record Sam's feedback, propose evidence-grounded options, and open a review in the workspace. Selecting an option previews the calendar change. Only **Adapt my plan** changes the Training Plan.
 
-All Athlete, workout, recovery, and COROS-shaped observations are deterministic synthetic data. The application does not connect to COROS, diagnose injury, generate a complete training season, or provide authenticated multi-user persistence.
+The fixture uses synthetic Athlete, workout, recovery, and device-shaped observations. The application does not diagnose injury, generate a complete training season, or connect to live device data.
 
 ## Product surface
 
-The repository ships a client-only React, TypeScript, and Vite application. Its production WebMCP configuration uses the compatibility fallback selected by the ChatGPT host-reliability gate. When WebMCP is available, the Coach Agent receives these six tools:
+The repository contains a client-only React, TypeScript, and Vite application. When an attached-site host provides WebMCP, the normal path registers exactly six fallback tools:
 
 - `get_athlete_context`
 - `get_training_plan`
@@ -17,13 +17,13 @@ The repository ships a client-only React, TypeScript, and Vite application. Its 
 - `open_workout_adaptation_review`
 - `read_workout_adaptation_decision`
 
-The normal workspace remains usable when WebMCP is unavailable. Primary and fallback review tools are never registered together.
+The tool descriptions explain each responsibility and the review lifecycle. A fresh generic Agent learns that workflow from the attached-site descriptions. `get_athlete_context` returns a bounded Coaching Briefing with the Athlete Profile, current plan summary, recent evidence and feedback, active Coaching Topics, and recent Adaptation History. The workspace remains usable when an attached-site host is unavailable.
+
+The Agent proposes adaptations from the evidence it reads. The app validates the proposal and renders the review; it does not generate coaching judgment or require fixed Agent wording or fixed workout changes.
 
 ## Local setup
 
-The exact repository and CI Node.js version is `22.23.2`, recorded in [`.nvmrc`](.nvmrc). Vercel selects the compatible `22.x` runtime family from `package.json` because its build platform supports Node versions at major-version granularity.
-
-With a version manager that reads `.nvmrc`:
+The repository and CI use Node.js `22.23.2`, recorded in [`.nvmrc`](.nvmrc).
 
 ```bash
 nvm install
@@ -32,78 +32,59 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. The Shared Coaching Workspace works as a human interface in an ordinary browser; a WebMCP host is required only for Coach Agent tools.
+Open the local URL printed by Vite. The Shared Coaching Workspace works as a human interface in an ordinary browser; an attached-site host is required only for Coach Agent tools.
 
 ## Architecture
 
-The application keeps one authoritative, application-owned workspace state. React and WebMCP use the same application commands and selectors.
+`WorkspaceState` is the one authoritative application-owned state. React and WebMCP read it through the same application selectors and commands.
 
-- `src/domain/` owns coaching types, invariants, Plan Approval, and Workout Adaptation validation.
+- `src/domain/` owns coaching types, invariants, Plan Approval, and Workout Change validation.
 - `src/demo/` owns the immutable `demo-athlete-v1` fixture and fixed clock.
 - `src/application/` owns commands, queries, plan versions, idempotency, and the review lifecycle.
-- `src/adapters/persistence/` stores a versioned browser envelope and falls back to page memory when storage is unavailable.
-- `src/adapters/webmcp/` owns tool registration and host mechanics without making coaching judgments.
-- `src/ui/` renders the Training Plan, evidence, Demo Guide, adaptation review, and reset flow.
-- `src/main.tsx` initializes the fixture, repository, application, fallback WebMCP tools, and UI.
+- `src/adapters/persistence/` stores a versioned browser envelope and keeps the current page usable when browser storage is unavailable.
+- `src/adapters/webmcp/` owns tool schemas, registration, lifecycle descriptions, and host cleanup.
+- `src/ui/` renders the Training Plan, evidence, Demo Guide, review, preview, and reset flow.
+- `src/main.tsx` initializes the fixture, repository, application, fallback tools, and UI.
 
 The detailed boundaries are recorded in [Implementation and verification architecture](docs/implementation-and-verification-architecture.md). The fixture and tool schemas are recorded in [Demo Athlete and coaching tool contract](docs/demo-athlete-coaching-contract-v1.md).
 
 ## Judge flow
 
 1. Open the workspace and use **Reset demo** to restore the fixed state.
-2. Keep the Week view visible. The original plan shows Thursday's 6 km recovery run, Saturday's 8 km easy run with strides, and Sunday's 18 km long run.
-3. In ChatGPT with the site attached, send:
+2. Keep the Week view visible and inspect the partial threshold workout, the rest of the week, and the shared evidence.
+3. In the attached Agent conversation, send:
 
    > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
 
-4. The Coach Agent records the Athlete Feedback and reads Athlete, Training Plan, workout, and recovery context.
-5. The Agent calls `open_workout_adaptation_review` with its recommendation and alternative.
-6. In the workspace, preview **Alternative — Keep the rhythm**, then return to **Coach's recommendation — Recovery first**.
-7. Press **Adapt my plan**. Selection alone does not mutate the Training Plan.
-8. The Agent calls `read_workout_adaptation_decision` to receive the structured result.
-9. Confirm that the plan advances to version 2, Thursday becomes rest, Saturday becomes 6 km easy without strides, and Sunday becomes a 14 km easy long run.
+4. The Agent records the Athlete Feedback and uses the tool descriptions to retrieve Athlete, Training Plan, Workout Result, and observation context.
+5. The Agent calls `open_workout_adaptation_review` with two ranked, evidence-grounded options. The review opens without changing the plan.
+6. Select each option to inspect its calendar preview. Selection alone does not mutate the Training Plan.
+7. Press **Adapt my plan** to grant Plan Approval, or choose **None — discuss further** to leave the plan unchanged.
+8. The Agent calls `read_workout_adaptation_decision` with the same `reviewId` when it needs the fallback result.
+9. Inspect the updated plan and its immutable Adaptation History receipt when an option was approved.
 
-The approved three-minute presentation contract is in [Three-minute judging story](docs/three-minute-judging-story.md).
+The fallback wire terminal statuses are `approved`, `discuss_further`, and `cancelled`. An `approved` result carries the applied adaptation receipt; the receipt is the history record, rather than a separate tool status.
 
-## Reset and persistence
+## State, persistence, and reset
 
-**Reset demo** opens an in-page confirmation and restores `demo-athlete-v1`, its fixed clock, plan version 1, original Planned Workouts, and empty feedback and review state.
+The application saves the complete validated workspace envelope in browser `localStorage`. If browser storage is unavailable or rejects a write, the current page remains authoritative and displays a warning that changes will be lost on reload. Invalid or incomplete saved state is replaced with the validated fixture.
 
-Approved state is stored in browser `localStorage` and normally survives reloads in the same browser profile. If storage is unavailable or rejects a write, the current page remains authoritative and displays a warning that changes will be lost on reload. Invalid or unsupported saved state is replaced with the validated fixture.
-
-The application has no account, server database, cross-device synchronization, or production COROS integration. Browser data belongs to the current browser profile and can be restored with **Reset demo**.
+**Reset demo** opens an in-page confirmation, cancels any active review, clears saved changes and review history, and restores `demo-athlete-v1`, its fixed clock, original Planned Workouts, seeded Athlete Feedback and Coaching Topic, and plan version 1.
 
 ## Automated verification
 
-Run the full local gate from a clean install:
+Run the local checks from a clean install:
 
 ```bash
-npm ci
-npm run format:check && \
-  npm run typecheck && \
-  npm test && \
-  npm run build && \
-  npm run test:e2e && \
-  npm run test:static
+npm run format:check
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+npm run test:static
 ```
 
-`npm run test:e2e` exercises the application and both review semantics through a controlled WebMCP harness. `npm run test:static` serves the existing production build from `dist/` and verifies that the public fallback workspace loads without WebMCP or external runtime requests. Neither test substitutes for manual verification in an enabled WebMCP host.
-
-GitHub Actions runs the same stages for pull requests targeting `main` and pushes to `main`. See the [verification workflow](.github/workflows/ci.yml) and the [release-candidate evidence template](docs/release-candidate-evidence.md).
-
-## Vercel deployment
-
-[`vercel.json`](vercel.json) declares the Vite build, lockfile-only install, `dist/` output, and `Origin-Agent-Cluster: ?1` response header. It does not link this repository to a Vercel project or authorize deployment.
-
-For an authorized release candidate:
-
-1. Select the exact commit whose GitHub Actions verification succeeded.
-2. Import or deploy the repository root as a Vite project without adding application credentials.
-3. Keep the committed install, build, output, Node `22.x`, and header configuration.
-4. Record the immutable commit, deployment identifier, public HTTPS URL, CI run, resolved Vercel Node version from the build log, and UTC deployment time in the evidence template.
-5. Verify the public URL signed out, inspect the response header, and complete the separate enabled-host WebMCP checks before accepting the candidate.
-
-No deployment URL or manual-host result is claimed by this repository documentation.
+The tests cover the fixture and relationships, bounded Coaching Briefing, persistence and recovery, feedback and review idempotency, preview-before-mutation, Plan Approval, fallback result delivery, and reset. The browser suites use a controlled WebMCP host harness; the human workspace remains the approval surface.
 
 ## Licence
 
