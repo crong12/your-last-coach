@@ -6,6 +6,26 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("renders the Final Turn mark in the accessible home link", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const home = page.getByRole("link", { name: "Your Last Coach home" });
+  await expect(home).toBeVisible();
+  await expect(home.locator('[data-brand-mark="final-turn"]')).toBeVisible();
+  await expect(home.locator("svg")).toHaveAttribute("aria-hidden", "true");
+});
+
+test("publishes the Final Turn mark as the browser icon", async ({ page }) => {
+  await page.goto("/");
+
+  const iconHref = await page.locator('link[rel="icon"]').getAttribute("href");
+  expect(iconHref).toBe("/final-turn.svg");
+  const response = await page.request.get(iconHref!);
+  expect(response.ok()).toBe(true);
+});
+
 test("exposes the three-pane navigation and restores a mobile deep link", async ({
   page,
 }) => {

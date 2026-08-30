@@ -33,6 +33,7 @@ import type {
 } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 import { HrvChart } from "./charts/HrvChart";
+import { BrandMark } from "./BrandMark";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -1914,9 +1915,7 @@ export function WorkspaceApp({
               selectPane("today");
             }}
           >
-            <span className="brand-mark" aria-hidden="true">
-              Y
-            </span>
+            <BrandMark className="brand-mark" />
             <span>Your Last Coach</span>
           </a>
           <div className="topbar-actions">

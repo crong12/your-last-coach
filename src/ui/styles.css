@@ -103,17 +103,26 @@ a:focus-visible {
   text-decoration: none;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
+  flex: 0 0 auto;
   width: 36px;
   height: 36px;
-  border-radius: 50% 50% 46% 54%;
-  color: var(--paper);
-  background: var(--deep-sea);
-  transform: rotate(-7deg);
+  overflow: visible;
 }
-.brand-mark::first-letter {
-  transform: rotate(7deg);
+.brand-mark__outer-lane,
+.brand-mark__inner-lane {
+  fill: none;
+  stroke-linecap: round;
+}
+.brand-mark__outer-lane {
+  stroke: var(--deep-sea);
+  stroke-width: 8;
+}
+.brand-mark__inner-lane {
+  stroke: var(--sea);
+  stroke-width: 5;
+}
+.brand-mark__endpoint {
+  fill: var(--track);
 }
 .topbar-actions {
   display: flex;

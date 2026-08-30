@@ -191,6 +191,9 @@ test("shows a calm loading state while Coach Agent tools register", async ({
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Opening your Training Plan…")).toBeVisible();
   await expect(
+    page.locator('.bootstrap-shell [data-brand-mark="final-turn"]'),
+  ).toBeVisible();
+  await expect(
     page.getByRole("heading", { name: "Your Training Plan" }),
   ).toBeVisible();
 });
