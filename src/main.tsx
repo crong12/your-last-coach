@@ -11,6 +11,7 @@ import { registerWebMcpTools } from "./adapters/webmcp/registerReadTools";
 import { createToolActivityStore } from "./adapters/webmcp/toolActivityStore";
 import type { ModelContextHost } from "./adapters/webmcp/types";
 import { createWorkspaceApplication } from "./application/createWorkspaceApplication";
+import { createPaneNavigation } from "./application/createPaneNavigation";
 import { createReviewCoordinator } from "./application/createReviewCoordinator";
 import { initializeWorkspace } from "./application/initializeWorkspace";
 import { createDemoCoachingContextSource } from "./demo/demoCoachingContextSource";
@@ -28,6 +29,7 @@ async function bootstrap() {
     initialUndeliveredFallbackResult: initialized.undeliveredFallbackResult,
   });
   const reviewCoordinator = createReviewCoordinator({ application });
+  const paneNavigation = createPaneNavigation();
   const demoGuidePreference = createDemoGuidePreference(
     () => window.localStorage,
   );
@@ -65,6 +67,7 @@ async function bootstrap() {
     <React.StrictMode>
       <WorkspaceApp
         application={application}
+        paneNavigation={paneNavigation}
         reviewCoordinator={reviewCoordinator}
         initialNotice={initialized.notice}
         initialDurability={initialized.durability}
