@@ -32,6 +32,7 @@ import type {
   WorkoutResult,
 } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
+import { HrvChart } from "./charts/HrvChart";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -1202,6 +1203,9 @@ function ContextRail({
   }
   return (
     <div className="context-rail">
+      {surface === "trends" && (
+        <HrvChart currentValue={observations.sleepHrvMs.value} />
+      )}
       {surface === "today" && (
         <section className="race-card">
           <span className="eyebrow">Target Race</span>
