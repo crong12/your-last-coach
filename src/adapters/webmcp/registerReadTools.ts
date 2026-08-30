@@ -27,11 +27,53 @@ function normalizeHostValue(value: unknown): unknown {
 }
 
 export const WEBMCP_TOOL_NAMES = [
-  "get_athlete_context",
+  "get_coaching_briefing",
   "get_training_plan",
   "get_workout_context",
   "record_athlete_feedback",
 ] as const;
+
+const COACH_INTERACTION_CONTRACT = {
+  version: "1.0",
+  sequence: [
+    {
+      step: "read_evidence",
+      instruction:
+        "Read this briefing, the relevant Training Plan range, and source workout context before deciding what to recommend.",
+    },
+    {
+      step: "record_feedback",
+      instruction:
+        "When the current Athlete message reports new workout experience, obtain any host-required consent before recording it and before composing or presenting adaptations; then record the exact report.",
+    },
+    {
+      step: "prepare_review",
+      instruction:
+        "After recording feedback, prepare one recommendation and one meaningful alternative grounded in returned evidence. Do not present the options in conversation.",
+    },
+    {
+      step: "open_review",
+      instruction:
+        "Open the native review as the first user-facing presentation of both options; never apply a Training Plan directly.",
+    },
+    {
+      step: "await_decision",
+      instruction:
+        "Wait for the Athlete's on-page decision. Selecting an option alone does not mutate the Training Plan.",
+    },
+    {
+      step: "read_decision",
+      instruction:
+        "Use the same reviewId to read the terminal approved, discuss_further, or cancelled result.",
+    },
+  ],
+  approvalBoundaries: {
+    feedbackRecordingConsent:
+      "Consent to record Athlete Feedback authorizes only that feedback write.",
+    planApproval:
+      "Only the Athlete pressing Adapt my plan authorizes Training Plan mutation.",
+  },
+} as const;
 
 function safeExecution(
   execute: (
@@ -62,7 +104,7 @@ interface RegisterWebMcpOptions {
 }
 
 const TOOL_ACTIVITY_LABELS: Record<string, string> = {
-  get_athlete_context: "reading the athlete context",
+  get_coaching_briefing: "reading the Coaching Briefing",
   get_training_plan: "reading the Training Plan",
   get_workout_context: "reading the workout context",
   record_athlete_feedback: "recording Athlete Feedback",
@@ -251,19 +293,26 @@ function createTools(
 
   const tools: WebMcpTool[] = [
     {
-      name: "get_athlete_context",
-      title: "Get athlete context",
+      name: "get_coaching_briefing",
+      title: "Get coaching briefing",
       description:
-        "Start here for a bounded Coaching Briefing. Identify the current planVersion, active topics, recent feedback, and evidence before proposing changes.",
+        "Start here for the bounded Coaching Briefing and structured interaction contract for this workspace.",
       inputSchema: {
         type: "object",
         properties: {},
         additionalProperties: false,
       },
       annotations,
-      execute: safeExecution(() =>
-        application.query({ type: "get_athlete_context" }),
-      ),
+      execute: safeExecution(() => {
+        const briefing = application.query({ type: "get_athlete_context" });
+        return {
+          ...briefing,
+          data: {
+            ...briefing.data,
+            interactionContract: structuredClone(COACH_INTERACTION_CONTRACT),
+          },
+        };
+      }),
     },
     {
       name: "get_training_plan",
