@@ -42,10 +42,31 @@ test("keeps the built candidate chartable through Trends and the Workout round t
     "55 ms",
   );
   await expect(
-    chart.getByText("1 of 7 nights recorded", { exact: true }),
+    chart.getByText("21 of 28 nights recorded", { exact: true }),
   ).toBeVisible();
+  const trends = page.locator(".trends-pane");
+  await expect(trends).toHaveAttribute("data-trends-range", "4w");
+  await expect(
+    page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
+  ).toHaveCount(28);
+  await expect(
+    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
+  ).toHaveCount(4);
+  await page.getByRole("button", { name: "12w" }).click();
+  await expect(trends).toHaveAttribute("data-trends-range", "12w");
+  await expect(
+    page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
+  ).toHaveCount(84);
+  await expect(
+    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
+  ).toHaveCount(12);
+  await page.getByRole("button", { name: "Build" }).click();
+  await expect(trends).toHaveAttribute("data-trends-range", "build");
+  await expect(
+    page.locator('[data-chart-card="hrv"] [data-chart-annotation-kind="race"]'),
+  ).toHaveCount(1);
   await page.screenshot({
-    path: "/tmp/issue-63-hrv-static-mobile.png",
+    path: "/tmp/issue-64-trends-static-mobile.png",
     fullPage: true,
   });
 

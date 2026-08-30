@@ -1,10 +1,18 @@
 import type {
+  IsoDate,
   PlannedWorkout,
   WorkoutBlock,
   WorkoutResult,
   WorkspaceState,
 } from "../domain/types";
 import { deepFreeze } from "../domain/immutable";
+
+const DEMO_READ_AT = "2026-08-26T20:15:00+01:00" as const;
+const DEMO_SOURCE = {
+  adapter: "synthetic-coros-shaped",
+  readAt: DEMO_READ_AT,
+  label: "seeded synthetic COROS-shaped observations",
+} as const;
 
 const easyBlock = (distanceKm: number): WorkoutBlock[] => [
   { kind: "easy", distanceKm },
@@ -32,14 +40,185 @@ const completedResult = (
   date: string,
   plannedWorkoutId: string,
   distanceKm: number,
+  summary: {
+    durationSeconds: number;
+    trainingLoad: number;
+    averagePaceSecondsPerKm: number;
+    averageHeartRateBpm: number;
+    activityKind?: "outdoor_run" | "indoor_run" | "trail_run" | "other";
+  },
 ): WorkoutResult => ({
   id: `result-${date}`,
   plannedWorkoutId,
   startedAt: `${date}T07:00:00+01:00`,
   status: "completed",
-  summary: { distanceKm },
+  summary: { distanceKm, ...summary },
+  source: DEMO_SOURCE,
   laps: [],
 });
+
+const readinessRecord = (
+  date: IsoDate,
+  values: {
+    hrvMs?: number;
+    restingHeartRateBpm?: number;
+    sleepMinutes?: number;
+    deepRatio?: number;
+    lightRatio?: number;
+    remRatio?: number;
+    awakeRatio?: number;
+  },
+) => ({
+  date,
+  ...(values.hrvMs === undefined ? {} : { hrvMs: values.hrvMs }),
+  ...(values.restingHeartRateBpm === undefined
+    ? {}
+    : { restingHeartRateBpm: values.restingHeartRateBpm }),
+  ...(values.sleepMinutes === undefined
+    ? {}
+    : {
+        sleep: {
+          durationMinutes: values.sleepMinutes,
+          ...(values.deepRatio === undefined &&
+          values.lightRatio === undefined &&
+          values.remRatio === undefined &&
+          values.awakeRatio === undefined
+            ? {}
+            : {
+                stages: {
+                  ...(values.deepRatio === undefined
+                    ? {}
+                    : { deepRatio: values.deepRatio }),
+                  ...(values.lightRatio === undefined
+                    ? {}
+                    : { lightRatio: values.lightRatio }),
+                  ...(values.remRatio === undefined
+                    ? {}
+                    : { remRatio: values.remRatio }),
+                  ...(values.awakeRatio === undefined
+                    ? {}
+                    : { awakeRatio: values.awakeRatio }),
+                },
+              }),
+        },
+      }),
+  source: DEMO_SOURCE,
+});
+
+const READINESS_HISTORY = [
+  readinessRecord("2026-07-30", {
+    hrvMs: 51,
+    restingHeartRateBpm: 55,
+    sleepMinutes: 405,
+  }),
+  readinessRecord("2026-07-31", { restingHeartRateBpm: 56, sleepMinutes: 398 }),
+  readinessRecord("2026-08-01", {
+    hrvMs: 52,
+    restingHeartRateBpm: 54,
+    sleepMinutes: 421,
+  }),
+  readinessRecord("2026-08-02", {
+    hrvMs: 53,
+    restingHeartRateBpm: 53,
+    sleepMinutes: 430,
+  }),
+  readinessRecord("2026-08-03", {
+    hrvMs: 51,
+    restingHeartRateBpm: 54,
+    sleepMinutes: 401,
+  }),
+  readinessRecord("2026-08-04", { restingHeartRateBpm: 55, sleepMinutes: 389 }),
+  readinessRecord("2026-08-05", {
+    hrvMs: 54,
+    restingHeartRateBpm: 53,
+    sleepMinutes: 435,
+  }),
+  readinessRecord("2026-08-06", {
+    hrvMs: 53,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 447,
+  }),
+  readinessRecord("2026-08-07", {
+    hrvMs: 55,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 452,
+  }),
+  readinessRecord("2026-08-08", {
+    hrvMs: 54,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 438,
+  }),
+  readinessRecord("2026-08-09", { restingHeartRateBpm: 53, sleepMinutes: 410 }),
+  readinessRecord("2026-08-10", {
+    hrvMs: 56,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 462,
+  }),
+  readinessRecord("2026-08-11", {
+    hrvMs: 57,
+    restingHeartRateBpm: 50,
+    sleepMinutes: 455,
+  }),
+  readinessRecord("2026-08-12", {
+    hrvMs: 55,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 448,
+  }),
+  readinessRecord("2026-08-13", {
+    hrvMs: 54,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 440,
+  }),
+  readinessRecord("2026-08-14", { restingHeartRateBpm: 53, sleepMinutes: 400 }),
+  readinessRecord("2026-08-15", {
+    hrvMs: 53,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 429,
+  }),
+  readinessRecord("2026-08-16", {
+    hrvMs: 55,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 460,
+  }),
+  readinessRecord("2026-08-17", {
+    hrvMs: 56,
+    restingHeartRateBpm: 50,
+    sleepMinutes: 470,
+  }),
+  readinessRecord("2026-08-18", { restingHeartRateBpm: 51, sleepMinutes: 425 }),
+  readinessRecord("2026-08-19", {
+    hrvMs: 57,
+    restingHeartRateBpm: 50,
+    sleepMinutes: 462,
+  }),
+  readinessRecord("2026-08-20", {
+    hrvMs: 56,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 451,
+  }),
+  readinessRecord("2026-08-21", {
+    hrvMs: 54,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 438,
+  }),
+  readinessRecord("2026-08-22", {
+    hrvMs: 55,
+    restingHeartRateBpm: 51,
+    sleepMinutes: 449,
+  }),
+  readinessRecord("2026-08-23", { restingHeartRateBpm: 52, sleepMinutes: 430 }),
+  readinessRecord("2026-08-24", { hrvMs: 54, restingHeartRateBpm: 53 }),
+  readinessRecord("2026-08-25", { restingHeartRateBpm: 53 }),
+  readinessRecord("2026-08-26", {
+    hrvMs: 55,
+    restingHeartRateBpm: 52,
+    sleepMinutes: 442,
+    deepRatio: 0.16,
+    lightRatio: 0.54,
+    remRatio: 0.27,
+    awakeRatio: 0.03,
+  }),
+] as const;
 
 export const DEMO_WORKSPACE_STATE = {
   seedVersion: "demo-athlete-v1",
@@ -95,9 +274,12 @@ export const DEMO_WORKSPACE_STATE = {
     sleepHrvMs: { value: 55, syntheticNormalRange: [49, 63] },
     restingHeartRateBpm: 52,
     dailyStress: "unremarkable",
+    source: DEMO_SOURCE,
+    readinessHistory: [...READINESS_HISTORY],
   },
   trainingPlan: {
     planVersion: 1,
+    buildStartDate: "2026-08-01",
     plannedWorkouts: [
       plannedWorkout(
         "planned-2026-08-02-long",
@@ -122,6 +304,17 @@ export const DEMO_WORKSPACE_STATE = {
         "Threshold intervals",
         "Develop sustainable speed",
         11,
+        [
+          { kind: "warmup", distanceKm: 2 },
+          {
+            kind: "repeat",
+            repetitions: 5,
+            workDistanceKm: 1,
+            targetPaceSecondsPerKm: { min: 275, max: 280 },
+            recoverySeconds: 90,
+          },
+          { kind: "cooldown", distanceKm: 1.5 },
+        ],
       ),
       plannedWorkout(
         "planned-2026-08-08-recovery",
@@ -264,6 +457,20 @@ export const DEMO_WORKSPACE_STATE = {
       ),
     ],
   },
+  trainingPhaseHistory: [
+    {
+      id: "phase-history-base-building",
+      date: "2026-08-01",
+      phaseId: "phase-base-building",
+      name: "Base building",
+    },
+    {
+      id: "phase-history-aerobic-development",
+      date: "2026-08-08",
+      phaseId: "phase-aerobic-development",
+      name: "Aerobic development",
+    },
+  ],
   workoutResults: [
     {
       id: "result-2026-08-06-threshold",
@@ -310,15 +517,69 @@ export const DEMO_WORKSPACE_STATE = {
         },
       ],
     },
-    completedResult("2026-08-13", "planned-2026-08-13-easy", 8),
-    completedResult("2026-08-15", "planned-2026-08-15-strides", 8),
-    completedResult("2026-08-16", "planned-2026-08-16-long", 18),
-    completedResult("2026-08-18", "planned-2026-08-18-easy", 10),
-    completedResult("2026-08-19", "planned-2026-08-19-steady", 12),
-    completedResult("2026-08-21", "planned-2026-08-21-easy", 8),
-    completedResult("2026-08-22", "planned-2026-08-22-recovery", 6),
-    completedResult("2026-08-23", "planned-2026-08-23-long", 20),
-    completedResult("2026-08-24", "planned-2026-08-24-recovery", 6),
+    completedResult("2026-08-13", "planned-2026-08-13-easy", 8, {
+      durationSeconds: 2_800,
+      trainingLoad: 34,
+      averagePaceSecondsPerKm: 350,
+      averageHeartRateBpm: 138,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-15", "planned-2026-08-15-strides", 8, {
+      durationSeconds: 2_760,
+      trainingLoad: 36,
+      averagePaceSecondsPerKm: 345,
+      averageHeartRateBpm: 140,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-16", "planned-2026-08-16-long", 18, {
+      durationSeconds: 6_480,
+      trainingLoad: 75,
+      averagePaceSecondsPerKm: 360,
+      averageHeartRateBpm: 145,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-18", "planned-2026-08-18-easy", 10, {
+      durationSeconds: 3_480,
+      trainingLoad: 43,
+      averagePaceSecondsPerKm: 348,
+      averageHeartRateBpm: 139,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-19", "planned-2026-08-19-steady", 12, {
+      durationSeconds: 3_960,
+      trainingLoad: 58,
+      averagePaceSecondsPerKm: 330,
+      averageHeartRateBpm: 151,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-21", "planned-2026-08-21-easy", 8, {
+      durationSeconds: 2_760,
+      trainingLoad: 32,
+      averagePaceSecondsPerKm: 345,
+      averageHeartRateBpm: 136,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-22", "planned-2026-08-22-recovery", 6, {
+      durationSeconds: 2_160,
+      trainingLoad: 27,
+      averagePaceSecondsPerKm: 360,
+      averageHeartRateBpm: 132,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-23", "planned-2026-08-23-long", 20, {
+      durationSeconds: 7_100,
+      trainingLoad: 88,
+      averagePaceSecondsPerKm: 355,
+      averageHeartRateBpm: 147,
+      activityKind: "outdoor_run",
+    }),
+    completedResult("2026-08-24", "planned-2026-08-24-recovery", 6, {
+      durationSeconds: 2_190,
+      trainingLoad: 22,
+      averagePaceSecondsPerKm: 365,
+      averageHeartRateBpm: 130,
+      activityKind: "outdoor_run",
+    }),
     {
       id: "result-2026-08-26-threshold",
       plannedWorkoutId: "planned-2026-08-26-threshold",
@@ -326,9 +587,15 @@ export const DEMO_WORKSPACE_STATE = {
       status: "partial",
       summary: {
         distanceKm: 7.5,
+        durationSeconds: 4_200,
+        trainingLoad: 72,
+        averagePaceSecondsPerKm: 282,
+        averageHeartRateBpm: 170,
+        activityKind: "outdoor_run",
         completedWorkRepetitions: 3,
         plannedWorkRepetitions: 5,
       },
+      source: DEMO_SOURCE,
       laps: [
         { id: "lap-threshold-warmup", kind: "warmup", distanceKm: 2 },
         {

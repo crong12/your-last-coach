@@ -516,6 +516,7 @@ export function createWorkspaceApplication(
             ...state,
             trainingPlan: {
               planVersion: receipt.planVersionAfter,
+              buildStartDate: state.trainingPlan.buildStartDate,
               plannedWorkouts,
             },
             appliedReviewIds: [...state.appliedReviewIds, reviewId],

@@ -38,6 +38,7 @@ import type {
   AthleteFeedback,
   PlannedWorkout,
   WorkoutResult,
+  WorkspaceState,
 } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 import { HrvChart } from "./charts/HrvChart";
@@ -46,6 +47,7 @@ import {
   formatPaceSeconds,
   normalizeResultLaps,
 } from "./charts/resultDetailMath";
+import { TrendsPane } from "./charts/TrendsPane";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -1682,11 +1684,15 @@ function ContextRail({
   plannedWorkouts,
   surface,
   onSelectWorkout,
+  onViewAdaptation,
+  state,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
   surface: PaneId;
   onSelectWorkout?: WorkoutSelect;
+  onViewAdaptation?: (adaptationId: string) => void;
+  state?: WorkspaceState;
 }) {
   const { observations } = context;
   const priorWeekDistanceKm = context.recentTraining
@@ -1706,8 +1712,12 @@ function ContextRail({
   }
   return (
     <div className="context-rail">
-      {surface === "trends" && (
-        <HrvChart currentValue={observations.sleepHrvMs.value} />
+      {surface === "trends" && state && (
+        <TrendsPane
+          state={state}
+          onSelectWorkout={onSelectWorkout}
+          onViewAdaptation={onViewAdaptation}
+        />
       )}
       {surface === "today" && (
         <section className="race-card">
@@ -2095,6 +2105,26 @@ export function WorkspaceApp({
       moveToPane(pane, forceInstant);
     },
     [moveToPane, paneNavigation, replacePaneHash],
+  );
+
+  const viewAdaptation = useCallback(
+    (adaptationId: string) => {
+      selectPane("coaching");
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(
+          `coaching-entry-approved-adaptation-${adaptationId}`,
+        );
+        target?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? "auto"
+            : "smooth",
+          block: "center",
+        });
+        target?.focus({ preventScroll: true });
+      });
+    },
+    [selectPane],
   );
 
   const restoreFromLocation = useCallback(
@@ -2684,6 +2714,9 @@ export function WorkspaceApp({
                   context={athleteContext.data}
                   plannedWorkouts={month.plannedWorkouts}
                   surface="trends"
+                  state={state}
+                  onSelectWorkout={openWorkout}
+                  onViewAdaptation={viewAdaptation}
                 />
               </div>
             </section>

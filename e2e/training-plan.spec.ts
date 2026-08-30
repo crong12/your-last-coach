@@ -1369,6 +1369,9 @@ test("renders context from a valid modified saved workspace", async ({
       value: 58,
       syntheticNormalRange: [50, 66],
     };
+    const latestReadiness = envelope.state.observations.readinessHistory.at(-1);
+    latestReadiness.hrvMs = 58;
+    latestReadiness.sleep.durationMinutes = 390;
 
     const thursday = envelope.state.trainingPlan.plannedWorkouts.find(
       (workout: { id: string }) => workout.id === "planned-2026-08-27-recovery",

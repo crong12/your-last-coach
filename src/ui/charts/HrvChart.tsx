@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ChartCard } from "./ChartCard";
 import { ChartPlot } from "./ChartPlot";
@@ -26,10 +26,7 @@ const HRV_DEMO_DATES = [
   "2026-08-30",
 ] as const;
 
-/**
- * Presentation-only evidence window. The single observed value is the
- * authoritative fixture's sleep HRV reading; unknown nights stay missing.
- */
+/** Presentation-only foundation fixture used when the chart is rendered alone. */
 export function createDemoHrvPoints(currentValue = 55): readonly ChartPoint[] {
   return HRV_DEMO_DATES.map((date) => ({
     date,
@@ -46,6 +43,14 @@ export interface HrvChartProps {
   points?: readonly ChartPoint[];
   annotations?: readonly ChartAnnotation[];
   onViewAdaptation?: (adaptationId: string) => void;
+  metric?: string;
+  unit?: string;
+  chartId?: string;
+  seriesId?: string;
+  status?: "ready" | "partial" | "empty" | "unavailable";
+  unavailableMessage?: string;
+  groupLabel?: string;
+  source?: string;
 }
 
 function finiteValue(value: number | null) {
@@ -80,10 +85,10 @@ function currentPoint(points: readonly ChartPoint[]) {
   return null;
 }
 
-function readoutForPoint(point: ChartPoint | null): ReactNode {
+function readoutForPoint(point: ChartPoint | null, unit: string): ReactNode {
   if (!point) return "No recorded nights in this range";
   return `${formatShortDate(point.date)} · ${
-    point.value === null ? "No recording" : `${point.value} ms`
+    point.value === null ? "No recording" : `${point.value} ${unit}`
   }`;
 }
 
@@ -93,10 +98,30 @@ function trendFor(current: number | null, average: number | null) {
   }
   if (current > average)
     return { glyph: "↑", label: "Up versus recorded nights" };
-  if (current < average) {
+  if (current < average)
     return { glyph: "↓", label: "Down versus recorded nights" };
-  }
   return { glyph: "→", label: "Flat versus recorded nights" };
+}
+
+function annotationReadout(annotation: ChartAnnotation) {
+  if (annotation.kind === "adaptation") {
+    return `${formatShortDate(annotation.date)} · Approved adaptation: ${annotation.label}`;
+  }
+  if (annotation.kind === "phase") {
+    return `${formatShortDate(annotation.date)} · Phase: ${annotation.label}`;
+  }
+  return `${formatShortDate(annotation.date)} · Race day: ${annotation.label}`;
+}
+
+function annotationIsVisible(
+  annotation: ChartAnnotation,
+  points: readonly ChartPoint[],
+) {
+  const first = points[0]?.date;
+  const last = points.at(-1)?.date;
+  return Boolean(
+    first && last && annotation.date >= first && annotation.date <= last,
+  );
 }
 
 export function HrvChart({
@@ -104,9 +129,22 @@ export function HrvChart({
   points: suppliedPoints,
   annotations = [],
   onViewAdaptation = () => undefined,
+  metric = "HRV",
+  unit = "ms",
+  chartId = "hrv",
+  seriesId = "hrv",
+  status,
+  unavailableMessage,
+  groupLabel = "Readiness evidence",
+  source = "Source: seeded synthetic COROS-shaped observations",
 }: HrvChartProps) {
-  const points = (suppliedPoints ?? createDemoHrvPoints(currentValue)).map(
-    (point) => ({ ...point, value: finiteValue(point.value) }),
+  const points = useMemo(
+    () =>
+      (suppliedPoints ?? createDemoHrvPoints(currentValue)).map((point) => ({
+        ...point,
+        value: finiteValue(point.value),
+      })),
+    [currentValue, suppliedPoints],
   );
   const coverage = getCoverage(points);
   const latestObserved = currentPoint(points);
@@ -126,25 +164,47 @@ export function HrvChart({
         : null,
   );
 
+  useEffect(() => {
+    setSelection((current) => {
+      if (current?.kind === "point") {
+        const point = points.find(({ date }) => date === current.date);
+        if (point) return current;
+      }
+      if (
+        current?.kind === "annotation" &&
+        annotationIsVisible(current.annotation, points) &&
+        annotations.some(
+          (annotation) =>
+            annotation.kind === current.annotation.kind &&
+            annotation.date === current.annotation.date &&
+            annotation.label === current.annotation.label,
+        )
+      ) {
+        return current;
+      }
+      return latestObserved
+        ? { kind: "point", date: latestObserved.date }
+        : points[0]
+          ? { kind: "point", date: points[0].date }
+          : null;
+    });
+  }, [annotations, latestObserved?.date, points]);
+
   const selectedPoint =
     selection?.kind === "point"
       ? (points.find(({ date }) => date === selection.date) ?? null)
       : null;
   const readout =
     selection?.kind === "annotation"
-      ? selection.annotation.kind === "adaptation"
-        ? `${formatShortDate(selection.annotation.date)} · Approved adaptation: ${selection.annotation.label}`
-        : selection.annotation.kind === "phase"
-          ? `${formatShortDate(selection.annotation.date)} · Phase: ${selection.annotation.label}`
-          : `${formatShortDate(selection.annotation.date)} · Race day: ${selection.annotation.label}`
-      : readoutForPoint(selectedPoint ?? latestObserved);
+      ? annotationReadout(selection.annotation)
+      : readoutForPoint(selectedPoint ?? latestObserved, unit);
   const currentLabel = latestObserved ? String(latestObserved.value) : "—";
   const averageLabel =
-    average === null ? "7-night avg —" : `7-night avg ${average} ms`;
+    average === null ? "7-night avg —" : `7-night avg ${average} ${unit}`;
   const summary = latestObserved
-    ? `HRV, current value ${latestObserved.value} milliseconds, ${trend.label.toLowerCase()}, ${coverage.observed} of ${coverage.expected} nights recorded.`
-    : `HRV, no recorded nights in this range, ${coverage.observed} of ${coverage.expected} nights recorded.`;
-  const hasObserved = coverage.observed > 0;
+    ? `${metric}, current value ${latestObserved.value} ${unit}, ${trend.label.toLowerCase()}, ${coverage.observed} of ${coverage.expected} nights recorded.`
+    : `${metric}, no recorded nights in this range, ${coverage.observed} of ${coverage.expected} nights recorded.`;
+  const hasObserved = coverage.observed > 0 && status !== "unavailable";
 
   const plot = hasObserved ? (
     (() => {
@@ -160,8 +220,8 @@ export function HrvChart({
         coverage.observed > 1 ? createLinePath(points, xScale, yScale) : "";
       return (
         <ChartPlot
-          id="hrv"
-          title="HRV trend"
+          id={chartId}
+          title={`${metric} trend`}
           description={summary}
           points={points}
           xScale={xScale}
@@ -178,7 +238,7 @@ export function HrvChart({
             const x = xScale(parsedDate);
             const y = value === null ? CHART_PLOT.bottom : yScale(value);
             const accessibleValue =
-              value === null ? "no recording" : `${value} milliseconds`;
+              value === null ? "no recording" : `${value} ${unit}`;
             return (
               <g key={point.date}>
                 {value === null && (
@@ -196,7 +256,7 @@ export function HrvChart({
                 )}
                 {index === 0 && path !== "" && (
                   <path
-                    data-series="hrv"
+                    data-series={seriesId}
                     d={path}
                     fill="none"
                     stroke="var(--series-1)"
@@ -209,7 +269,7 @@ export function HrvChart({
                   x={x}
                   y={y}
                   date={point.date}
-                  label={`Inspect HRV for ${formatLongDate(point.date)}, ${accessibleValue}`}
+                  label={`Inspect ${metric} for ${formatLongDate(point.date)}, ${accessibleValue}`}
                   selected={
                     selection?.kind === "point" && selection.date === point.date
                   }
@@ -225,7 +285,11 @@ export function HrvChart({
       );
     })()
   ) : (
-    <p className="chart-card__empty">No recorded nights in this range</p>
+    <p className="chart-card__empty">
+      {status === "unavailable"
+        ? (unavailableMessage ?? `${metric} data unavailable`)
+        : "No recorded nights in this range"}
+    </p>
   );
 
   const selectedAdaptation =
@@ -235,10 +299,7 @@ export function HrvChart({
       : null;
   const fixedReadout = selectedAdaptation ? (
     <>
-      <span>
-        {formatShortDate(selectedAdaptation.date)} · Approved adaptation:{" "}
-        {selectedAdaptation.label}
-      </span>
+      <span>{annotationReadout(selectedAdaptation)}</span>{" "}
       <button
         type="button"
         className="button button--quiet chart-card__readout-action"
@@ -254,18 +315,23 @@ export function HrvChart({
 
   return (
     <ChartCard
-      id="hrv"
-      metric="HRV"
-      currentValue={currentLabel}
-      unit="ms"
-      averageLabel={averageLabel}
+      id={chartId}
+      metric={metric}
+      currentValue={status === "unavailable" ? "—" : currentLabel}
+      unit={unit}
+      averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
       averageBasis="recorded nights"
-      trendGlyph={trend.glyph}
-      trendLabel={trend.label}
+      trendGlyph={status === "unavailable" ? "—" : trend.glyph}
+      trendLabel={status === "unavailable" ? "No trend available" : trend.label}
       readout={fixedReadout}
       plot={plot}
-      coverage={`${coverage.observed} of ${coverage.expected} nights recorded`}
-      source="Source: seeded synthetic COROS-shaped observations"
+      coverage={
+        status === "unavailable"
+          ? "Data unavailable"
+          : `${coverage.observed} of ${coverage.expected} nights recorded`
+      }
+      source={source}
+      eyebrow={groupLabel}
     />
   );
 }
