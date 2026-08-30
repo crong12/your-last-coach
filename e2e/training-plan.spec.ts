@@ -194,9 +194,7 @@ test("shows a calm loading state while Coach Agent tools register", async ({
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Opening your Training Plan…")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Your Training Plan" }),
-  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
 });
 
 test("opens the Demo Guide once, keeps it reachable, and reopens it after reset", async ({
@@ -282,7 +280,9 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
   await page.keyboard.press("Escape");
   await expect(menuTrigger).toBeFocused();
 
-  const workout = page.getByRole("button", { name: /5 × 1 km threshold/ });
+  const workout = page.locator(
+    "#today-workout-details-planned-2026-08-26-threshold",
+  );
   await workout.focus();
   await workout.press("Enter");
   const workoutScreen = page.getByRole("main", { name: "Workout Result" });
@@ -392,7 +392,10 @@ test("reset temporarily owns an active review and either restores or cancels it"
   await openReset();
   await reset.getByRole("button", { name: "Reset demo" }).click();
   await expect(review).toBeHidden();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
@@ -436,7 +439,6 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
   await expect(
     page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
   await expect(
     runTool("read_workout_adaptation_decision", {
       reviewId: "review:playwright",
@@ -475,24 +477,27 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
   await approve.focus();
   await approve.press("Enter");
   await expect(review).toBeHidden();
-  await expect(page.getByText("Plan version 2")).toBeVisible();
-
-  const month = page.getByRole("button", { name: "Month" });
-  await month.focus();
-  await month.press("Enter");
+  const approvedTimeline = page.getByRole("region", {
+    name: "Coaching timeline",
+  });
+  await expect(approvedTimeline).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "August 2026" }),
+    approvedTimeline
+      .locator("#coaching-entry-approved-adaptation-keyboard-approval")
+      .getByRole("heading", { name: "Recovery first" }),
   ).toBeVisible();
-  const week = page.getByRole("button", { name: "Week" });
-  await week.focus();
-  await week.press("Enter");
-  await expect(page.getByText("24–30 August")).toBeVisible();
+  await expect(
+    approvedTimeline.getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
 
   await openResetDialog(page);
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
@@ -559,7 +564,11 @@ test("reviews both ranked Workout Adaptations and leaves browser Back non-mutati
   await expect(
     page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Today" })
+      .getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
 });
 
 test("shows the shared coaching briefing", async ({ page }) => {
@@ -643,17 +652,20 @@ test("persists feedback context and plan adaptations across reload and reset", a
     .click();
 
   await expect(review).toBeHidden();
-  await expect(page.getByText("Plan version 2")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /6 km easy, 2026-08-29, 6 kilometres/ }),
-  ).toContainText("Adapted");
+    page.locator('[data-workout-id="planned-2026-08-29-strides"]'),
+  ).toHaveAttribute(
+    "aria-label",
+    "Saturday 29 August, 6 km easy, 6 km, Planned",
+  );
   await expect(
-    page.getByRole("button", {
-      name: /14 km easy long run, 2026-08-30, 14 kilometres/,
-    }),
-  ).toContainText("Adapted");
+    page.locator('[data-workout-id="planned-2026-08-30-long"]'),
+  ).toHaveAttribute(
+    "aria-label",
+    "Sunday 30 August, 14 km easy long run, 14 km, Planned",
+  );
   await expect(
-    page.getByRole("button", { name: /6 km recovery, 2026-08-27/ }),
+    page.locator('[data-workout-id="planned-2026-08-27-recovery"]'),
   ).toHaveCount(0);
   await expect
     .poll(() =>
@@ -692,8 +704,11 @@ test("persists feedback context and plan adaptations across reload and reset", a
     });
 
   await page.reload();
-  await expect(page.getByText("Plan version 2")).toBeVisible();
-  await expect(page.getByText("Adapted", { exact: true })).toHaveCount(2);
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .locator("#coaching-entry-approved-adaptation-playwright"),
+  ).toContainText("Recovery first");
 
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
   await expect(timeline).toBeVisible();
@@ -727,48 +742,11 @@ test("persists feedback context and plan adaptations across reload and reset", a
   ).toBeVisible();
 });
 
-test("shows the deterministic Week first and the same workouts in Month", async ({
-  page,
-}) => {
-  await page.goto("/");
-
-  await expect(
-    page.getByRole("heading", { name: "Your Training Plan" }),
-  ).toBeVisible();
-  await expect(page.getByText("26 August 2026 · 20:15")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Week" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(
-    page.getByRole("button", { name: /5 × 1 km threshold, 2026-08-26/ }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /18 km long run, 2026-08-30/ }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Month" }).click();
-  await expect(
-    page.getByRole("heading", { name: "August 2026" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /5 × 1 km threshold, 2026-08-26/ }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /18 km long run, 2026-08-30/ }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Week" }).click();
-  await expect(page.getByText("24–30 August")).toBeVisible();
-});
-
 test("shows a planned Workout without pulling completed content forward", async ({
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: /18 km long run, 2026-08-30/ })
-    .click();
+  await page.locator('[data-workout-id="planned-2026-08-30-long"]').click();
 
   await expect(
     page.getByRole("heading", { name: "18 km long run" }),
@@ -790,44 +768,6 @@ test("shows a planned Workout without pulling completed content forward", async 
       .getByRole("main", { name: "Planned Workout" })
       .getByText("Workout Result"),
   ).not.toBeAttached();
-});
-
-test("shows recent training and the complete mixed recovery evidence", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 720, height: 900 });
-  await page.goto("/");
-
-  await expect(
-    page.getByRole("heading", { name: "How you’re arriving" }),
-  ).toBeVisible();
-  await expect(page.getByText("52 bpm", { exact: true })).toBeVisible();
-  await expect(page.getByText("Unremarkable", { exact: true })).toBeVisible();
-  await expect(page.getByText("7h 22", { exact: true })).toBeVisible();
-  await expect(page.getByText("55 ms", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Recent training" }),
-  ).toBeVisible();
-  await expect(page.getByText("56 km from 18–23 August")).toBeVisible();
-  await expect(page.getByText("13 Aug", { exact: true })).toBeVisible();
-  await expect(page.getByText("26 Aug", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("Seeded synthetic observations", { exact: true }),
-  ).toBeVisible();
-
-  await page
-    .getByRole("button", { name: /18 km long run, 2026-08-30/ })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "18 km long run" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Workout structure" }),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Targets" })).toBeVisible();
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth),
-  ).toBeLessThanOrEqual(720);
 });
 
 test("registers selector-backed WebMCP tools once and tears them down", async ({
@@ -1112,7 +1052,6 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
     .getByRole("button", { name: "Adapt my plan: Recovery first" })
     .click();
   await expect(review).toBeHidden();
-  await expect(page.getByText("Plan version 2")).toBeVisible();
 
   const decision = await runTool("read_workout_adaptation_decision", {
     reviewId: proposal.reviewId,
@@ -1135,7 +1074,6 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
       name: "Coach Agent connection: connected",
     }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 2")).toBeVisible();
   const reloadedBriefing = (await runTool("get_coaching_briefing", {})) as {
     status: string;
     data: {
@@ -1276,7 +1214,10 @@ test("persists the seeded envelope across reload and resets with in-page approva
   expect(savedBeforeReload).not.toBeNull();
 
   await page.reload();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
   await openResetDialog(page);
   await expect(
     page.getByRole("heading", { name: "Reset the demo?" }),
@@ -1294,7 +1235,10 @@ test("persists the seeded envelope across reload and resets with in-page approva
   await expect(
     page.getByText("Demo restored to its starting Training Plan."),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
@@ -1311,7 +1255,10 @@ test("replaces invalid saved data and explains the refresh", async ({
       "Saved demo data could not be used, so the Training Plan was refreshed.",
     ),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
@@ -1363,25 +1310,41 @@ test("renders context from a valid modified saved workspace", async ({
 
   await page.reload();
 
+  const today = page.getByRole("region", { name: "Today" });
   await expect(
-    page.getByText(/arrive ready for South Downs Marathon/),
+    today.getByRole("heading", { name: "South Downs Marathon" }),
   ).toBeVisible();
-  await expect(page.getByText("9 May 2027").first()).toBeVisible();
+  await expect(today.getByText("9 May 2027", { exact: true })).toBeVisible();
   await expect(
-    page
-      .getByRole("region", { name: "Today" })
-      .getByText("4:00", { exact: true }),
-  ).toBeVisible();
+    today.locator('[data-workout-id="planned-2026-08-27-recovery"]'),
+  ).toContainText("5 km");
   await expect(
-    page.getByText("29 km remain after Wednesday’s partial session."),
-  ).toBeVisible();
-  await expect(page.getByText("61%", { exact: true })).toBeVisible();
-  await expect(page.getByText("1.20", { exact: true })).toBeVisible();
-  await expect(page.getByText("72 short / 60 long")).toBeVisible();
-  await expect(page.getByText("6h 30", { exact: true })).toBeVisible();
-  await expect(page.getByText("Score 77")).toBeVisible();
-  await expect(page.getByText("58 ms", { exact: true })).toBeVisible();
-  await expect(page.getByText("Usual 50–66 ms")).toBeVisible();
+    today.locator('[data-workout-id="planned-2026-08-30-long"]'),
+  ).toContainText("16 km");
+  expect(
+    await page.evaluate(() => {
+      const saved = window.localStorage.getItem("your-last-coach.workspace.v1");
+      if (!saved) throw new Error("Expected modified workspace to persist");
+      const state = JSON.parse(saved).state;
+      return {
+        targetRace: state.targetRace,
+        recoveryPercent: state.observations.recovery.percent,
+        trainingLoad: state.observations.trainingLoad,
+        sleep: state.observations.sleep,
+        sleepHrvMs: state.observations.sleepHrvMs,
+      };
+    }),
+  ).toMatchObject({
+    targetRace: {
+      name: "South Downs Marathon",
+      date: "2027-05-09",
+      objectiveSeconds: 14_400,
+    },
+    recoveryPercent: 61,
+    trainingLoad: { shortTerm: 72, longTerm: 60, ratio: 1.2 },
+    sleep: { durationMinutes: 390, score: 77 },
+    sleepHrvMs: { value: 58, syntheticNormalRange: [50, 66] },
+  });
 });
 
 test("remains usable without WebMCP and warns when storage is memory-only", async ({
@@ -1411,23 +1374,29 @@ test("remains usable without WebMCP and warns when storage is memory-only", asyn
     ),
   ).toBeVisible();
   await guide.getByRole("button", { name: "Continue to workspace" }).click();
-  await page.getByRole("button", { name: "Month" }).click();
+  const today = page.getByRole("region", { name: "Today" });
   await expect(
-    page.getByRole("heading", { name: "August 2026" }),
+    today.getByRole("heading", { name: "Brighton Marathon" }),
+  ).toBeVisible();
+  await expect(
+    today.getByRole("heading", { name: "24–30 August 2026" }),
   ).toBeVisible();
 });
 
-test("keeps the Training Plan readable beside ChatGPT", async ({ page }) => {
+test("keeps Today readable beside ChatGPT", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 900 });
   await page.goto("/");
 
+  const today = page.getByRole("region", { name: "Today" });
   await expect(
-    page.getByRole("heading", { name: "Your Training Plan" }),
+    today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(720);
-  await expect(page.getByRole("button", { name: "Month" })).toBeVisible();
+  await expect(
+    today.getByRole("heading", { name: "24–30 August 2026" }),
+  ).toBeVisible();
 });
 
 test("keeps the guide and fallback review contained at a narrow viewport", async ({
