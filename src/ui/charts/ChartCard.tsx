@@ -1,0 +1,87 @@
+import type { ReactNode } from "react";
+
+export interface ChartCardProps {
+  id: string;
+  metric: string;
+  currentValue: string;
+  unit: string;
+  averageLabel: string;
+  averageBasis: string;
+  trendLabel: string;
+  trendGlyph: string;
+  readout: ReactNode;
+  plot: ReactNode;
+  coverage: string;
+  source: string;
+}
+
+export function ChartCard({
+  id,
+  metric,
+  currentValue,
+  unit,
+  averageLabel,
+  averageBasis,
+  trendLabel,
+  trendGlyph,
+  readout,
+  plot,
+  coverage,
+  source,
+}: ChartCardProps) {
+  const titleId = `chart-card-${id}-title`;
+  return (
+    <section
+      className="chart-card"
+      data-chart-card={id}
+      aria-labelledby={titleId}
+    >
+      <header className="chart-card__header">
+        <div className="chart-card__metric-block">
+          <span className="eyebrow">Readiness evidence</span>
+          <h3 id={titleId} className="chart-card__metric">
+            {metric}
+          </h3>
+        </div>
+        <div className="chart-card__current">
+          <span className="chart-card__label">Current</span>
+          <strong
+            className="chart-card__current-value"
+            data-chart-current-value
+            aria-label={
+              currentValue === "—" ? currentValue : `${currentValue} ${unit}`
+            }
+          >
+            <span>{currentValue}</span>
+            {currentValue !== "—" && (
+              <span className="chart-card__unit">{unit}</span>
+            )}
+          </strong>
+        </div>
+        <div className="chart-card__average">
+          <span>{averageLabel}</span>
+          <small>{averageBasis}</small>
+        </div>
+        <div className="chart-card__trend">
+          <span className="chart-card__trend-glyph" aria-hidden="true">
+            {trendGlyph}
+          </span>
+          <span>{trendLabel}</span>
+        </div>
+      </header>
+      <div
+        className="chart-card__readout"
+        data-chart-readout={id}
+        role="status"
+        aria-live="polite"
+      >
+        {readout}
+      </div>
+      {plot}
+      <footer className="chart-card__footer">
+        <span className="chart-card__coverage">{coverage}</span>
+        <span className="chart-card__source">{source}</span>
+      </footer>
+    </section>
+  );
+}

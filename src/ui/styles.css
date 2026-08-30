@@ -451,6 +451,9 @@ a:focus-visible {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding-top: 0;
 }
+.workspace--single .context-rail > .chart-card {
+  grid-column: 1 / -1;
+}
 .plan-column {
   min-width: 0;
 }
@@ -1193,6 +1196,190 @@ h1 {
   text-align: right;
 }
 
+.chart-card {
+  overflow: hidden;
+  border: 1px solid rgba(23, 51, 48, 0.12);
+  border-radius: 22px;
+  background: rgba(248, 250, 246, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.chart-card__header {
+  display: grid;
+  grid-template-areas: "metric current average trend";
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: end;
+  gap: 14px;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-card__metric-block {
+  grid-area: metric;
+}
+
+.chart-card__metric {
+  margin: 5px 0 0;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.chart-card__current {
+  display: grid;
+  justify-items: end;
+  grid-area: current;
+  gap: 2px;
+}
+
+.chart-card__label,
+.chart-card__average small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chart-card__current-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 25px;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+.chart-card__unit {
+  font-size: 0.68em;
+}
+
+.chart-card__average {
+  display: grid;
+  grid-area: average;
+  gap: 2px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chart-card__trend {
+  display: inline-flex;
+  align-items: center;
+  grid-area: trend;
+  gap: 5px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chart-card__trend-glyph {
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.chart-card__readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  margin: 0 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.chart-card__readout-action {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 10px;
+}
+
+.chart-card__plot {
+  overflow: hidden;
+  padding: 8px 12px 2px;
+}
+
+.chart-plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-card__plot [data-chart-series] {
+  pointer-events: all;
+}
+
+.chart-axis-label,
+.chart-annotation__label {
+  fill: var(--muted);
+  font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.chart-annotation__label {
+  fill: var(--ink-soft);
+  font-size: 9px;
+}
+
+.chart-annotation__label--phase {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-chart-point],
+[data-chart-annotation-kind="adaptation"] {
+  cursor: pointer;
+  outline: none;
+  pointer-events: all;
+}
+
+[data-chart-point]:focus-visible,
+[data-chart-annotation-kind="adaptation"]:focus-visible {
+  outline: 3px solid #3f7e8a;
+  outline-offset: 3px;
+}
+
+.chart-card__empty {
+  min-height: 126px;
+  margin: 0;
+  padding: 34px 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-card__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 20px 18px;
+}
+
+.chart-card__coverage,
+.chart-card__source {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.chart-card__coverage {
+  color: var(--deep-sea);
+  font-weight: 700;
+}
+
+.chart-card__source {
+  text-align: right;
+}
+
 .month-scroll {
   overflow-x: auto;
 }
@@ -1516,6 +1703,24 @@ h1 {
     flex-direction: column;
   }
   .section-heading p {
+    text-align: left;
+  }
+  .chart-card__header {
+    grid-template-areas:
+      "metric current"
+      "average trend";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 13px 10px;
+  }
+  .chart-card__trend {
+    justify-self: end;
+  }
+  .chart-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .chart-card__source {
     text-align: left;
   }
   .context-rail {
