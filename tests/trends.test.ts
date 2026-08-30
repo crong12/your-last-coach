@@ -33,11 +33,10 @@ describe("issue 64 fixture evidence", () => {
       readAt: "2026-08-26T20:15:00+01:00",
     });
     expect(result.summary).toMatchObject({
-      durationSeconds: 4_200,
-      trainingLoad: 72,
-      averagePaceSecondsPerKm: 282,
-      averageHeartRateBpm: 170,
+      distanceKm: 7.5,
       activityKind: "outdoor_run",
+      completedWorkRepetitions: 3,
+      plannedWorkRepetitions: 5,
     });
     expect(
       (state.trainingPlan as unknown as Record<string, unknown>).buildStartDate,
@@ -332,20 +331,26 @@ describe("issue 64 fixture evidence", () => {
     const state = await createDemoCoachingContextSource().loadContext();
     const projection = projectWeeklyVolumeLoad(state, "4w");
 
-    expect(projection.status).toBe("ready");
+    expect(projection.status).toBe("partial");
     expect(projection.weeks).toHaveLength(4);
     expect(projection.weeks.at(-1)).toMatchObject({
       weekStart: "2026-08-24",
       distanceKm: 13.5,
-      trainingLoad: 94,
+      trainingLoad: null,
     });
+    expect(projection.coverage).toEqual({ availableLoads: 9, results: 11 });
 
     const degraded = structuredClone(state) as WorkspaceState;
-    delete degraded.workoutResults.at(-1)!.summary.trainingLoad;
+    const recoveryResult = degraded.workoutResults.find(
+      ({ id }) => id === "result-2026-08-24",
+    );
+    expect(recoveryResult).toBeDefined();
+    delete recoveryResult!.summary.trainingLoad;
     expect(projectWeeklyVolumeLoad(degraded, "4w").status).toBe("partial");
-    expect(
-      projectWeeklyVolumeLoad(degraded, "4w").weeks.at(-1)?.trainingLoad,
-    ).toBe(null);
+    expect(projectWeeklyVolumeLoad(degraded, "4w").coverage).toEqual({
+      availableLoads: 8,
+      results: 11,
+    });
   });
 
   it("groups Workout Results by the Training Plan local calendar date", async () => {
@@ -369,7 +374,7 @@ describe("issue 64 fixture evidence", () => {
     const state = await createDemoCoachingContextSource().loadContext();
     const projection = projectPaceHeartRate(state, "build");
 
-    expect(projection.status).toBe("ready");
+    expect(projection.status).toBe("partial");
     expect(projection.points.length).toBeGreaterThanOrEqual(2);
     expect(
       projection.points.every(
@@ -394,7 +399,7 @@ describe("issue 64 fixture evidence", () => {
     const state = await createDemoCoachingContextSource().loadContext();
     const projection = projectRepeatedSessions(state, "build");
 
-    expect(projection.status).toBe("ready");
+    expect(projection.status).toBe("degraded");
     expect(projection.groups).toHaveLength(1);
     expect(projection.groups[0]).toMatchObject({
       attemptCount: 2,

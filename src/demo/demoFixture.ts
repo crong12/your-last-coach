@@ -478,7 +478,12 @@ export const DEMO_WORKSPACE_STATE = {
       startedAt: "2026-08-06T17:30:00+01:00",
       status: "completed",
       provenance: "seeded synthetic COROS-shaped Workout Result",
-      summary: { distanceKm: 11, durationSeconds: 3_600 },
+      source: DEMO_SOURCE,
+      summary: {
+        distanceKm: 11,
+        durationSeconds: 3_600,
+        activityKind: "outdoor_run",
+      },
       laps: [
         {
           id: "lap-threshold-completed-warmup",
@@ -587,10 +592,6 @@ export const DEMO_WORKSPACE_STATE = {
       status: "partial",
       summary: {
         distanceKm: 7.5,
-        durationSeconds: 4_200,
-        trainingLoad: 72,
-        averagePaceSecondsPerKm: 282,
-        averageHeartRateBpm: 170,
         activityKind: "outdoor_run",
         completedWorkRepetitions: 3,
         plannedWorkRepetitions: 5,

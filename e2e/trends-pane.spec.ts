@@ -111,7 +111,7 @@ test("links every Trends chart and card to the selected range on mobile", async 
     page.locator(
       '[data-chart-card="pace-heart-rate"] [data-pace-heart-rate-point]',
     ),
-  ).toHaveCount(11);
+  ).toHaveCount(9);
   await expect(page.locator("[data-repeated-session-option]")).toHaveCount(1);
 
   const cardWidths = await page
@@ -164,11 +164,11 @@ test("inspects missing evidence and restores both Workout Result pushes on mobil
   const paceActionId = await paceAction.getAttribute("id");
   await paceAction.click();
   await expect(
-    page.getByRole("main", { name: "Planned Workout" }),
+    page.getByRole("main", { name: "Workout Result" }),
   ).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => location.hash))
-    .toBe("#workout/planned-2026-08-26-threshold");
+    .toBe("#workout/planned-2026-08-24-recovery");
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect(page.locator(`#${paceActionId}`)).toBeFocused();
@@ -178,7 +178,7 @@ test("inspects missing evidence and restores both Workout Result pushes on mobil
   const repeatedActionId = await repeatedAction.getAttribute("id");
   await repeatedAction.click();
   await expect(
-    page.getByRole("main", { name: "Planned Workout" }),
+    page.getByRole("main", { name: "Workout Result" }),
   ).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => location.hash))
@@ -244,20 +244,22 @@ test("keeps distance visible while an unavailable Workout Result load is marked 
         workoutResults: Array<{ summary: Record<string, unknown> }>;
       };
     };
-    const latest = envelope.state.workoutResults.at(-1);
-    if (!latest) throw new Error("Workout Result was not found");
-    delete latest.summary.trainingLoad;
+    const recovery = envelope.state.workoutResults.find(
+      (result: { id?: string }) => result.id === "result-2026-08-24",
+    );
+    if (!recovery) throw new Error("Workout Result was not found");
+    delete recovery.summary.trainingLoad;
     localStorage.setItem(key, JSON.stringify(envelope));
   });
   await page.reload();
   await page.goto("/#trends");
 
   const volume = page.locator('[data-chart-card="volume-load"]');
-  await expect(volume.locator("[data-missing-load]")).toHaveCount(1);
+  await expect(volume.locator("[data-missing-load]")).toHaveCount(2);
   await expect(volume.locator("[data-volume-current]")).toHaveText("13.5 km");
   await expect(volume.locator("[data-load-current]")).toHaveText("—");
   await expect(volume).toContainText(
-    "10 of 11 Workout Results with available load",
+    "8 of 11 Workout Results with available load",
   );
 });
 
@@ -475,7 +477,7 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
   const paceActionId = await paceAction.getAttribute("id");
   await paceAction.click();
   await expect(
-    page.getByRole("main", { name: "Planned Workout" }),
+    page.getByRole("main", { name: "Workout Result" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
@@ -487,7 +489,7 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
   const repeatedActionId = await repeatedAction.getAttribute("id");
   await repeatedAction.click();
   await expect(
-    page.getByRole("main", { name: "Planned Workout" }),
+    page.getByRole("main", { name: "Workout Result" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
