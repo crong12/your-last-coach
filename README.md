@@ -10,14 +10,14 @@ All Athlete, workout, recovery, and COROS-shaped observations are deterministic 
 
 The repository ships a client-only React, TypeScript, and Vite application. When WebMCP is available, the Coach Agent receives these six fallback tools:
 
-- `get_athlete_context`
+- `get_coaching_briefing`
 - `get_training_plan`
 - `get_workout_context`
 - `record_athlete_feedback`
 - `open_workout_adaptation_review`
 - `read_workout_adaptation_decision`
 
-The tool descriptions provide the Agent’s workflow. A fresh generic Agent uses them to preserve the Athlete’s report, read the bounded Coaching Briefing, inspect the relevant Training Plan and Workout Result, and open a review. The normal workspace remains usable when WebMCP is unavailable.
+The entry tool returns a structured interaction contract alongside the bounded Coaching Briefing. A fresh generic Agent uses it to preserve the Athlete’s report, inspect the relevant Training Plan and Workout Result, and place adaptations directly into the native review. The normal workspace remains usable when WebMCP is unavailable.
 
 ## Local setup
 
@@ -56,8 +56,8 @@ The detailed boundaries are recorded in [Implementation and verification archite
 
    > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
 
-4. The Coach Agent follows the attached-site descriptions to record Athlete Feedback and read the Coaching Briefing and relevant context.
-5. The Agent calls `open_workout_adaptation_review` with two model-proposed, evidence-grounded options.
+4. The Coach Agent reads the Coaching Briefing and relevant context. If the host requires consent to record the supplied report, approve that recording; this does not authorize a Training Plan change.
+5. The Agent records the exact Athlete Feedback, prepares two evidence-grounded options without presenting them in chat, and calls `open_workout_adaptation_review` so the native review is their first user-facing presentation.
 6. In the workspace, preview the options before deciding.
 7. Press **Adapt my plan**. Selection alone does not mutate the Training Plan.
 8. The Agent calls `read_workout_adaptation_decision` to receive the structured result.

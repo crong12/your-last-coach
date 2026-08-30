@@ -230,7 +230,7 @@ describe("WebMCP coaching tools", () => {
     });
 
     expect(registrations.map(({ tool }) => tool.name)).toEqual([
-      "get_athlete_context",
+      "get_coaching_briefing",
       "get_training_plan",
       "get_workout_context",
       "record_athlete_feedback",
@@ -241,7 +241,7 @@ describe("WebMCP coaching tools", () => {
 
     const descriptionFor = (name: string) =>
       registrations.find(({ tool }) => tool.name === name)!.tool.description;
-    expect(descriptionFor("get_athlete_context")).toMatch(/start here/i);
+    expect(descriptionFor("get_coaching_briefing")).toMatch(/start here/i);
     expect(descriptionFor("record_athlete_feedback")).toMatch(
       /record.*before.*propos/i,
     );
@@ -275,6 +275,57 @@ describe("WebMCP coaching tools", () => {
       "reported",
     ]);
     expect(properties).not.toHaveProperty("relatedWorkoutResultId");
+
+    const briefingTool = registrations.find(
+      ({ tool }) => tool.name === "get_coaching_briefing",
+    )!.tool;
+    const briefing = await briefingTool.execute(
+      {},
+      { signal: new AbortController().signal },
+    );
+    expect(briefing).toMatchObject({
+      status: "ok",
+      data: {
+        athlete: { id: "athlete-sam" },
+        interactionContract: {
+          version: "1.0",
+          approvalBoundaries: {
+            feedbackRecordingConsent: expect.any(String),
+            planApproval: expect.stringMatching(/Adapt my plan/i),
+          },
+        },
+      },
+    });
+    const sequence = (
+      briefing as {
+        data: {
+          interactionContract: {
+            sequence: Array<{ step: string; instruction: string }>;
+          };
+        };
+      }
+    ).data.interactionContract.sequence;
+    expect(sequence.map(({ step }) => step)).toEqual([
+      "read_evidence",
+      "record_feedback",
+      "prepare_review",
+      "open_review",
+      "await_decision",
+      "read_decision",
+    ]);
+    const instructionFor = (step: string) =>
+      sequence.find((entry) => entry.step === step)!.instruction;
+    expect(instructionFor("record_feedback")).toMatch(
+      /consent.*before.*recording.*before.*composing or presenting/i,
+    );
+    expect(instructionFor("prepare_review")).toMatch(
+      /do not present.*conversation/i,
+    );
+    expect(instructionFor("open_review")).toMatch(
+      /native review.*first user-facing/i,
+    );
+    expect(instructionFor("await_decision")).toMatch(/wait.*does not mutate/i);
+    expect(instructionFor("read_decision")).toMatch(/same reviewId.*terminal/i);
   });
 
   it("opens a fallback review immediately and reports not_ready while it is active", async () => {
@@ -679,7 +730,7 @@ describe("WebMCP coaching tools", () => {
     expect(registration).toMatchObject({
       status: "connected",
       toolNames: [
-        "get_athlete_context",
+        "get_coaching_briefing",
         "get_training_plan",
         "get_workout_context",
         "record_athlete_feedback",
@@ -690,7 +741,7 @@ describe("WebMCP coaching tools", () => {
       registration.toolNames,
     );
     expect(registrations.map(({ tool }) => tool.title)).toEqual([
-      "Get athlete context",
+      "Get coaching briefing",
       "Get training plan",
       "Get workout context",
       "Record athlete feedback",
@@ -811,7 +862,7 @@ describe("WebMCP coaching tools", () => {
     );
     const execution = { signal: new AbortController().signal };
 
-    const athlete = await tools.get_athlete_context.execute({}, execution);
+    const athlete = await tools.get_coaching_briefing.execute({}, execution);
     const planBeforeReset = await tools.get_training_plan.execute(
       { from: "2026-08-24", to: "2026-08-30" },
       execution,

@@ -71,7 +71,7 @@ The topic preserves what the Athlete reported without diagnosing an injury. Sile
 
 ### Coaching Briefing
 
-`get_athlete_context` returns a bounded Coaching Briefing containing:
+`get_coaching_briefing` returns a bounded Coaching Briefing containing:
 
 - the Athlete, Target Race, and current Training Phase;
 - the Athlete Profile fields above;
@@ -81,6 +81,8 @@ The topic preserves what the Athlete reported without diagnosing an injury. Sile
 - the five newest Athlete Feedback records;
 - the active monitoring Coaching Topics with their evidence references and follow-up conditions; and
 - the three newest Adaptation History receipts when approved adaptations exist.
+
+The result also carries a versioned `interactionContract`, separate from the authoritative coaching evidence. Its ordered steps require the Agent to read relevant evidence; obtain any host-required consent before recording supplied feedback and before composing or presenting adaptations; record the exact feedback; prepare one recommendation and one meaningful alternative without presenting them in conversation; make the native review their first user-facing presentation; wait without mutating; and read the terminal decision with the same `reviewId`. Feedback-recording consent authorizes only that write. Only **Adapt my plan** grants Plan Approval.
 
 The Shared Coaching Workspace renders the same briefing from the same authoritative state. The briefing is a current projection, not a second source of truth or a transcript summary. Its bounded fields are the current ISO week plan, newest five feedback records, monitoring topics, and newest three receipts; the current `recentTraining` behavior is the complete fixture result array described above.
 
@@ -230,7 +232,7 @@ Uncertainty:
 
 | Tool                               | Responsibility                                                                                                   | Input                                                           | Output                                                                                                                                                                                                                                         | Mutation boundary                                                          |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `get_athlete_context`              | Start a coaching interaction by reading the bounded Coaching Briefing                                            | None                                                            | Athlete, Target Race, Training Phase, Athlete Profile, current-week plan summary, complete fixture `recentTraining`, newest five Athlete Feedback records, monitoring topics, newest three Adaptation History receipts, `asOf`, and provenance | Read-only                                                                  |
+| `get_coaching_briefing`            | Start a coaching interaction by reading the bounded Coaching Briefing and interaction contract                    | None                                                            | Athlete, Target Race, Training Phase, Athlete Profile, current-week plan summary, complete fixture `recentTraining`, newest five Athlete Feedback records, monitoring topics, newest three Adaptation History receipts, `asOf`, provenance, and `interactionContract` | Read-only                                                                  |
 | `get_training_plan`                | Read calendar state                                                                                              | `from`, `to`                                                    | `planVersion` and Planned Workouts in the requested range                                                                                                                                                                                      | Read-only                                                                  |
 | `get_workout_context`              | Read one workout and its evidence                                                                                | `workoutId`                                                     | Planned Workout, optional Workout Result, and related Athlete Feedback                                                                                                                                                                         | Read-only                                                                  |
 | `record_athlete_feedback`          | Record new Athlete-reported evidence before proposing an adaptation                                              | `requestId`, `relatedWorkoutId`, `rawText`, optional `reported` | Newly recorded feedback or the existing result for a repeated `requestId`                                                                                                                                                                      | Mutates Athlete Feedback only; the stable Coaching Topic remains unchanged |
@@ -239,7 +241,7 @@ Uncertainty:
 
 While a fallback review is pending, `read_workout_adaptation_decision` returns `not_ready`; after the Athlete's decision it returns exactly one terminal status: `approved`, `discuss_further`, or `cancelled`, then clears that result for delivery.
 
-The shipped runtime exposes exactly the six fallback tools above. Tool descriptions communicate the review lifecycle to a fresh Agent without relying on repository instructions or a prior conversation. The fallback surface does not include `review_workout_adaptation`.
+The shipped runtime exposes exactly the six fallback tools above. The entry briefing's structured interaction contract communicates the review lifecycle to a fresh Agent without relying on repository instructions, an installed skill, or a prior conversation. Downstream descriptions remain focused on their own operations and immediate preconditions. The fallback surface does not include `review_workout_adaptation`.
 
 Controlled development harness only: a separate pending-call interface may be named `review_workout_adaptation` for settlement tests. It is outside the shipped six-tool contract, is not registered by the shipped runtime, and must not be counted as a standing or production tool. Any future pending-call or primary review experience remains future work and does not change the current v1.1 runtime surface.
 

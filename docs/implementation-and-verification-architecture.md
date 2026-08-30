@@ -213,7 +213,7 @@ The shipped read and state path is:
 WorkspaceState
   -> validate / persist / reset
   -> selectAthleteContext (Coaching Briefing)
-  -> React ContextRail + get_athlete_context
+  -> React ContextRail + get_coaching_briefing
 ```
 
 ## Coaching Briefing projection
@@ -230,6 +230,8 @@ The application owns a deterministic selector that assembles the context a fresh
 - the three newest Adaptation History receipts when present.
 
 The selector is bounded by contract rather than token count. Its explicit bounds are the current ISO week plan, newest five feedback records, monitoring topics, and newest three receipts; `recentTraining` currently projects the complete fixture result array. `get_training_plan` and `get_workout_context` remain the deeper evidence reads. The UI renders the same projection so the Athlete can inspect what the Coach Agent is expected to know.
+
+The WebMCP adapter exposes this projection as `get_coaching_briefing` and adds a versioned `interactionContract` beside the selector data. The interaction contract is adapter-owned operational guidance, not Athlete evidence or authoritative workspace state. It orders host-required feedback consent before recording and before adaptation composition or presentation, makes the native review the first presentation of both options, preserves the separate **Adapt my plan** Plan Approval boundary, and requires a same-`reviewId` terminal read. Repository instructions and installed skills are not part of the runtime contract.
 
 For `demo-athlete-v1`, the selector always returns the seeded profile and shin-discomfort topic. Relevance is expressed by the topic's follow-up condition. The Coach Agent may acknowledge the topic when the Athlete reports on a run, but cannot diagnose, silently resolve, or allow it to override stronger current evidence.
 

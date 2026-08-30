@@ -895,7 +895,7 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
       })),
-      athlete: await tools.get_athlete_context.execute({}, execution),
+      athlete: await tools.get_coaching_briefing.execute({}, execution),
       plan: await tools.get_training_plan.execute(
         { from: "2026-08-24", to: "2026-08-30" },
         execution,
@@ -908,7 +908,7 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   });
 
   expect(result.registrations.map(({ name }) => name)).toEqual([
-    "get_athlete_context",
+    "get_coaching_briefing",
     "get_training_plan",
     "get_workout_context",
     "record_athlete_feedback",
@@ -920,7 +920,15 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   ).toEqual([true, true, true, false, false, true]);
   expect(result.athlete).toMatchObject({
     status: "ok",
-    data: { athlete: { displayName: "Sam" } },
+    data: {
+      athlete: { displayName: "Sam" },
+      interactionContract: {
+        version: "1.0",
+        approvalBoundaries: {
+          planApproval: expect.stringMatching(/Adapt my plan/i),
+        },
+      },
+    },
   });
   expect(result.plan).toMatchObject({
     status: "ok",
@@ -977,7 +985,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
       { name, input },
     );
 
-  const initialBriefing = (await runTool("get_athlete_context", {})) as {
+  const initialBriefing = (await runTool("get_coaching_briefing", {})) as {
     status: string;
     data: {
       trainingPlan: {
@@ -1151,7 +1159,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(page.getByText("Plan version 2")).toBeVisible();
-  const reloadedBriefing = (await runTool("get_athlete_context", {})) as {
+  const reloadedBriefing = (await runTool("get_coaching_briefing", {})) as {
     status: string;
     data: {
       trainingPlan: { planVersion: number };

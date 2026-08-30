@@ -72,7 +72,7 @@ Use the cost line once in the Devpost description or near the close, not as a pr
 
 The fallback review flow has been verified in both enabled Chrome and ChatGPT's in-app browser. The submission build exposes six tools:
 
-- `get_athlete_context`;
+- `get_coaching_briefing`;
 - `get_training_plan`;
 - `get_workout_context`;
 - `record_athlete_feedback`;
@@ -128,7 +128,7 @@ Use a normal conversational request; do not instruct the agent to “use Your La
 
 > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
 
-The runtime Coach Agent is not assumed to read this repository or its `AGENTS.md`. It receives the conversation, attached site, and registered WebMCP tool descriptions.
+The runtime Coach Agent is not assumed to read this repository or its `AGENTS.md`, or to have a custom skill installed. It receives the conversation, attached site, registered WebMCP tools, and the structured interaction contract returned by `get_coaching_briefing`.
 
 ## Timed story
 
@@ -136,8 +136,8 @@ The runtime Coach Agent is not assumed to read this repository or its `AGENTS.md
 | --------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0:00–0:25 | ChatGPT and workspace visible side by side                                                           | Brighton 2027 motivation; static or generic plans struggle when actual training diverges; introduce the shared workspace idea.                                                            |
 | 0:25–0:43 | Original week and Coaching Briefing visible                                                          | This is a truthful, reproducible synthetic Athlete. Human and agent can inspect the same profile, active topic, and current evidence.                                                     |
-| 0:43–1:20 | Send the natural Athlete message; ChatGPT invokes tools                                              | From a fresh conversation, the Agent records the report and retrieves the briefing, plan, and workout evidence through WebMCP instead of relying on hidden memory or scraping the page.   |
-| 1:20–1:48 | Coaching explanation and two ranked options appear                                                   | The Agent briefly recognizes that today's no-pain report follows the shin topic, then bases its moderate-confidence recommendation on accumulated fatigue and names the counter-evidence. |
+| 0:43–1:20 | Send the natural Athlete message; ChatGPT invokes tools and, if required, asks consent to record it   | From a fresh conversation, the Agent retrieves the briefing, plan, and workout evidence through WebMCP. Any host-required consent happens before feedback recording or adaptation composition. |
+| 1:20–1:48 | The native review opens with two ranked options                                                       | The Agent records the report, then places its evidence-grounded recommendation and alternative directly in the workspace instead of duplicating them in chat.                           |
 | 1:48–2:18 | Review modal; briefly preview Alternative, return to Coach's recommendation, press **Adapt my plan** | Selecting a card previews only. The consequential Training Plan change requires explicit Athlete approval.                                                                                |
 | 2:18–2:36 | Modal closes; calendar updates; structured tool result appears in ChatGPT                            | Narrate one or two visible changes and the resulting Adaptation History. Human and agent now see the same approved plan version.                                                          |
 | 2:36–2:48 | Updated calendar remains visible                                                                     | Close on the broader product vision and, if useful, the qualified incremental-cost line.                                                                                                  |
@@ -146,12 +146,12 @@ Do not artificially hold the post-approval UI. Let the polished product transiti
 
 ## Expected WebMCP trace
 
-The exact ordering of the first four calls may vary, but a successful fresh-conversation demo completes all six responsibilities without corrective prompting:
+The successful fresh-conversation path completes all six responsibilities without a corrective workflow prompt. A host-required conversational consent exchange may occur between evidence reads and feedback recording:
 
-1. `record_athlete_feedback`
-2. `get_athlete_context`
-3. `get_training_plan`
-4. `get_workout_context`
+1. `get_coaching_briefing`
+2. `get_training_plan`
+3. `get_workout_context`
+4. Obtain host-required consent, if any, then `record_athlete_feedback`
 5. `open_workout_adaptation_review`
 6. `read_workout_adaptation_decision` after the Athlete decides on-page
 
@@ -214,9 +214,9 @@ A future scheduled COROS MCP extraction and workspace hydration process remains 
 3. Confirm the WebMCP/status control reports that the tools are available.
 4. Confirm the original Thursday, Saturday, and Sunday workouts and the visible Coaching Briefing.
 5. Copy or type the suggested Athlete message.
-6. Allow the Agent to record feedback and inspect the relevant context.
-7. Confirm the explanation briefly recognizes the prior shin report, retains the stronger mixed fatigue evidence, and avoids injury or overtraining diagnosis.
-8. Open the adaptation review.
+6. If the host requests consent to record the report in the attached workspace, approve that feedback write. The Agent should not present adaptation options before this point.
+7. Confirm that the Agent records the report, retains the stronger mixed fatigue evidence, and avoids injury or overtraining diagnosis.
+8. Confirm that the Agent opens the adaptation review as the first user-facing presentation of its recommendation and alternative.
 9. Optionally preview the Alternative, then choose the recommendation.
 10. Press **Adapt my plan**.
 11. Confirm the changed calendar and structured Agent result.
