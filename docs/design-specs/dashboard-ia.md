@@ -22,6 +22,7 @@ One Shared Coaching Workspace, three page-level panes plus pushed screens:
 - **Desktop**: the panes stack vertically as sections in a centered max-width column with a sticky scrollspy section nav; dots are mobile-only. (#46)
 - **Navigation**: hash routes; pane changes `replaceState`, pushed screens `pushState`; deep links restore; bare URL → Today. One navigation state serves gestures and WebMCP tools. ([ADR 0001](../adr/0001-hash-based-navigation-without-a-router.md))
 - **Pushed screens**: full-viewport on both form factors; back always pops to origin pane/scroll position. (#46)
+- **Adaptation review**: pending proposals and declined decisions stay in the Coaching surface; this slice adds no Today notification chip or section-nav count.
 - **Demo chrome** (Demo Guide, Reset): overflow menu in the app bar/header — never inside a pane. (#49)
 - The incumbent context rail dissolves: Target Race → Today hero; Athlete Profile → Coaching pane summary card; Monitoring card is superseded by Trends. (#49)
 
@@ -64,7 +65,7 @@ The implementation issues cut from this spec are sequenced so shared foundations
 5. Chart foundation (ADR 0002 dependencies + shared chart primitives, proven on the HRV chart).
 6. Pane 2 — Trends (remaining charts + linked range toggle).
 7. Pane 3 — Coaching (timeline, awaiting-review card, profile card, demo-chrome relocation).
-8. Adaptation review pushed screen (modal retirement, WebMCP rewiring).
+8. Adaptation review pushed screen (durable proposal lifecycle, full-push UI, WebMCP).
 9. Workout detail — completed composition (per-lap chart, plan-vs-actual, comparison, feedback).
 
 Each issue is a demoable vertical slice, links this spec as parent, declares its blockers, and carries `enhancement` + `ready-for-agent`.

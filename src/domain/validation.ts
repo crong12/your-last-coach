@@ -3,6 +3,10 @@ import type {
   PlannedWorkout,
   WorkspaceState,
 } from "./types";
+import {
+  collectWorkspaceEvidenceRefs,
+  validatePendingAdaptationProposal,
+} from "./review";
 
 const WORKOUT_TYPES = new Set([
   "easy",
@@ -745,6 +749,69 @@ function validateAdaptationReceipts(
   return reviewIds;
 }
 
+function validateDeclinedAdaptations(
+  value: unknown,
+  currentPlanVersion: unknown,
+  evidenceRefs: Set<string>,
+  errors: string[],
+): Set<string> {
+  const reviewIds = new Set<string>();
+  if (!Array.isArray(value)) {
+    errors.push("Declined adaptations must be an array");
+    return reviewIds;
+  }
+  for (const decision of value) {
+    if (!isRecord(decision)) {
+      errors.push("Declined Plan Adaptation is invalid");
+      continue;
+    }
+    const selectedOption = decision.selectedOption;
+    const recommendation = decision.recommendation;
+    const validSelected =
+      selectedOption === null ||
+      (isRecord(selectedOption) &&
+        hasOnlyFields(selectedOption, ["optionId", "label"]) &&
+        isNonEmptyString(selectedOption.optionId) &&
+        isNonEmptyString(selectedOption.label));
+    const validRecommendation =
+      isRecord(recommendation) &&
+      hasOnlyFields(recommendation, ["label", "summary"]) &&
+      isNonEmptyString(recommendation.label) &&
+      isNonEmptyString(recommendation.summary);
+    if (
+      !hasOnlyFields(decision, [
+        "status",
+        "reviewId",
+        "selectedOption",
+        "recommendation",
+        "declinedAt",
+        "planVersion",
+        "evidenceRefs",
+      ]) ||
+      decision.status !== "declined" ||
+      !isNonEmptyString(decision.reviewId) ||
+      reviewIds.has(decision.reviewId) ||
+      !validSelected ||
+      !validRecommendation ||
+      !isIsoTimestamp(decision.declinedAt) ||
+      !isPositiveInteger(decision.planVersion) ||
+      !isPositiveInteger(currentPlanVersion) ||
+      decision.planVersion > currentPlanVersion ||
+      !Array.isArray(decision.evidenceRefs) ||
+      decision.evidenceRefs.length === 0 ||
+      decision.evidenceRefs.some(
+        (ref) => !isNonEmptyString(ref) || !evidenceRefs.has(ref),
+      ) ||
+      new Set(decision.evidenceRefs).size !== decision.evidenceRefs.length
+    ) {
+      errors.push("Declined Plan Adaptation is invalid");
+      continue;
+    }
+    reviewIds.add(decision.reviewId);
+  }
+  return reviewIds;
+}
+
 export function validateWorkspaceState(value: unknown): {
   valid: boolean;
   errors: string[];
@@ -821,6 +888,27 @@ export function validateWorkspaceState(value: unknown): {
     }
   }
   validateCoachingTopics(value.coachingTopics, topicEvidenceRefs, errors);
+  const evidenceRefs = collectWorkspaceEvidenceRefs(value);
+  const pending = value.pendingAdaptationProposal;
+  if (pending !== undefined) {
+    const trainingPlan = isRecord(value.trainingPlan)
+      ? value.trainingPlan
+      : undefined;
+    const validated = validatePendingAdaptationProposal(pending, {
+      planVersion: trainingPlan ? Number(trainingPlan.planVersion) : 0,
+      plannedWorkouts: Array.isArray(trainingPlan?.plannedWorkouts)
+        ? (trainingPlan.plannedWorkouts as PlannedWorkout[])
+        : [],
+      evidenceRefs,
+    });
+    if (!validated.valid) errors.push("Pending adaptation proposal is invalid");
+  }
+  const declinedReviewIds = validateDeclinedAdaptations(
+    value.declinedAdaptations,
+    isRecord(value.trainingPlan) ? value.trainingPlan.planVersion : undefined,
+    evidenceRefs,
+    errors,
+  );
   validateUniqueStrings(
     value.processedRequestIds,
     "Processed request identifiers",
@@ -844,6 +932,24 @@ export function validateWorkspaceState(value: unknown): {
     [...appliedReviewIds].some((reviewId) => !receiptReviewIds.has(reviewId))
   ) {
     errors.push("Applied review identifiers must match adaptation receipts");
+  }
+  if (
+    [...receiptReviewIds].some((reviewId) => declinedReviewIds.has(reviewId))
+  ) {
+    errors.push("terminal adaptation review IDs must be unique");
+  }
+  const pendingReviewId =
+    isRecord(pending) &&
+    isRecord(pending.proposal) &&
+    isNonEmptyString(pending.proposal.reviewId)
+      ? pending.proposal.reviewId
+      : null;
+  if (
+    pendingReviewId !== null &&
+    (receiptReviewIds.has(pendingReviewId) ||
+      declinedReviewIds.has(pendingReviewId))
+  ) {
+    errors.push("Pending adaptation review cannot already be terminal");
   }
   validateMutationHistory(value.mutationHistory, errors);
 

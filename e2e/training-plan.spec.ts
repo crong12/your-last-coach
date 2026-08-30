@@ -175,6 +175,10 @@ async function openGuideDialog(page: Page) {
   await page.getByRole("menuitem", { name: "Demo Guide" }).click();
 }
 
+function adaptationReview(page: Page) {
+  return page.getByRole("main", { name: "Workout Adaptation review" });
+}
+
 test("shows a calm loading state while Coach Agent tools register", async ({
   page,
 }) => {
@@ -332,9 +336,7 @@ test("an external review displaces an unseen Demo Guide without marking or reope
     await tool.execute(proposal, { signal: new AbortController().signal });
   }, acceptedReviewProposal());
 
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
+  const review = adaptationReview(page);
   await expect(review).toBeVisible();
   await expect(guide).toBeHidden();
   await page.keyboard.press("Escape");
@@ -378,9 +380,7 @@ test("reset temporarily owns an active review and either restores or cancels it"
     }, acceptedReviewProposal());
   await openReview();
 
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
+  const review = adaptationReview(page);
   const openReset = () => openResetDialog(page, true);
   await openReset();
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
@@ -396,7 +396,7 @@ test("reset temporarily owns an active review and either restores or cancels it"
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
-test("completes fallback discussion, approval, view changes, and reset by keyboard", async ({
+test("completes fallback decline, approval, view changes, and reset by keyboard", async ({
   page,
 }) => {
   await installWebMcpHarness(page, "fallback");
@@ -427,39 +427,53 @@ test("completes fallback discussion, approval, view changes, and reset by keyboa
     );
 
   await runTool("open_workout_adaptation_review", acceptedReviewProposal());
-  let review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
+  let review = adaptationReview(page);
   await expect(
-    review.getByRole("button", { name: /Coach's recommendation/ }),
+    review.getByRole("heading", { name: "Workout Adaptation" }),
   ).toBeFocused();
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
   await expect(review).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
   await expect(page.getByText("Plan version 1")).toBeVisible();
-  await runTool("read_workout_adaptation_decision", {
-    reviewId: "review:playwright",
-  });
+  await expect(
+    runTool("read_workout_adaptation_decision", {
+      reviewId: "review:playwright",
+    }),
+  ).resolves.toEqual({ status: "not_ready", reviewId: "review:playwright" });
+
+  await page.getByRole("button", { name: "Review proposal" }).click();
+  review = adaptationReview(page);
+  await review.getByRole("button", { name: "Keep current plan" }).click();
+  await expect(review).toBeHidden();
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("Declined Adaptation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    runTool("read_workout_adaptation_decision", {
+      reviewId: "review:playwright",
+    }),
+  ).resolves.toEqual({ status: "declined", reviewId: "review:playwright" });
 
   await runTool("open_workout_adaptation_review", {
     ...acceptedReviewProposal(),
     reviewId: "review:keyboard-approval",
   });
-  review = page.getByRole("dialog", { name: "Review Workout Adaptations" });
-  const recommendation = review.getByRole("button", {
+  review = adaptationReview(page);
+  const recommendation = review.getByRole("radio", {
     name: /Coach's recommendation/,
   });
-  await expect(recommendation).toBeFocused();
-  await page.keyboard.press("Enter");
+  await recommendation.focus();
+  await recommendation.press("Enter");
   await expect(recommendation).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
-  await expect(
-    review.getByRole("button", { name: "Adapt my plan" }),
-  ).toBeFocused();
-  await page.keyboard.press("Enter");
+  const approve = review.getByRole("button", {
+    name: "Adapt my plan: Recovery first",
+  });
+  await approve.focus();
+  await approve.press("Enter");
   await expect(review).toBeHidden();
   await expect(page.getByText("Plan version 2")).toBeVisible();
 
@@ -482,14 +496,11 @@ test("completes fallback discussion, approval, view changes, and reset by keyboa
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
-test("reviews both ranked Workout Adaptations and leaves every exit non-mutating", async ({
+test("reviews both ranked Workout Adaptations and leaves browser Back non-mutating", async ({
   page,
 }) => {
   await installWebMcpHarness(page, "primary");
   await page.goto("/");
-  const beforeEnvelope = await page.evaluate(() =>
-    localStorage.getItem("your-last-coach.workspace.v1"),
-  );
   const openReview = () =>
     page.evaluate((proposal) => {
       const registrations = (
@@ -515,78 +526,40 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
     }, acceptedReviewProposal());
 
   await openReview();
-  const dialog = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Moderate confidence")).toBeVisible();
+  const review = adaptationReview(page);
+  await expect(review).toBeVisible();
+  await expect(review.getByText("Moderate confidence")).toBeVisible();
   await expect(
-    dialog.getByText(/sleep, HRV, resting heart rate/),
+    review.getByText(/sleep, HRV, resting heart rate/),
   ).toBeVisible();
   await expect(
-    dialog.getByText("One difficult workout cannot establish the cause."),
+    review.getByText("One difficult workout cannot establish the cause."),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("button", {
+    review.getByRole("radio", {
       name: /Coach's recommendation — Recovery first/,
     }),
   ).toBeVisible();
-  await expect(
-    dialog.getByRole("button", { name: /Alternative — Keep the rhythm/ }),
-  ).toBeVisible();
+  await expect(review.locator("summary")).toBeVisible();
 
-  await dialog
-    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+  await review
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
     .click();
-  await expect(dialog.getByText("6 km recovery → Rest")).toBeVisible();
+  await expect(review.getByText("6 km recovery").first()).toBeVisible();
   await expect(
-    dialog.getByText("8 km easy with strides → 6 km easy"),
+    review.getByText("8 km easy with strides").first(),
   ).toBeVisible();
-  await expect(
-    dialog.getByText("18 km long run → 14 km easy long run"),
-  ).toBeVisible();
+  await expect(review.getByText("18 km long run").first()).toBeVisible();
 
-  await dialog
-    .getByRole("button", { name: /Alternative — Keep the rhythm/ })
-    .click();
+  await review.locator("details > summary").click();
+  await expect(review.getByText("5 km very easy")).toBeVisible();
+  await expect(review.getByText("16 km easy long run")).toBeVisible();
+  await page.goBack();
+  await expect(review).toBeHidden();
   await expect(
-    dialog.getByText("6 km recovery → 5 km very easy"),
+    page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
-  await expect(
-    dialog.getByText("18 km long run → 16 km easy long run"),
-  ).toBeVisible();
-  await dialog.getByRole("button", { name: "None — discuss further" }).click();
-
-  await expect(dialog).toBeHidden();
   await expect(page.getByText("Plan version 1")).toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: /18 km long run, 2026-08-30, 18 kilometres/,
-    }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(() =>
-      localStorage.getItem("your-last-coach.workspace.v1"),
-    ),
-  ).toBe(beforeEnvelope);
-
-  await openReview();
-  await page.getByRole("button", { name: "Close adaptation review" }).click();
-  await expect(dialog).toBeHidden();
-  expect(
-    await page.evaluate(() =>
-      localStorage.getItem("your-last-coach.workspace.v1"),
-    ),
-  ).toBe(beforeEnvelope);
-
-  await openReview();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  expect(
-    await page.evaluate(() =>
-      localStorage.getItem("your-last-coach.workspace.v1"),
-    ),
-  ).toBe(beforeEnvelope);
 });
 
 test("shows the shared coaching briefing", async ({ page }) => {
@@ -661,15 +634,15 @@ test("persists feedback context and plan adaptations across reload and reset", a
     reviewId: "review:playwright",
   });
 
-  const dialog = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
-  await dialog
-    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+  const review = adaptationReview(page);
+  await review
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
     .click();
-  await dialog.getByRole("button", { name: "Adapt my plan" }).click();
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
 
-  await expect(dialog).toBeHidden();
+  await expect(review).toBeHidden();
   await expect(page.getByText("Plan version 2")).toBeVisible();
   await expect(
     page.getByRole("button", { name: /6 km easy, 2026-08-29, 6 kilometres/ }),
@@ -1109,22 +1082,20 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
     status: "review_opened",
     reviewId: proposal.reviewId,
   });
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
+  const review = adaptationReview(page);
   await expect(
-    review.getByRole("button", {
+    review.getByRole("radio", {
       name: /Coach's recommendation — Recovery first/,
     }),
   ).toBeVisible();
   await expect(
-    review.getByRole("button", {
+    review.locator("summary", {
       name: /Alternative — Keep the rhythm/,
     }),
   ).toBeVisible();
 
   await review
-    .getByRole("button", {
+    .getByRole("radio", {
       name: /Coach's recommendation — Recovery first/,
     })
     .click();
@@ -1137,7 +1108,9 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
     data: { planVersion: 1 },
   });
 
-  await review.getByRole("button", { name: "Adapt my plan" }).click();
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
   await expect(review).toBeHidden();
   await expect(page.getByText("Plan version 2")).toBeVisible();
 
@@ -1504,13 +1477,11 @@ test("keeps the guide and fallback review contained at a narrow viewport", async
       .find(({ tool }) => tool.name === "open_workout_adaptation_review")!
       .tool.execute(proposal, { signal: new AbortController().signal });
   }, acceptedReviewProposal());
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
-  });
-  const recommendation = review.getByRole("button", {
+  const review = adaptationReview(page);
+  const recommendation = review.getByRole("radio", {
     name: /Coach's recommendation/,
   });
-  const alternative = review.getByRole("button", { name: /Alternative/ });
+  const alternative = review.locator("summary");
   await expect(review).toBeVisible();
   const [reviewBox, recommendationBox, alternativeBox] = await Promise.all([
     review.boundingBox(),
@@ -1520,6 +1491,8 @@ test("keeps the guide and fallback review contained at a narrow viewport", async
   expect(reviewBox!.width).toBeLessThanOrEqual(390);
   expect(reviewBox!.height).toBeLessThanOrEqual(844);
   expect(alternativeBox!.y).toBeGreaterThan(recommendationBox!.y);
+  const actionBox = await review.locator(".adaptation-actions").boundingBox();
+  expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(844);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);

@@ -475,6 +475,8 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
     '[data-chart-card="pace-heart-rate"] [data-pace-view-workout]',
   );
   const paceActionId = await paceAction.getAttribute("id");
+  await paceAction.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise(requestAnimationFrame));
   await paceAction.click();
   await expect(
     page.getByRole("main", { name: "Workout Result" }),

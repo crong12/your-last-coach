@@ -10,7 +10,7 @@ Fixed demo time: `2026-08-26T20:15:00+01:00` (`Europe/London`)
 
 This contract defines the deterministic fixture and Coach Agent–Shared Coaching Workspace boundary for the proof of concept. It is demo-oriented, not a production COROS integration contract.
 
-Version 1.1 gives a fresh Coach Agent a bounded Coaching Briefing and makes the fallback review journey discoverable from the registered tools. The runtime exposes the six-tool fallback surface, and all Athlete-visible and Coach-Agent-readable context comes from the same workspace state.
+Version 1.1 gives a fresh Coach Agent a bounded Coaching Briefing and makes the fallback review journey discoverable from the registered tools. The runtime exposes the six-tool fallback surface, and all Athlete-visible and Coach-Agent-readable context comes from the same workspace state. Issue 66 adds a durable pending proposal lifecycle and an explicit `declined` result for **Keep current plan** without changing that six-tool surface.
 
 ## Demo Athlete
 
@@ -166,7 +166,7 @@ The fixture keeps five sources structurally separate:
 2. Synthetic COROS-shaped observations: workout, load, recovery, sleep, HRV, resting heart rate, and stress data.
 3. Athlete Feedback: the Athlete’s subjective reports, including evidence linked to Coaching Topics.
 4. Coach inference: rationale, counter-evidence, confidence, limitations, and ranking.
-5. App-owned state: Training Plan, Coaching Topics, previews, approvals, and Adaptation History.
+5. App-owned state: Training Plan, Coaching Topics, previews, approvals, declined decisions, and Adaptation History.
 
 The workspace may present these as “What happened”, “What you told me”, and “Coach’s read”. It must not imply that Coach inference or app-owned plan changes came from COROS.
 
@@ -210,7 +210,7 @@ Uncertainty:
 - Confidence: `moderate`
 - One difficult workout cannot establish the cause.
 - The evidence supports reducing near-term load, not diagnosing injury or overtraining.
-- `None — discuss further` remains available for unseen context or an unsuitable proposal.
+- `Discuss further` remains a distinct controlled-review outcome for unseen context or an unsuitable proposal; it is not the Athlete-facing meaning of **Keep current plan**.
 
 ### Rank 1: Coach’s recommendation — Recovery first
 
@@ -239,7 +239,7 @@ Uncertainty:
 | `open_workout_adaptation_review`   | After recording and reading evidence, open the Athlete-facing review with one recommendation and one alternative | Same proposal payload                                           | Immediate `review_opened`                                                                                                                                                                                                                      | The call itself does not mutate; later on-page approval may apply          |
 | `read_workout_adaptation_decision` | After the Athlete decides on-page, retrieve the structured terminal result                                       | `reviewId`                                                      | `not_ready` or stored terminal result, then cleared for delivery                                                                                                                                                                               | Read-only; any application already occurred on-page                        |
 
-While a fallback review is pending, `read_workout_adaptation_decision` returns `not_ready`; after the Athlete's decision it returns exactly one terminal status: `approved`, `discuss_further`, or `cancelled`, then clears that result for delivery.
+While a fallback review is pending, `read_workout_adaptation_decision` returns `not_ready`; after the Athlete's decision it returns exactly one terminal status: `approved`, `declined`, `discuss_further`, or `cancelled`, then clears that result for delivery. **Keep current plan** is the explicit `declined` result: it records the Coach Recommendation in the Coaching timeline, leaves the Training Plan unchanged, and never creates an Approved Adaptation receipt.
 
 The shipped runtime exposes exactly the six fallback tools above. The entry briefing's structured interaction contract communicates the review lifecycle to a fresh Agent without relying on repository instructions, an installed skill, or a prior conversation. Downstream descriptions remain focused on their own operations and immediate preconditions. The fallback surface does not include `review_workout_adaptation`.
 
@@ -276,7 +276,7 @@ Controlled development harness only: a separate pending-call interface may be na
 }
 ```
 
-The named properties guarantee exactly one recommendation and one alternative. The app validates distinct option IDs, the expected `planVersion`, and every referenced Planned Workout. `get_training_plan` makes `planVersion` and stable workout IDs prominent; context reads return reusable evidence references. Rejections identify the invalid field and expected correction so the Coach Agent can retry.
+The named properties guarantee exactly one recommendation and one alternative. The app validates distinct option IDs, the expected `planVersion`, every referenced Planned Workout, and evidence references returned by the context selectors. `get_training_plan` makes `planVersion` and stable workout IDs prominent; context reads return reusable evidence references. Rejections identify the invalid field and expected correction so the Coach Agent can retry.
 
 ## Review lifecycle and mutation rules
 
@@ -286,7 +286,7 @@ The named properties guarantee exactly one recommendation and one alternative. T
 - Approval atomically applies the selected Workout Adaptation, increments `planVersion`, stores the terminal outcome, and settles the review.
 - The applied result identifies the review, cited evidence references, selected option identity, affected Planned Workout before/after values, application time, and plan versions before and after. This becomes Adaptation History. It excludes proposal rationale, free-form reasoning, and the discarded alternative.
 - `reviewId` and `requestId` are idempotency keys; reuse cannot apply or record twice.
-- `None — discuss further`, cancellation, timeout, unload before approval, and reset discard the pending proposal without changing the Training Plan.
+- **Keep current plan** clears the pending proposal, records a durable declined decision, and returns `declined` without changing the Training Plan. `discuss_further` remains distinct from decline. Cancellation, timeout, stale-plan change, and reset return `cancelled` where the fallback delivery is applicable; a reset cancellation remains available for one exact-once read after the reset transaction. A published fallback proposal survives registration/page teardown and reload with its persisted expiry; a controlled-development pending call retains waiter-specific abort and teardown cancellation.
 - The shipped open/read fallback path uses the same proposal, validation, preview, approval, application, and idempotency semantics end to end.
 - A controlled development harness may exercise a pending-call path with the same application command for settlement tests; it is outside the shipped six-tool contract and is not a runtime registration choice.
 

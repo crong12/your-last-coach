@@ -436,11 +436,11 @@ function createTools(
         untrustedContentHint: false,
       },
       execute: safeExecution(async (input, execution) => {
-        const opened = options.reviewCoordinator.open(
+        const opened = (await options.reviewCoordinator.openAndPersist(
           normalizeHostValue(input),
           "primary",
           execution?.signal,
-        ) as {
+        )) as {
           status: string;
           reviewId?: string;
         };
@@ -463,7 +463,7 @@ function createTools(
           untrustedContentHint: false,
         },
         execute: safeExecution((input, execution) =>
-          options.reviewCoordinator.open(
+          options.reviewCoordinator.openAndPersist(
             normalizeHostValue(input),
             "fallback",
             execution?.signal,
@@ -474,7 +474,7 @@ function createTools(
         name: "read_workout_adaptation_decision",
         title: "Read workout adaptation decision",
         description:
-          "Use the same reviewId after opening; poll only as needed until approved, discuss_further, or cancelled; return the Athlete-controlled terminal outcome.",
+          "Use the same reviewId after opening; poll only as needed until approved, declined, discuss_further, or cancelled; return the Athlete-controlled terminal outcome.",
         inputSchema: {
           type: "object",
           properties: { reviewId: { type: "string", minLength: 1 } },
