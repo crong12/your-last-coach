@@ -46,36 +46,52 @@ describe("Workout Result detail context", () => {
 
   it("returns result-backed context with same-type previous attempts newest first and excludes the current result", () => {
     const state = createDemoWorkspaceState();
-    const completed = state.workoutResults.find(
-      (result) => result.status === "completed" && result.laps.length > 0,
+    const current = state.workoutResults.find(
+      (result) => result.id === "result-2026-08-26-threshold",
     );
-    expect(completed?.plannedWorkoutId).toBeDefined();
+    expect(current?.plannedWorkoutId).toBeDefined();
 
-    const plannedId = completed!.plannedWorkoutId!;
+    const plannedId = current!.plannedWorkoutId!;
     const context = selectWorkoutContext(state, { workoutId: plannedId });
 
     expect(context.status).toBe("ok");
     if (context.status !== "ok") throw new Error("Expected workout context");
-    expect(context.data.workoutResult?.id).toBe(completed!.id);
+    expect(context.data.workoutResult?.id).toBe(current!.id);
     expect(context.data.previousAttempts).toEqual([
       expect.objectContaining({
         matchBasis: "planned_workout_type",
         workoutResult: expect.objectContaining({
-          id: "result-2026-08-26-threshold",
-          status: "partial",
+          id: "result-2026-08-06-threshold",
+          status: "completed",
         }),
       }),
     ]);
     expect(
       context.data.previousAttempts.some(
-        ({ workoutResult }) => workoutResult.id === completed!.id,
+        ({ workoutResult }) => workoutResult.id === current!.id,
       ),
     ).toBe(false);
     expect(context.evidenceRefs).toEqual(
       expect.arrayContaining([
         "planned-workout:planned-2026-08-26-threshold",
         "workout-result:result-2026-08-26-threshold",
+        "planned-workout:planned-2026-08-06-threshold",
+        "workout-result:result-2026-08-06-threshold",
       ]),
+    );
+  });
+
+  it("does not present a future same-type result as a previous attempt", () => {
+    const context = selectWorkoutContext(createDemoWorkspaceState(), {
+      workoutId: "planned-2026-08-06-threshold",
+    });
+
+    expect(context.status).toBe("ok");
+    if (context.status !== "ok") throw new Error("Expected workout context");
+    expect(context.data.workoutResult?.id).toBe("result-2026-08-06-threshold");
+    expect(context.data.previousAttempts).toEqual([]);
+    expect(context.evidenceRefs).not.toContain(
+      "workout-result:result-2026-08-26-threshold",
     );
   });
 
@@ -111,6 +127,25 @@ describe("Workout Result detail context", () => {
       id: "result-2026-08-13",
       status: "completed",
       laps: [],
+    });
+  });
+
+  it("keeps a stopped result in the result-backed context with its authoritative status", () => {
+    const state = structuredClone(createDemoWorkspaceState());
+    const result = state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-26-threshold",
+    )!;
+    result.status = "stopped";
+
+    const context = selectWorkoutContext(state, {
+      workoutId: "planned-2026-08-26-threshold",
+    });
+
+    expect(context.status).toBe("ok");
+    if (context.status !== "ok") throw new Error("Expected workout context");
+    expect(context.data.workoutResult).toMatchObject({
+      id: "result-2026-08-26-threshold",
+      status: "stopped",
     });
   });
 });

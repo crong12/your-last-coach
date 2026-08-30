@@ -113,6 +113,29 @@ describe("Workout Result lap chart", () => {
     ).toContain("No max HR recorded");
   });
 
+  it("uses an exact missing max-HR segment and keeps recorded max HR explicit", () => {
+    renderChart([
+      laps[0],
+      {
+        ...laps[1],
+        maximumHeartRateBpm: 180,
+      },
+    ]);
+
+    expect(
+      container.querySelector("[data-result-chart-readout]")?.textContent,
+    ).toBe("Lap 1 · 2 km · 6:00/km · Avg HR 130 bpm · No max HR recorded");
+
+    act(() =>
+      container
+        .querySelectorAll<SVGGElement>("[data-result-lap-target]")[1]
+        .dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(
+      container.querySelector("[data-result-chart-readout]")?.textContent,
+    ).toBe("Lap 2 · 2 km · 4:46/km · Avg HR 152 bpm · Max HR 180 bpm");
+  });
+
   it("reports honest no-lap state without an SVG", () => {
     renderChart([]);
 

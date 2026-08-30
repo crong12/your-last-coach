@@ -249,36 +249,128 @@ test("renders a completed empty-lap result without fabricating chart or table", 
   await expect(screen.locator("details")).toHaveCount(0);
 });
 
-test("pushes a previous same-type attempt and restores the comparison row focus on Back", async ({
+test("keeps a stopped result result-backed without adding a fixture result", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const storageKey = "your-last-coach.workspace.v1";
+    const saved = window.localStorage.getItem(storageKey);
+    if (!saved) throw new Error("Expected the demo workspace to be saved");
+    const envelope = JSON.parse(saved);
+    const result = envelope.state.workoutResults.find(
+      (candidate: { id: string }) =>
+        candidate.id === "result-2026-08-26-threshold",
+    );
+    if (!result) throw new Error("Expected the threshold result");
+    result.status = "stopped";
+    window.localStorage.setItem(storageKey, JSON.stringify(envelope));
+  });
+  await page.reload();
+  await page.goto("/#workout/planned-2026-08-26-threshold");
+
+  const screen = page.getByRole("main", { name: "Workout Result" });
+  await expect(screen.getByText("STOPPED", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByText("Workout Result", { exact: true }),
+  ).toBeVisible();
+  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(3);
+  await expect(screen.getByText("Per-lap pace and heart rate")).toBeVisible();
+});
+
+test("walks pane to current to previous and restores each origin, focus, and forward title", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/#workout/planned-2026-08-06-threshold");
-
-  const screen = page.getByRole("main", { name: "Workout Result" });
-  const previousRow = screen.getByRole("button", {
-    name: /previous attempt 26 August 2026.*7\.5 km/i,
+  await page.goto("/#today");
+  await page.getByRole("button", { name: "Month" }).click();
+  const currentEntry = page.getByRole("button", {
+    name: /5 × 1 km threshold, 2026-08-26/,
   });
-  await expect(previousRow).toBeVisible();
-  await previousRow.click();
+  await currentEntry.scrollIntoViewIfNeeded();
+  const paneOrigin = await page.evaluate(() => ({
+    scrollY: window.scrollY,
+    paneScrollLeft:
+      document.querySelector<HTMLElement>(".workspace-panes")!.scrollLeft,
+  }));
+
+  await currentEntry.click();
   await expect
     .poll(() => page.evaluate(() => location.hash))
     .toBe("#workout/planned-2026-08-26-threshold");
-  await expect(page.getByText("PARTIAL", { exact: true })).toBeVisible();
+  const currentScreen = page.getByRole("main", { name: "Workout Result" });
   await expect(
-    page.getByRole("button", { name: "Back to Threshold intervals" }),
+    currentScreen.getByRole("heading", { name: "5 × 1 km threshold" }),
+  ).toBeFocused();
+  await expect(
+    currentScreen.getByText("Delta vs current +3.5 km"),
   ).toBeVisible();
+  const previousRow = currentScreen.getByRole("button", {
+    name: /previous attempt 6 August 2026.*11 km/i,
+  });
+  await expect(previousRow).toBeVisible();
+
+  await previousRow.click();
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toBe("#workout/planned-2026-08-06-threshold");
+  await expect(page.getByText("COMPLETED", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Threshold intervals" }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Back to 5 × 1 km threshold" }),
+  ).toBeVisible();
+
   await page
-    .getByRole("button", { name: "Back to Threshold intervals" })
+    .getByRole("button", { name: "Back to 5 × 1 km threshold" })
     .click();
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toBe("#workout/planned-2026-08-26-threshold");
+  await expect(
+    currentScreen.getByRole("button", {
+      name: /previous attempt 6 August 2026.*11 km/i,
+    }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Back to Today" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
+  await expect(currentEntry).toBeFocused();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        scrollY: window.scrollY,
+        paneScrollLeft:
+          document.querySelector<HTMLElement>(".workspace-panes")!.scrollLeft,
+      })),
+    )
+    .toEqual(paneOrigin);
+
+  await page.goForward();
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toBe("#workout/planned-2026-08-26-threshold");
+  await expect(
+    page.getByRole("heading", { name: "5 × 1 km threshold" }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Back to Today" }),
+  ).toBeVisible();
+
+  await page.goForward();
   await expect
     .poll(() => page.evaluate(() => location.hash))
     .toBe("#workout/planned-2026-08-06-threshold");
   await expect(
-    page.getByRole("button", {
-      name: /previous attempt 26 August 2026.*7\.5 km/i,
-    }),
+    page.getByRole("heading", { name: "Threshold intervals" }),
   ).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Back to 5 × 1 km threshold" }),
+  ).toBeVisible();
 });
 
 test("records workout feedback through the shared application state and Coaching timeline", async ({
@@ -303,6 +395,33 @@ test("records workout feedback through the shared application state and Coaching
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
   await expect(
     timeline.getByText("The completed session felt controlled."),
+  ).toBeVisible();
+});
+
+test("keeps feedback visible and surfaces memory-only durability after a save fallback", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#workout/planned-2026-08-06-threshold");
+  await page.evaluate(() => {
+    const unavailable = () => {
+      throw new DOMException("Storage denied", "SecurityError");
+    };
+    Storage.prototype.setItem = unavailable;
+  });
+  const screen = page.getByRole("main", { name: "Workout Result" });
+  await screen.getByRole("button", { name: "Add feedback" }).click();
+  const form = screen.getByRole("form", { name: "Add Athlete Feedback" });
+  await form
+    .getByRole("textbox", { name: "Athlete Feedback" })
+    .fill("The completed session was controlled.");
+  await form.getByRole("button", { name: "Save feedback" }).click();
+
+  await expect(
+    screen.getByText("The completed session was controlled."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Changes will last only until this page is reloaded."),
   ).toBeVisible();
 });
 

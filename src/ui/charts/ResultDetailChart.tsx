@@ -24,15 +24,15 @@ function formatHeartRate(value: number | null) {
 }
 
 function formatReadout(lap: ResultDetailLap) {
+  const maximumHeartRate =
+    lap.maximumHeartRateBpm === null
+      ? "No max HR recorded"
+      : `Max HR ${lap.maximumHeartRateBpm} bpm`;
   return `${lap.label} · ${formatDistance(lap.distanceKm)} · ${
     lap.paceSecondsPerKm === null
       ? "No pace recorded"
       : `${formatPaceSeconds(lap.paceSecondsPerKm)}/km`
-  } · Avg HR ${formatHeartRate(lap.averageHeartRateBpm)} · Max HR ${
-    lap.maximumHeartRateBpm === null
-      ? "No max HR recorded"
-      : `${lap.maximumHeartRateBpm} bpm`
-  }`;
+  } · Avg HR ${formatHeartRate(lap.averageHeartRateBpm)} · ${maximumHeartRate}`;
 }
 
 function formatCoverage(

@@ -6,6 +6,7 @@ export type WorkspaceRoute =
   { kind: "pane"; pane: PaneId } | { kind: "workout"; workoutId: string };
 
 export const NAVIGATION_STATE_KEY = "yourLastCoachNavigation";
+export const NAVIGATION_FOCUS_STATE_KEY = "yourLastCoachNavigationFocus";
 
 export interface PaneOriginReceipt {
   version: 1;
@@ -26,9 +27,12 @@ export interface WorkoutOriginReceipt {
 
 export type NavigationOriginReceipt = PaneOriginReceipt | WorkoutOriginReceipt;
 
-function navigationReceiptFromHistoryState(value: unknown) {
+function navigationReceiptFromHistoryState(
+  value: unknown,
+  key = NAVIGATION_STATE_KEY,
+) {
   if (typeof value !== "object" || value === null) return null;
-  const receipt = (value as Record<string, unknown>)[NAVIGATION_STATE_KEY];
+  const receipt = (value as Record<string, unknown>)[key];
   return typeof receipt === "object" && receipt !== null
     ? (receipt as Record<string, unknown>)
     : null;
@@ -57,7 +61,20 @@ export function paneOriginFromHistoryState(
 export function workoutOriginFromHistoryState(
   value: unknown,
 ): WorkoutOriginReceipt | null {
-  const candidate = navigationReceiptFromHistoryState(value);
+  return workoutReceiptFromHistoryState(value, NAVIGATION_STATE_KEY);
+}
+
+export function workoutFocusFromHistoryState(
+  value: unknown,
+): WorkoutOriginReceipt | null {
+  return workoutReceiptFromHistoryState(value, NAVIGATION_FOCUS_STATE_KEY);
+}
+
+function workoutReceiptFromHistoryState(
+  value: unknown,
+  key: string,
+): WorkoutOriginReceipt | null {
+  const candidate = navigationReceiptFromHistoryState(value, key);
   if (
     !candidate ||
     candidate.version !== 1 ||

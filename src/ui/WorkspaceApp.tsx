@@ -19,12 +19,14 @@ import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
 import {
+  NAVIGATION_FOCUS_STATE_KEY,
   NAVIGATION_STATE_KEY,
   PANE_IDS,
   paneOriginFromHistoryState,
   type PaneNavigation,
   type PaneId,
   type PaneOriginReceipt,
+  workoutFocusFromHistoryState,
   workoutOriginFromHistoryState,
   type WorkoutOriginReceipt,
   type WorkspaceRoute,
@@ -68,10 +70,12 @@ function historyStateWithOrigin(
   origin: PaneOriginReceipt | WorkoutOriginReceipt,
 ) {
   const current = window.history.state;
-  return {
+  const next = {
     ...(typeof current === "object" && current !== null ? current : {}),
     [NAVIGATION_STATE_KEY]: origin,
   };
+  delete next[NAVIGATION_FOCUS_STATE_KEY];
+  return next;
 }
 
 function historyStateWithoutOrigin() {
@@ -79,6 +83,23 @@ function historyStateWithoutOrigin() {
   if (typeof current !== "object" || current === null) return null;
   const next = { ...(current as Record<string, unknown>) };
   delete next[NAVIGATION_STATE_KEY];
+  delete next[NAVIGATION_FOCUS_STATE_KEY];
+  return next;
+}
+
+function historyStateWithFocus(focus: WorkoutOriginReceipt) {
+  const current = window.history.state;
+  return {
+    ...(typeof current === "object" && current !== null ? current : {}),
+    [NAVIGATION_FOCUS_STATE_KEY]: focus,
+  };
+}
+
+function historyStateWithoutFocus() {
+  const current = window.history.state;
+  if (typeof current !== "object" || current === null) return null;
+  const next = { ...(current as Record<string, unknown>) };
+  delete next[NAVIGATION_FOCUS_STATE_KEY];
   return next;
 }
 
@@ -510,6 +531,13 @@ function WorkoutPreviousAttempts({
         {context.previousAttempts.map(({ plannedWorkout, workoutResult }) => {
           const date = formatDate(workoutResult.startedAt.slice(0, 10));
           const label = `View previous attempt ${date} · ${formatDistance(workoutResult.summary.distanceKm)}`;
+          const distanceDelta = context.workoutResult
+            ? formatDelta(
+                workoutResult.summary.distanceKm -
+                  context.workoutResult.summary.distanceKm,
+                "km",
+              )
+            : null;
           return (
             <li key={workoutResult.id}>
               {onSelectWorkout ? (
@@ -530,6 +558,9 @@ function WorkoutPreviousAttempts({
                       {formatDistance(workoutResult.summary.distanceKm)}
                     </strong>
                     <small>Previous attempt</small>
+                    {distanceDelta !== null && (
+                      <small>Delta vs current {distanceDelta}</small>
+                    )}
                   </span>
                 </button>
               ) : (
@@ -543,6 +574,9 @@ function WorkoutPreviousAttempts({
                       {formatDistance(workoutResult.summary.distanceKm)}
                     </strong>
                     <small>Previous attempt</small>
+                    {distanceDelta !== null && (
+                      <small>Delta vs current {distanceDelta}</small>
+                    )}
                   </span>
                 </div>
               )}
@@ -576,7 +610,7 @@ function makeFeedbackRequestId() {
   }
 }
 
-function WorkoutFeedback({
+export function WorkoutFeedback({
   context,
   application,
   onDurability,
@@ -2081,14 +2115,24 @@ export function WorkspaceApp({
         });
         if (workout.status === "ok") {
           const origin = paneOriginFromHistoryState(window.history.state);
-          const workoutOrigin = workoutOriginFromHistoryState(
+          const workoutFocus = workoutFocusFromHistoryState(
             window.history.state,
           );
           if (origin) paneNavigation.restorePane(origin.pane);
           pendingWorkoutOriginRef.current =
-            restoreCoordinates && workoutOrigin?.workoutId === parsed.workoutId
-              ? workoutOrigin
+            restoreCoordinates && workoutFocus?.workoutId === parsed.workoutId
+              ? workoutFocus
               : null;
+          if (
+            restoreCoordinates &&
+            workoutFocus?.workoutId === parsed.workoutId
+          ) {
+            window.history.replaceState(
+              historyStateWithoutFocus(),
+              "",
+              `${window.location.pathname}${window.location.search}${workspaceRouteHash(parsed)}`,
+            );
+          }
           paneNavigation.restoreRoute(parsed);
           return;
         }
@@ -2348,9 +2392,9 @@ export function WorkspaceApp({
         workoutScrollTop: workoutScreenRef.current?.scrollTop ?? 0,
         invokerId: invoker.id,
       };
-      const stateWithOrigin = historyStateWithOrigin(origin);
+      const stateWithFocus = historyStateWithFocus(origin);
       window.history.replaceState(
-        stateWithOrigin,
+        stateWithFocus,
         "",
         `${window.location.pathname}${window.location.search}${workspaceRouteHash(activeRoute)}`,
       );
@@ -2358,6 +2402,7 @@ export function WorkspaceApp({
         kind: "workout",
         workoutId: workout.id,
       };
+      const stateWithOrigin = historyStateWithOrigin(origin);
       window.history.pushState(
         stateWithOrigin,
         "",

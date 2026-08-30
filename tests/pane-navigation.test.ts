@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PANE_IDS,
   createPaneNavigation,
+  workoutFocusFromHistoryState,
   workoutOriginFromHistoryState,
   workspaceRouteFromHash,
   workspaceRouteHash,
@@ -125,5 +126,30 @@ describe("Workout routes", () => {
         },
       }),
     ).toBeNull();
+    expect(
+      workoutOriginFromHistoryState({
+        yourLastCoachNavigationFocus: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: 144,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      workoutFocusFromHistoryState({
+        yourLastCoachNavigationFocus: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: 144,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toMatchObject({
+      kind: "workout-origin",
+      workoutId: "planned-current",
+    });
   });
 });

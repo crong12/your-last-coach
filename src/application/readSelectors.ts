@@ -258,11 +258,21 @@ export function selectWorkoutContext(
     state.workoutResults.find(
       ({ plannedWorkoutId }) => plannedWorkoutId === plannedWorkout.id,
     ) ?? null;
+  const currentResultId = workoutResult?.id;
+  const currentResultStartedAt = workoutResult
+    ? Date.parse(workoutResult.startedAt)
+    : null;
   const relatedWorkouts = new Map(
     state.trainingPlan.plannedWorkouts.map((workout) => [workout.id, workout]),
   );
   const previousAttempts = state.workoutResults
-    .filter((candidate) => candidate.id !== workoutResult?.id)
+    .filter(
+      (candidate) =>
+        currentResultId !== undefined &&
+        candidate.id !== currentResultId &&
+        currentResultStartedAt !== null &&
+        Date.parse(candidate.startedAt) < currentResultStartedAt,
+    )
     .map((candidate) => {
       const candidateWorkout = candidate.plannedWorkoutId
         ? relatedWorkouts.get(candidate.plannedWorkoutId)
