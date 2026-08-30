@@ -123,11 +123,14 @@ test("shows the seeded coaching narrative before the bounded athlete profile", a
     entries.nth(0).getByRole("link", { name: /in response to/i }),
   ).toHaveAttribute("href", "#coaching-entry-workout-result-2026-08-23");
   await expect(
-    entries.nth(1).getByRole("link", { name: /in response to/i }),
+    entries.nth(1).getByRole("link", { name: /Related Athlete Feedback/i }),
   ).toHaveAttribute(
     "href",
     "#coaching-entry-athlete-feedback-seed-shin-discomfort",
   );
+  await expect(
+    entries.nth(1).getByRole("link", { name: /in response to/i }),
+  ).toHaveCount(0);
   await entries
     .nth(0)
     .getByRole("link", { name: /in response to/i })
@@ -153,6 +156,96 @@ test("shows the seeded coaching narrative before the bounded athlete profile", a
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
+});
+
+test("shows an honest empty state when no supported coaching entries exist", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const key = "your-last-coach.workspace.v1";
+    const saved = window.localStorage.getItem(key);
+    if (!saved) throw new Error("Expected the demo workspace to be saved");
+    const envelope = JSON.parse(saved);
+    envelope.state.athleteFeedback = [];
+    envelope.state.workoutResults = [];
+    envelope.state.coachingTopics = [];
+    envelope.state.adaptationReceipts = [];
+    envelope.state.appliedReviewIds = [];
+    window.localStorage.setItem(key, JSON.stringify(envelope));
+  });
+  await page.reload();
+  await page.goto("/#coaching");
+
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(
+    timeline.getByRole("heading", { name: "No coaching activity yet" }),
+  ).toBeVisible();
+  await expect(
+    timeline.getByText(
+      "Athlete Feedback, Coach Recommendations, and Workout Results will appear here.",
+    ),
+  ).toBeVisible();
+  await expect(timeline.getByRole("listitem")).toHaveCount(0);
+});
+
+test("does not infer a different Workout Result for an explicit stale Feedback result ID", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const key = "your-last-coach.workspace.v1";
+    const saved = window.localStorage.getItem(key);
+    if (!saved) throw new Error("Expected the demo workspace to be saved");
+    const envelope = JSON.parse(saved);
+    const feedback = envelope.state.athleteFeedback[0];
+    const result = envelope.state.workoutResults.find(
+      (candidate: { id: string }) =>
+        candidate.id === feedback.relatedWorkoutResultId,
+    );
+    envelope.state.workoutResults.push({
+      ...result,
+      id: "result-2026-08-23-shadow",
+    });
+    window.localStorage.setItem(key, JSON.stringify(envelope));
+  });
+  await page.addInitScript(() => {
+    const nativeStructuredClone = window.structuredClone.bind(window);
+    let degraded = false;
+    window.structuredClone = ((value: unknown) => {
+      const clone = nativeStructuredClone(value);
+      if (
+        !degraded &&
+        typeof value === "object" &&
+        value !== null &&
+        "seedVersion" in value &&
+        "workoutResults" in value &&
+        Array.isArray((value as { workoutResults?: unknown }).workoutResults)
+      ) {
+        degraded = true;
+        const stateClone = clone as {
+          workoutResults: Array<{ id: string }>;
+        };
+        stateClone.workoutResults = stateClone.workoutResults.filter(
+          ({ id }) => id !== "result-2026-08-23",
+        );
+      }
+      return clone;
+    }) as typeof window.structuredClone;
+  });
+  await page.reload();
+  await page.goto("/#coaching");
+
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(timeline.getByRole("listitem")).toHaveCount(1);
+  await expect(
+    timeline.getByText("Workout Result", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    timeline
+      .locator("#coaching-entry-athlete-feedback-seed-shin-discomfort")
+      .getByRole("link"),
+  ).toHaveCount(0);
 });
 
 test("opens and controls the app-bar menu without leaving direct demo controls", async ({
@@ -291,6 +384,23 @@ test("shows the approved adaptation receipt with its source evidence after settl
   await expect(review).toBeHidden();
 
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  const entries = timeline.getByRole("listitem");
+  await expect(entries.first()).toContainText("Approved Adaptation");
+  await expect(entries.first()).toContainText("Recovery first");
+  const thresholdResult = timeline.locator(
+    "#coaching-entry-workout-result-2026-08-26-threshold",
+  );
+  await expect(
+    thresholdResult.getByRole("link", {
+      name: /Related Approved Adaptation/i,
+    }),
+  ).toHaveAttribute(
+    "href",
+    "#coaching-entry-approved-adaptation-coaching-pane",
+  );
+  await expect(
+    thresholdResult.getByRole("link", { name: /in response to/i }),
+  ).toHaveCount(0);
   await expect(
     timeline.getByText("Recovery first", { exact: true }),
   ).toBeVisible();
@@ -307,4 +417,78 @@ test("shows the approved adaptation receipt with its source evidence after settl
       .getByRole("region", { name: "Coaching timeline" })
       .getByText("Recovery first", { exact: true }),
   ).toBeVisible();
+});
+
+test("keeps Planned Workout and unknown receipt evidence literal without an inferred Result", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  const proposal = approvedReceiptProposal();
+  proposal.evidenceRefs = ["planned-workout:planned-2026-08-26-threshold"];
+  const opened = await page.evaluate(async (input) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(input, { signal: new AbortController().signal });
+  }, proposal);
+  expect(opened).toMatchObject({ status: "review_opened" });
+
+  const review = page.getByRole("dialog", {
+    name: "Review Workout Adaptations",
+  });
+  await review
+    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await review.getByRole("button", { name: "Adapt my plan" }).click();
+  await expect(review).toBeHidden();
+
+  await page.evaluate(() => {
+    const key = "your-last-coach.workspace.v1";
+    const saved = window.localStorage.getItem(key);
+    if (!saved) throw new Error("Expected the approved workspace to be saved");
+    const envelope = JSON.parse(saved);
+    envelope.state.adaptationReceipts[0].evidenceRefs.push(
+      "evidence:unverified-source",
+    );
+    delete envelope.undeliveredFallbackResult;
+    window.localStorage.setItem(key, JSON.stringify(envelope));
+  });
+  await page.reload();
+
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(
+    timeline.locator("#coaching-entry-workout-result-2026-08-26-threshold"),
+  ).toHaveCount(0);
+  await expect(
+    timeline
+      .locator("#coaching-entry-approved-adaptation-coaching-pane")
+      .getByRole("link", { name: /Workout Result/ }),
+  ).toHaveCount(0);
+  await expect(
+    timeline.getByText(
+      "Based on: 26 August 2026 · 5 × 1 km threshold · Evidence reference evidence:unverified-source",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    timeline.getByText("Unverified source", { exact: true }),
+  ).toHaveCount(0);
 });

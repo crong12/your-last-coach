@@ -623,13 +623,18 @@ function DemoGuide({
   );
 }
 
+type CoachingTimelineLink = {
+  entryId: string;
+  direction: "causal" | "related";
+};
+
 type CoachingTimelineEntry =
   | {
       kind: "feedback";
       id: string;
       timestamp: string;
       feedback: AthleteFeedback;
-      relatedEntryIds: string[];
+      relatedEntries: CoachingTimelineLink[];
     }
   | {
       kind: "workout-result";
@@ -637,14 +642,14 @@ type CoachingTimelineEntry =
       timestamp: string;
       result: WorkoutResult;
       workout: PlannedWorkout | null;
-      relatedEntryIds: string[];
+      relatedEntries: CoachingTimelineLink[];
     }
   | {
       kind: "approved-adaptation";
       id: string;
       timestamp: string;
       receipt: AppliedPlanAdaptation;
-      relatedEntryIds: string[];
+      relatedEntries: CoachingTimelineLink[];
     };
 
 const coachingEntryId = (
@@ -673,31 +678,22 @@ function workoutResultForFeedback(
   feedback: AthleteFeedback,
   results: WorkoutResult[],
 ) {
-  if (feedback.relatedWorkoutResultId) {
-    const direct = results.find(
-      ({ id }) => id === feedback.relatedWorkoutResultId,
+  if (feedback.relatedWorkoutResultId !== undefined) {
+    return (
+      results.find(({ id }) => id === feedback.relatedWorkoutResultId) ?? null
     );
-    if (direct) return direct;
   }
-  return results.find(
-    ({ plannedWorkoutId }) => plannedWorkoutId === feedback.relatedWorkoutId,
+  return (
+    results.find(
+      ({ plannedWorkoutId }) => plannedWorkoutId === feedback.relatedWorkoutId,
+    ) ?? null
   );
 }
 
 function workoutResultForEvidenceRef(ref: string, context: AthleteContextData) {
-  if (ref.startsWith("workout-result:")) {
-    const resultId = ref.slice("workout-result:".length);
-    return context.recentTraining.find(({ id }) => id === resultId) ?? null;
-  }
-  if (ref.startsWith("planned-workout:")) {
-    const plannedWorkoutId = ref.slice("planned-workout:".length);
-    const result = context.recentTraining.find(
-      ({ plannedWorkoutId: resultPlannedWorkoutId }) =>
-        resultPlannedWorkoutId === plannedWorkoutId,
-    );
-    return result ?? null;
-  }
-  return null;
+  if (!ref.startsWith("workout-result:")) return null;
+  const resultId = ref.slice("workout-result:".length);
+  return context.recentTraining.find(({ id }) => id === resultId) ?? null;
 }
 
 function sourceLabelForEvidenceRef(
@@ -705,19 +701,19 @@ function sourceLabelForEvidenceRef(
   context: AthleteContextData,
   plannedWorkouts: PlannedWorkout[],
 ) {
-  const result = workoutResultForEvidenceRef(ref, context);
-  if (result) {
-    const workout = plannedWorkouts.find(
-      ({ id }) => id === result.plannedWorkoutId,
-    );
-    return `${formatDate(result.startedAt.slice(0, 10))} · ${workout?.title ?? "Recorded workout"}`;
-  }
   if (ref.startsWith("planned-workout:")) {
     const plannedWorkoutId = ref.slice("planned-workout:".length);
     const workout = plannedWorkouts.find(({ id }) => id === plannedWorkoutId);
     return workout
       ? `${formatDate(workout.date)} · ${workout.title}`
       : `Evidence reference ${ref}`;
+  }
+  const result = workoutResultForEvidenceRef(ref, context);
+  if (result) {
+    const workout = plannedWorkouts.find(
+      ({ id }) => id === result.plannedWorkoutId,
+    );
+    return `${formatDate(result.startedAt.slice(0, 10))} · ${workout?.title ?? "Recorded workout"}`;
   }
   if (ref.startsWith("athlete-feedback:")) {
     const feedbackId = ref.slice("athlete-feedback:".length);
@@ -748,7 +744,7 @@ function projectCoachingTimeline(
     id: coachingEntryId("feedback", feedback.id),
     timestamp: feedback.recordedAt,
     feedback,
-    relatedEntryIds: [] as string[],
+    relatedEntries: [] as CoachingTimelineLink[],
   }));
   const resultsById = new Map(
     context.recentTraining.map((result) => [result.id, result]),
@@ -776,14 +772,14 @@ function projectCoachingTimeline(
       workout:
         plannedWorkouts.find(({ id }) => id === result.plannedWorkoutId) ??
         null,
-      relatedEntryIds: [] as string[],
+      relatedEntries: [] as CoachingTimelineLink[],
     }));
   const adaptationEntries = context.recentAdaptationHistory.map((receipt) => ({
     kind: "approved-adaptation" as const,
     id: coachingEntryId("approved-adaptation", receipt.reviewId),
     timestamp: receipt.appliedAt,
     receipt,
-    relatedEntryIds: [] as string[],
+    relatedEntries: [] as CoachingTimelineLink[],
   }));
   const entries: CoachingTimelineEntry[] = [
     ...feedbackEntries,
@@ -797,6 +793,30 @@ function projectCoachingTimeline(
     feedbackEntries.map((entry) => [entry.feedback.id, entry]),
   );
 
+  const addThreadLink = (
+    entry: CoachingTimelineEntry,
+    relatedEntry: CoachingTimelineEntry,
+    direction: CoachingTimelineLink["direction"],
+  ) => {
+    if (
+      !entry.relatedEntries.some(({ entryId }) => entryId === relatedEntry.id)
+    ) {
+      entry.relatedEntries.push({ entryId: relatedEntry.id, direction });
+    }
+  };
+  const connectThread = (
+    dependent: CoachingTimelineEntry,
+    source: CoachingTimelineEntry,
+  ) => {
+    const direction =
+      timelineTimestamp(dependent.timestamp) >
+      timelineTimestamp(source.timestamp)
+        ? "causal"
+        : "related";
+    addThreadLink(dependent, source, direction);
+    addThreadLink(source, dependent, "related");
+  };
+
   for (const feedbackEntry of feedbackEntries) {
     const result = workoutResultForFeedback(
       feedbackEntry.feedback,
@@ -804,8 +824,7 @@ function projectCoachingTimeline(
     );
     const resultEntry = result ? resultEntryById.get(result.id) : undefined;
     if (resultEntry) {
-      feedbackEntry.relatedEntryIds.push(resultEntry.id);
-      resultEntry.relatedEntryIds.push(feedbackEntry.id);
+      connectThread(feedbackEntry, resultEntry);
     }
   }
   for (const adaptationEntry of adaptationEntries) {
@@ -813,23 +832,11 @@ function projectCoachingTimeline(
     for (const ref of receipt.evidenceRefs) {
       const result = workoutResultForEvidenceRef(ref, context);
       const resultEntry = result ? resultEntryById.get(result.id) : undefined;
-      if (
-        resultEntry &&
-        !adaptationEntry.relatedEntryIds.includes(resultEntry.id)
-      ) {
-        adaptationEntry.relatedEntryIds.push(resultEntry.id);
-        resultEntry.relatedEntryIds.push(adaptationEntry.id);
-      }
+      if (resultEntry) connectThread(adaptationEntry, resultEntry);
       if (ref.startsWith("athlete-feedback:")) {
         const feedbackId = ref.slice("athlete-feedback:".length);
         const feedbackEntry = feedbackEntryById.get(feedbackId);
-        if (
-          feedbackEntry &&
-          !adaptationEntry.relatedEntryIds.includes(feedbackEntry.id)
-        ) {
-          adaptationEntry.relatedEntryIds.push(feedbackEntry.id);
-          feedbackEntry.relatedEntryIds.push(adaptationEntry.id);
-        }
+        if (feedbackEntry) connectThread(adaptationEntry, feedbackEntry);
       }
     }
   }
@@ -863,12 +870,18 @@ function TimelineThreadLinks({
   entry: CoachingTimelineEntry;
   entries: CoachingTimelineEntry[];
 }) {
-  if (entry.relatedEntryIds.length === 0) return null;
-  const relatedEntries = entry.relatedEntryIds
-    .map((id) => entries.find((candidate) => candidate.id === id))
+  if (entry.relatedEntries.length === 0) return null;
+  const relatedEntries = entry.relatedEntries
+    .map((link) => ({
+      ...link,
+      entry: entries.find((candidate) => candidate.id === link.entryId),
+    }))
     .filter(
-      (candidate): candidate is CoachingTimelineEntry =>
-        candidate !== undefined,
+      (
+        candidate,
+      ): candidate is CoachingTimelineLink & {
+        entry: CoachingTimelineEntry;
+      } => candidate.entry !== undefined,
     );
   if (relatedEntries.length === 0) return null;
   return (
@@ -876,7 +889,7 @@ function TimelineThreadLinks({
       className="coaching-entry__threads"
       aria-label="Related coaching entries"
     >
-      {relatedEntries.map((related) => (
+      {relatedEntries.map(({ entry: related, direction }) => (
         <a
           key={related.id}
           href={`#${related.id}`}
@@ -893,11 +906,24 @@ function TimelineThreadLinks({
             target?.focus({ preventScroll: true });
           }}
         >
-          ↳ in response to {timelineEntryLabel(related.kind)}
+          ↳ {threadLinkLabel(entry, related, direction)}
         </a>
       ))}
     </nav>
   );
+}
+
+function threadLinkLabel(
+  entry: CoachingTimelineEntry,
+  related: CoachingTimelineEntry,
+  direction: CoachingTimelineLink["direction"],
+) {
+  if (direction === "related") {
+    return `Related ${timelineEntryLabel(related.kind)}`;
+  }
+  return entry.kind === "approved-adaptation"
+    ? `Based on ${timelineEntryLabel(related.kind)}`
+    : `In response to ${timelineEntryLabel(related.kind)}`;
 }
 
 function CoachingTimelineEntryView({
