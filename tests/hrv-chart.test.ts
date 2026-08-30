@@ -25,6 +25,7 @@ function renderChart(
   chartPoints: readonly ChartPoint[] = points,
   annotations: readonly ChartAnnotation[] = [],
   onViewAdaptation = vi.fn(),
+  average?: number | null,
 ) {
   container = document.createElement("div");
   document.body.append(container);
@@ -35,6 +36,7 @@ function renderChart(
         points: chartPoints,
         annotations,
         onViewAdaptation,
+        average,
       }),
     );
   });
@@ -157,5 +159,24 @@ describe("HRV chart render states", () => {
         .querySelector("[data-chart-point-selection]")
         ?.getAttribute("stroke"),
     ).toBe("var(--series-1)");
+  });
+
+  it("uses the supplied trailing average for the header and direction", () => {
+    renderChart(
+      [
+        { date: "2026-08-25", value: 1 },
+        { date: "2026-08-26", value: 55 },
+      ],
+      [],
+      vi.fn(),
+      50,
+    );
+
+    expect(
+      container.querySelector(".chart-card__average")?.textContent,
+    ).toContain("7-night avg 50 ms");
+    expect(
+      container.querySelector(".chart-card__trend")?.textContent,
+    ).toContain("Up versus recorded nights");
   });
 });
