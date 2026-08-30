@@ -17,7 +17,21 @@
   --track: #e87851;
   --track-soft: #f7ddd2;
   --sun: #d8d273;
+  --sun-soft: #f0ecca;
+  --ochre: #7d6f1b;
+  --ember: #b8431f;
+  --warn: var(--ochre);
+  --warn-soft: var(--sun-soft);
+  --warn-on-dark: var(--sun);
+  --bad: var(--ember);
+  --bad-soft: var(--track-soft);
+  --bad-on-dark: var(--track);
+  --series-1: var(--deep-sea);
+  --series-2: var(--sea);
   --shadow: 0 24px 70px rgba(24, 58, 53, 0.1);
+}
+.numeric {
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 * {
