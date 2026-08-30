@@ -280,5 +280,5 @@ test("keeps the normal Today surface static under reduced motion", async ({
         transitionDurationSeconds: parseFloat(style.transitionDuration),
       };
     }),
-  ).toEqual({ animationName: "none", transitionDurationSeconds: 0.00001 });
+  ).toEqual({ animationName: "none", transitionDurationSeconds: 0 });
 });

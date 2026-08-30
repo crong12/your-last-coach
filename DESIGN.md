@@ -74,7 +74,7 @@ The world is sea-green ink on cream paper. Surfaces are translucent paper (`rgba
 - **Ink hierarchy:** `ink` for primary text, `ink-soft`/`muted` for secondary, `deep-sea` for emphasis and primary actions, `sea` for supporting strokes.
 - **Structure:** `line` hairlines; `foam`/`canvas` for quiet fills.
 - **Accents — used sparingly and with meaning:**
-  - `track` (coral) = **attention**. The pending-review dot, the countdown numeral, the primary "Adapt my plan" moment, approved-adaptation diamonds. Never decoration.
+  - `track` (coral) = **attention**. The pending-review dot, the countdown numeral, the primary "Adapt my plan" moment, approved-adaptation diamonds. The Final Turn brand mark's single lower-right endpoint is the sole non-state exception: it represents the Athlete's target, not a status.
   - `sun` = ambient highlight (evidence accents), rarely.
 - **Semantic states ("good is quiet", #47):** good news gets no color — default ink rendering. Deviations speak: `ochre` (warn) and `ember` (bad) for text/strokes on light surfaces — both AA (4.8:1 / 5.2:1 on `paper`); `sun-soft` / `track-soft` for their fills and bands. On dark `deep-sea` surfaces use `sun` / `track` (graphics-grade; pair small text with `foam`). Never color-only: every warn/bad pairs with a glyph or label.
 - **Charts:** series are neutral — `series-1: deep-sea`, `series-2: sea`. Coral never draws a data series.
@@ -112,11 +112,11 @@ The journal barely moves. The incumbent defines **no transitions** — state cha
 
 ## Anti-patterns
 
-1. Coral as decoration, or drawing a data series. Coral means _attention_.
+1. Coral as decoration, or drawing a data series. Coral means _attention_; the Final Turn brand endpoint is the sole brand exception.
 2. Newsreader for numbers, labels, or controls.
 3. Green "success" states — good is quiet here.
 4. Fabricated continuity: interpolated gaps, zero-filled missing nights, unlabelled aggregates.
-5. Notification chrome: badges, counts, red dots (the single coral pending-dot is the entire budget).
+5. Notification chrome: badges, counts, red dots (the single coral pending-dot is the entire in-product status budget; the brand endpoint is not status chrome).
 6. Stacked or hard shadows; per-card light sources.
 7. Proportional-figure numerals in any table, stat, or chart.
 8. "User", "dashboard", or non-CONTEXT.md vocabulary in UI copy.

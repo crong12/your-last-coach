@@ -103,17 +103,10 @@ a:focus-visible {
   text-decoration: none;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
+  flex: 0 0 auto;
   width: 36px;
   height: 36px;
-  border-radius: 50% 50% 46% 54%;
-  color: var(--paper);
-  background: var(--deep-sea);
-  transform: rotate(-7deg);
-}
-.brand-mark::first-letter {
-  transform: rotate(7deg);
+  overflow: visible;
 }
 .topbar-actions {
   display: flex;
@@ -3459,6 +3452,6 @@ h1 {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
