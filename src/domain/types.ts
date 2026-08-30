@@ -67,6 +67,7 @@ export interface WorkoutResult {
   plannedWorkoutId?: string;
   startedAt: string;
   status: "completed" | "partial" | "stopped";
+  provenance?: string;
   summary: {
     distanceKm: number;
     durationSeconds?: number;

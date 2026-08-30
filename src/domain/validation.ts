@@ -301,6 +301,8 @@ function validateWorkoutResults(
       !isTimestamp(result.startedAt) ||
       !isNonEmptyString(result.status) ||
       !RESULT_STATUSES.has(result.status) ||
+      (result.provenance !== undefined &&
+        !isNonEmptyString(result.provenance)) ||
       !validSummary ||
       !Array.isArray(result.laps)
     ) {

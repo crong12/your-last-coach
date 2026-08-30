@@ -65,9 +65,16 @@ export interface TrainingPlanData {
   source: "app_owned";
 }
 
+export interface PreviousAttemptSummary {
+  plannedWorkout: PlannedWorkout;
+  workoutResult: WorkoutResult;
+  matchBasis: "planned_workout_type";
+}
+
 export interface WorkoutContextData {
   plannedWorkout: PlannedWorkout;
   workoutResult: WorkoutResult | null;
+  previousAttempts: PreviousAttemptSummary[];
   athleteFeedback: AthleteFeedback[];
   sources: {
     plannedWorkout: EvidenceSource;
@@ -251,16 +258,50 @@ export function selectWorkoutContext(
     state.workoutResults.find(
       ({ plannedWorkoutId }) => plannedWorkoutId === plannedWorkout.id,
     ) ?? null;
-  const athleteFeedback = state.athleteFeedback.filter(
-    ({ relatedWorkoutId }) =>
-      relatedWorkoutId === plannedWorkout.id ||
-      relatedWorkoutId === workoutResult?.id,
+  const relatedWorkouts = new Map(
+    state.trainingPlan.plannedWorkouts.map((workout) => [workout.id, workout]),
   );
+  const previousAttempts = state.workoutResults
+    .filter((candidate) => candidate.id !== workoutResult?.id)
+    .map((candidate) => {
+      const candidateWorkout = candidate.plannedWorkoutId
+        ? relatedWorkouts.get(candidate.plannedWorkoutId)
+        : undefined;
+      return candidateWorkout && candidateWorkout.type === plannedWorkout.type
+        ? { candidate, candidateWorkout }
+        : null;
+    })
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        candidate: WorkoutResult;
+        candidateWorkout: PlannedWorkout;
+      } => candidate !== null,
+    )
+    .sort(
+      (a, b) =>
+        Date.parse(b.candidate.startedAt) - Date.parse(a.candidate.startedAt) ||
+        b.candidate.id.localeCompare(a.candidate.id),
+    )
+    .map(({ candidate, candidateWorkout }) => ({
+      plannedWorkout: structuredClone(candidateWorkout),
+      workoutResult: structuredClone(candidate),
+      matchBasis: "planned_workout_type" as const,
+    }));
+  const athleteFeedback = state.athleteFeedback
+    .filter(
+      ({ relatedWorkoutId }) =>
+        relatedWorkoutId === plannedWorkout.id ||
+        relatedWorkoutId === workoutResult?.id,
+    )
+    .map((feedback) => structuredClone(feedback));
 
   return success(
     {
-      plannedWorkout,
-      workoutResult,
+      plannedWorkout: structuredClone(plannedWorkout),
+      workoutResult: workoutResult ? structuredClone(workoutResult) : null,
+      previousAttempts,
       athleteFeedback,
       sources: {
         plannedWorkout: "app_owned",
@@ -271,6 +312,15 @@ export function selectWorkoutContext(
     [
       `planned-workout:${plannedWorkout.id}`,
       ...(workoutResult ? [`workout-result:${workoutResult.id}`] : []),
+      ...previousAttempts.flatMap(
+        ({
+          plannedWorkout: previousWorkout,
+          workoutResult: previousResult,
+        }) => [
+          `planned-workout:${previousWorkout.id}`,
+          `workout-result:${previousResult.id}`,
+        ],
+      ),
       ...athleteFeedback.map(({ id }) => `athlete-feedback:${id}`),
     ],
   );

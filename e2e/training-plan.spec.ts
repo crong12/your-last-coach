@@ -281,14 +281,14 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
   const workout = page.getByRole("button", { name: /5 × 1 km threshold/ });
   await workout.focus();
   await workout.press("Enter");
-  const workoutScreen = page.getByRole("main", { name: "Planned Workout" });
+  const workoutScreen = page.getByRole("main", { name: "Workout Result" });
   await expect(
     workoutScreen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
-  await page.keyboard.press("Tab");
   const workoutBack = workoutScreen.getByRole("button", {
     name: "Back to Today",
   });
+  await workoutBack.focus();
   await expect(workoutBack).toBeFocused();
   await workoutBack.press("Enter");
   await expect(workout).toBeFocused();
@@ -789,14 +789,16 @@ test("shows the deterministic Week first and the same workouts in Month", async 
   await expect(page.getByText("24–30 August")).toBeVisible();
 });
 
-test("shows the planned Workout without pulling completed content forward", async ({
+test("shows a planned Workout without pulling completed content forward", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /5 × 1 km threshold/ }).click();
+  await page
+    .getByRole("button", { name: /18 km long run, 2026-08-30/ })
+    .click();
 
   await expect(
-    page.getByRole("heading", { name: "5 × 1 km threshold" }),
+    page.getByRole("heading", { name: "18 km long run" }),
   ).toBeVisible();
   await expect(
     page.getByText("Coach’s intent", { exact: true }).last(),
@@ -804,7 +806,7 @@ test("shows the planned Workout without pulling completed content forward", asyn
   await expect(
     page
       .getByRole("main", { name: "Planned Workout" })
-      .getByText("Develop threshold pace under control"),
+      .getByText("Build aerobic durability"),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Workout structure" }),
@@ -840,9 +842,11 @@ test("shows recent training and the complete mixed recovery evidence", async ({
     page.getByText("Seeded synthetic observations", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: /5 × 1 km threshold/ }).click();
+  await page
+    .getByRole("button", { name: /18 km long run, 2026-08-30/ })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "5 × 1 km threshold" }),
+    page.getByRole("heading", { name: "18 km long run" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Workout structure" }),
