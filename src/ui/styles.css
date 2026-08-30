@@ -186,6 +186,75 @@ a:focus-visible {
   color: #704a25;
   background: #fff3de;
 }
+.workspace-shell {
+  width: 100%;
+}
+.pane-nav {
+  position: sticky;
+  z-index: 4;
+  top: 12px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 18px auto 0;
+  padding: 5px;
+  border: 1px solid rgba(23, 51, 48, 0.12);
+  border-radius: 999px;
+  background: rgba(248, 250, 246, 0.9);
+  box-shadow: 0 10px 28px rgba(24, 58, 53, 0.1);
+  backdrop-filter: blur(18px);
+}
+.pane-nav__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 13px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pane-nav__button[aria-current="page"] {
+  color: var(--paper);
+  background: var(--deep-sea);
+}
+.pane-nav__dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+}
+.pane-nav__button[aria-current="page"] .pane-nav__dot {
+  background: currentColor;
+}
+.workspace-panes {
+  min-width: 0;
+}
+.workspace-pane {
+  min-width: 0;
+  scroll-margin-top: 76px;
+}
+.pane-heading {
+  width: min(1080px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: clamp(48px, 7vw, 88px) 0 0;
+}
+.pane-heading h2 {
+  margin: 5px 0 8px;
+  font-size: clamp(32px, 5vw, 48px);
+}
+.pane-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(270px, 340px);
@@ -193,6 +262,14 @@ a:focus-visible {
   width: min(1480px, 100%);
   margin: 0 auto;
   padding: clamp(28px, 4vw, 58px) clamp(18px, 3vw, 42px) 64px;
+}
+.workspace--single {
+  display: block;
+  width: min(1080px, 100%);
+}
+.workspace--single .context-rail {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 0;
 }
 .plan-column {
   min-width: 0;
@@ -1139,8 +1216,60 @@ h1 {
     min-height: 34px;
     padding: 6px 11px;
   }
+  .pane-nav {
+    top: 8px;
+    margin-top: 10px;
+  }
+  .pane-nav__button {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 10px;
+  }
+  .pane-nav__dot {
+    display: block;
+    width: 9px;
+    height: 9px;
+  }
+  .pane-nav__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .workspace-panes {
+    display: flex;
+    align-items: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .workspace-panes::-webkit-scrollbar {
+    display: none;
+  }
+  .workspace-pane {
+    flex: 0 0 100%;
+    width: 100%;
+    scroll-margin-top: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .workspace-panes:focus-visible {
+    outline-offset: -5px;
+  }
+  .pane-heading {
+    width: auto;
+    margin: 0 14px;
+    padding-top: 34px;
+  }
   .workspace {
     padding: 28px 14px 48px;
+  }
+  .workspace--single .context-rail {
+    grid-template-columns: 1fr;
   }
   .plan-hero {
     align-items: flex-start;

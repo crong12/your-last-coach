@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type { CoachAgentConnection } from "../adapters/webmcp/types";
 import type { DemoGuidePreference } from "../adapters/persistence/demoGuidePreference";
@@ -7,11 +13,17 @@ import type { AthleteContextData } from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
+import {
+  PANE_IDS,
+  type PaneNavigation,
+  type PaneId,
+} from "../application/createPaneNavigation";
 import type { PlannedWorkout, WorkoutResult } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
+  paneNavigation: PaneNavigation;
   reviewCoordinator: ReviewCoordinator;
   initialNotice: string | null;
   initialDurability: Durability;
@@ -21,6 +33,25 @@ interface WorkspaceAppProps {
 }
 
 type PlanView = "week" | "month";
+
+export function paneIdFromHash(hash: string): PaneId {
+  const candidate = hash.startsWith("#") ? hash.slice(1) : "";
+  return PANE_IDS.find((pane) => pane === candidate) ?? "today";
+}
+
+export function paneHash(pane: PaneId) {
+  return `#${pane}`;
+}
+
+const PANE_LABELS: Record<PaneId, string> = {
+  today: "Today",
+  trends: "Trends",
+  coaching: "Coaching",
+};
+
+function isCanonicalPaneHash(hash: string) {
+  return PANE_IDS.some((pane) => paneHash(pane) === hash);
+}
 
 const WEEK_DATES = [
   "2026-08-24",
@@ -517,9 +548,11 @@ function DemoGuide({
 function ContextRail({
   context,
   plannedWorkouts,
+  surface,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
+  surface: PaneId;
 }) {
   const { observations } = context;
   const profile = context.athlete.profile;
@@ -530,54 +563,60 @@ function ContextRail({
     })
     .reduce((total, result) => total + result.summary.distanceKm, 0);
   return (
-    <aside className="context-rail" aria-label="Shared coaching context">
-      <section className="race-card">
-        <span className="eyebrow">Target Race</span>
-        <h2>{context.targetRace.name}</h2>
-        <p>{formatDate(context.targetRace.date)}</p>
-        <div className="race-objective">
-          <span>Objective</span>
-          <strong>
-            {formatObjective(context.targetRace.objectiveSeconds)}
-          </strong>
-        </div>
-      </section>
-      <section className="profile-card" aria-labelledby="profile-title">
-        <div className="section-heading section-heading--small">
-          <div>
-            <span className="eyebrow">Shared profile</span>
-            <h2 id="profile-title">Athlete Profile</h2>
+    <div className="context-rail">
+      {surface === "today" && (
+        <section className="race-card">
+          <span className="eyebrow">Target Race</span>
+          <h2>{context.targetRace.name}</h2>
+          <p>{formatDate(context.targetRace.date)}</p>
+          <div className="race-objective">
+            <span>Objective</span>
+            <strong>
+              {formatObjective(context.targetRace.objectiveSeconds)}
+            </strong>
           </div>
-        </div>
-        <dl className="profile-list">
-          <div>
-            <dt>Normal weekly volume</dt>
-            <dd>
-              {profile.normalWeeklyVolumeKm.value.min}–
-              {profile.normalWeeklyVolumeKm.value.max} km
-            </dd>
+        </section>
+      )}
+      {surface === "coaching" && (
+        <section className="profile-card" aria-labelledby="profile-title">
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">Shared profile</span>
+              <h2 id="profile-title">Athlete Profile</h2>
+            </div>
           </div>
-          <div>
-            <dt>Recent half-marathon</dt>
-            <dd>{formatObjective(profile.recentHalfMarathonSeconds.value)}</dd>
-          </div>
-          <div>
-            <dt>Threshold pace</dt>
-            <dd>{formatPace(profile.thresholdPaceSecondsPerKm.value)}/km</dd>
-          </div>
-          <div>
-            <dt>Preferred long run</dt>
-            <dd>{profile.preferredLongRunDay.value}</dd>
-          </div>
-          <div>
-            <dt>Maximum weekday session</dt>
-            <dd>
-              {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
-            </dd>
-          </div>
-        </dl>
-      </section>
-      {context.activeCoachingTopics.length > 0 && (
+          <dl className="profile-list">
+            <div>
+              <dt>Normal weekly volume</dt>
+              <dd>
+                {profile.normalWeeklyVolumeKm.value.min}–
+                {profile.normalWeeklyVolumeKm.value.max} km
+              </dd>
+            </div>
+            <div>
+              <dt>Recent half-marathon</dt>
+              <dd>
+                {formatObjective(profile.recentHalfMarathonSeconds.value)}
+              </dd>
+            </div>
+            <div>
+              <dt>Threshold pace</dt>
+              <dd>{formatPace(profile.thresholdPaceSecondsPerKm.value)}/km</dd>
+            </div>
+            <div>
+              <dt>Preferred long run</dt>
+              <dd>{profile.preferredLongRunDay.value}</dd>
+            </div>
+            <div>
+              <dt>Maximum weekday session</dt>
+              <dd>
+                {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
+      {surface === "trends" && context.activeCoachingTopics.length > 0 && (
         <section className="monitoring-card" aria-labelledby="monitoring-title">
           <div className="section-heading section-heading--small">
             <div>
@@ -612,62 +651,64 @@ function ContextRail({
           </div>
         </section>
       )}
-      <section className="evidence-card">
-        <div className="section-heading section-heading--small">
-          <div>
-            <span className="eyebrow">Shared evidence</span>
-            <h2>How you’re arriving</h2>
+      {surface === "trends" && (
+        <section className="evidence-card">
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">Shared evidence</span>
+              <h2>How you’re arriving</h2>
+            </div>
           </div>
-        </div>
-        <dl className="metrics-list">
-          <div>
-            <dt>Recovery</dt>
-            <dd>{observations.recovery.percent}%</dd>
-            <small>
-              {formatClassification(observations.recovery.classification)}
-            </small>
-          </div>
-          <div>
-            <dt>Load ratio</dt>
-            <dd>{observations.trainingLoad.ratio.toFixed(2)}</dd>
-            <small>
-              {observations.trainingLoad.shortTerm} short /{" "}
-              {observations.trainingLoad.longTerm} long
-            </small>
-          </div>
-          <div>
-            <dt>Sleep</dt>
-            <dd>{formatSleep(observations.sleep.durationMinutes)}</dd>
-            <small>Score {observations.sleep.score}</small>
-          </div>
-          <div>
-            <dt>HRV</dt>
-            <dd>{observations.sleepHrvMs.value} ms</dd>
-            <small>
-              Usual {observations.sleepHrvMs.syntheticNormalRange[0]}–
-              {observations.sleepHrvMs.syntheticNormalRange[1]} ms
-            </small>
-          </div>
-          <div>
-            <dt>Resting heart rate</dt>
-            <dd>{observations.restingHeartRateBpm} bpm</dd>
-            <small>Within the seeded normal context</small>
-          </div>
-          <div>
-            <dt>Daily stress</dt>
-            <dd>{formatClassification(observations.dailyStress)}</dd>
-            <small>No broad stress signal</small>
-          </div>
-        </dl>
-        <p className="evidence-balance">
-          Load and recovery support caution. Sleep, HRV, resting heart rate, and
-          stress remain within the seeded normal context.
-        </p>
-        <small className="provenance-label">
-          Seeded synthetic observations
-        </small>
-      </section>
-      {context.recentAthleteFeedback.length > 0 && (
+          <dl className="metrics-list">
+            <div>
+              <dt>Recovery</dt>
+              <dd>{observations.recovery.percent}%</dd>
+              <small>
+                {formatClassification(observations.recovery.classification)}
+              </small>
+            </div>
+            <div>
+              <dt>Load ratio</dt>
+              <dd>{observations.trainingLoad.ratio.toFixed(2)}</dd>
+              <small>
+                {observations.trainingLoad.shortTerm} short /{" "}
+                {observations.trainingLoad.longTerm} long
+              </small>
+            </div>
+            <div>
+              <dt>Sleep</dt>
+              <dd>{formatSleep(observations.sleep.durationMinutes)}</dd>
+              <small>Score {observations.sleep.score}</small>
+            </div>
+            <div>
+              <dt>HRV</dt>
+              <dd>{observations.sleepHrvMs.value} ms</dd>
+              <small>
+                Usual {observations.sleepHrvMs.syntheticNormalRange[0]}–
+                {observations.sleepHrvMs.syntheticNormalRange[1]} ms
+              </small>
+            </div>
+            <div>
+              <dt>Resting heart rate</dt>
+              <dd>{observations.restingHeartRateBpm} bpm</dd>
+              <small>Within the seeded normal context</small>
+            </div>
+            <div>
+              <dt>Daily stress</dt>
+              <dd>{formatClassification(observations.dailyStress)}</dd>
+              <small>No broad stress signal</small>
+            </div>
+          </dl>
+          <p className="evidence-balance">
+            Load and recovery support caution. Sleep, HRV, resting heart rate,
+            and stress remain within the seeded normal context.
+          </p>
+          <small className="provenance-label">
+            Seeded synthetic observations
+          </small>
+        </section>
+      )}
+      {surface === "coaching" && context.recentAthleteFeedback.length > 0 && (
         <section className="feedback-card" aria-labelledby="feedback-title">
           <div className="section-heading section-heading--small">
             <div>
@@ -716,7 +757,7 @@ function ContextRail({
           </ol>
         </section>
       )}
-      {context.recentAdaptationHistory.length > 0 && (
+      {surface === "coaching" && context.recentAdaptationHistory.length > 0 && (
         <section
           className="adaptation-history-card"
           aria-labelledby="adaptation-history-title"
@@ -748,36 +789,38 @@ function ContextRail({
           </ol>
         </section>
       )}
-      <section className="recent-training-card">
-        <div className="section-heading section-heading--small">
-          <div>
-            <span className="eyebrow">Synthetic observation history</span>
-            <h2>Recent training</h2>
+      {surface === "trends" && (
+        <section className="recent-training-card">
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">Synthetic observation history</span>
+              <h2>Recent training</h2>
+            </div>
           </div>
-        </div>
-        <p className="recent-training-summary">
-          {priorWeekDistanceKm} km from 18–23 August
-        </p>
-        <ol className="recent-training-list">
-          {context.recentTraining.map((result) => {
-            const date = result.startedAt.slice(0, 10);
-            const workout = plannedWorkouts.find(
-              ({ id }) => id === result.plannedWorkoutId,
-            );
-            return (
-              <li key={result.id}>
-                <time dateTime={date}>{formatShortDate(date)}</time>
-                <span>{workout?.title ?? "Recorded workout"}</span>
-                <strong>
-                  {result.summary.distanceKm} km
-                  {result.status === "partial" ? " · partial" : ""}
-                </strong>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-    </aside>
+          <p className="recent-training-summary">
+            {priorWeekDistanceKm} km from 18–23 August
+          </p>
+          <ol className="recent-training-list">
+            {context.recentTraining.map((result) => {
+              const date = result.startedAt.slice(0, 10);
+              const workout = plannedWorkouts.find(
+                ({ id }) => id === result.plannedWorkoutId,
+              );
+              return (
+                <li key={result.id}>
+                  <time dateTime={date}>{formatShortDate(date)}</time>
+                  <span>{workout?.title ?? "Recorded workout"}</span>
+                  <strong>
+                    {result.summary.distanceKm} km
+                    {result.status === "partial" ? " · partial" : ""}
+                  </strong>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -924,6 +967,7 @@ export function ReviewModal({
 
 export function WorkspaceApp({
   application,
+  paneNavigation,
   reviewCoordinator,
   initialNotice,
   initialDurability,
@@ -956,6 +1000,156 @@ export function WorkspaceApp({
     toolActivityStore.getSnapshot,
     toolActivityStore.getSnapshot,
   );
+  const selectedPane = useSyncExternalStore(
+    paneNavigation.subscribe,
+    paneNavigation.getSelectedPane,
+    paneNavigation.getSelectedPane,
+  );
+  const panesRef = useRef<HTMLDivElement>(null);
+  const paneRefs = useRef<Record<PaneId, HTMLElement | null>>({
+    today: null,
+    trends: null,
+    coaching: null,
+  });
+  const scrollFrameRef = useRef<number | null>(null);
+
+  const replacePaneHash = useCallback((pane: PaneId) => {
+    const nextHash = paneHash(pane);
+    if (window.location.hash === nextHash) return;
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${nextHash}`,
+    );
+  }, []);
+
+  const revealMobilePane = useCallback((behavior: ScrollBehavior) => {
+    const container = panesRef.current;
+    if (!container) return;
+    const paneTop = container.getBoundingClientRect().top + window.scrollY;
+    if (window.scrollY <= paneTop) return;
+    window.scrollTo({ top: paneTop, behavior });
+  }, []);
+
+  const moveToPane = useCallback(
+    (pane: PaneId, forceInstant = false) => {
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      const behavior: ScrollBehavior =
+        forceInstant || reduceMotion ? "auto" : "smooth";
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        const container = panesRef.current;
+        if (!container) return;
+        container.scrollTo({
+          left: PANE_IDS.indexOf(pane) * container.clientWidth,
+          behavior,
+        });
+        revealMobilePane(behavior);
+        return;
+      }
+      paneRefs.current[pane]?.scrollIntoView({ behavior, block: "start" });
+    },
+    [revealMobilePane],
+  );
+
+  const selectPane = useCallback(
+    (pane: PaneId, forceInstant = false) => {
+      paneNavigation.selectPane(pane);
+      replacePaneHash(pane);
+      moveToPane(pane, forceInstant);
+    },
+    [moveToPane, paneNavigation, replacePaneHash],
+  );
+
+  useEffect(() => {
+    const restoredPane = paneIdFromHash(window.location.hash);
+    paneNavigation.restorePane(restoredPane);
+    if (!isCanonicalPaneHash(window.location.hash)) {
+      replacePaneHash(restoredPane);
+    }
+    moveToPane(restoredPane, true);
+
+    const onHashChange = () => {
+      const pane = paneIdFromHash(window.location.hash);
+      paneNavigation.restorePane(pane);
+      if (!isCanonicalPaneHash(window.location.hash)) replacePaneHash(pane);
+      moveToPane(pane, true);
+    };
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const onBreakpointChange = () =>
+      moveToPane(paneNavigation.getSelectedPane(), true);
+    window.addEventListener("hashchange", onHashChange);
+    mobileQuery.addEventListener("change", onBreakpointChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+      mobileQuery.removeEventListener("change", onBreakpointChange);
+    };
+  }, [moveToPane, paneNavigation, replacePaneHash]);
+
+  useEffect(() => {
+    const updateFromGeometry = () => {
+      scrollFrameRef.current = null;
+      let pane: PaneId;
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        const container = panesRef.current;
+        if (!container || container.clientWidth === 0) return;
+        const index = Math.max(
+          0,
+          Math.min(
+            PANE_IDS.length - 1,
+            Math.round(container.scrollLeft / container.clientWidth),
+          ),
+        );
+        pane = PANE_IDS[index];
+      } else {
+        const readingLine = 150;
+        pane = "today";
+        let closestDistance = Number.POSITIVE_INFINITY;
+        for (const candidate of PANE_IDS) {
+          const section = paneRefs.current[candidate];
+          if (section) {
+            const distance = Math.abs(
+              section.getBoundingClientRect().top - readingLine,
+            );
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              pane = candidate;
+            }
+          }
+        }
+      }
+      const previousPane = paneNavigation.getSelectedPane();
+      paneNavigation.restorePane(pane);
+      replacePaneHash(pane);
+      if (
+        pane !== previousPane &&
+        window.matchMedia("(max-width: 760px)").matches
+      ) {
+        const behavior = window.matchMedia("(prefers-reduced-motion: reduce)")
+          .matches
+          ? "auto"
+          : "smooth";
+        revealMobilePane(behavior);
+      }
+    };
+    const scheduleUpdate = () => {
+      if (scrollFrameRef.current !== null) return;
+      scrollFrameRef.current = window.requestAnimationFrame(updateFromGeometry);
+    };
+    const container = panesRef.current;
+    container?.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      container?.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, [paneNavigation, replacePaneHash, revealMobilePane]);
   useEffect(() => {
     if (reviewState.status !== "reviewing") return;
     setSelectedWorkout(null);
@@ -1016,8 +1210,12 @@ export function WorkspaceApp({
       <header className="topbar">
         <a
           className="brand"
-          href="#training-plan"
+          href="#today"
           aria-label="Your Last Coach home"
+          onClick={(event) => {
+            event.preventDefault();
+            selectPane("today");
+          }}
         >
           <span className="brand-mark" aria-hidden="true">
             Y
@@ -1059,59 +1257,138 @@ export function WorkspaceApp({
         </div>
       )}
 
-      <main className="workspace" id="training-plan">
-        <section className="plan-column">
-          <header className="plan-hero">
-            <div>
-              <span className="eyebrow">
-                Shared Coaching Workspace · {state.athlete.displayName}
-              </span>
-              <h1>Your Training Plan</h1>
-              <p>
-                Build aerobic strength, absorb the work, and arrive ready for{" "}
-                {state.targetRace.name}.
-              </p>
-            </div>
-            <div className="hero-meta">
-              <span>{state.trainingPhase.name}</span>
-              <strong>
-                {formatClock(state.clock.now, state.clock.timeZone)}
-              </strong>
-              <small>Plan version {state.trainingPlan.planVersion}</small>
-            </div>
-          </header>
+      <main className="workspace-shell" id="training-plan">
+        <nav className="pane-nav" aria-label="Workspace sections">
+          {PANE_IDS.map((pane) => (
+            <button
+              key={pane}
+              className="pane-nav__button"
+              aria-label={`Show ${PANE_LABELS[pane]} pane`}
+              aria-current={selectedPane === pane ? "page" : undefined}
+              onClick={() => selectPane(pane)}
+            >
+              <span className="pane-nav__dot" aria-hidden="true" />
+              <span className="pane-nav__label">{PANE_LABELS[pane]}</span>
+            </button>
+          ))}
+        </nav>
 
-          <nav className="view-switch" aria-label="Training Plan view">
-            {(["week", "month"] as const).map((planView) => (
-              <button
-                key={planView}
-                aria-pressed={view === planView}
-                onClick={() => setView(planView)}
-              >
-                {planView === "week" ? "Week" : "Month"}
-              </button>
-            ))}
-          </nav>
+        <div
+          ref={panesRef}
+          className="workspace-panes"
+          role="group"
+          aria-label="Workspace panes"
+          tabIndex={0}
+        >
+          <section
+            ref={(element) => {
+              paneRefs.current.today = element;
+            }}
+            className="workspace-pane"
+            id="today"
+            aria-label="Today"
+          >
+            <div className="workspace workspace--today">
+              <section className="plan-column">
+                <header className="plan-hero">
+                  <div>
+                    <span className="eyebrow">
+                      Shared Coaching Workspace · {state.athlete.displayName}
+                    </span>
+                    <h1>Your Training Plan</h1>
+                    <p>
+                      Build aerobic strength, absorb the work, and arrive ready
+                      for {state.targetRace.name}.
+                    </p>
+                  </div>
+                  <div className="hero-meta">
+                    <span>{state.trainingPhase.name}</span>
+                    <strong>
+                      {formatClock(state.clock.now, state.clock.timeZone)}
+                    </strong>
+                    <small>Plan version {state.trainingPlan.planVersion}</small>
+                  </div>
+                </header>
 
-          {view === "week" ? (
-            <WeekPlan
-              workouts={week.plannedWorkouts}
-              currentDate={state.clock.now.slice(0, 10)}
-              onSelect={setSelectedWorkout}
-              adaptedWorkoutIds={adaptedWorkoutIds}
-            />
-          ) : (
-            <MonthPlan
-              workouts={month.plannedWorkouts}
-              onSelect={setSelectedWorkout}
-              adaptedWorkoutIds={adaptedWorkoutIds}
-            />
-          )}
-        </section>
-        <ContextRail
-          context={athleteContext.data}
-          plannedWorkouts={month.plannedWorkouts}
-        />
+                <nav className="view-switch" aria-label="Training Plan view">
+                  {(["week", "month"] as const).map((planView) => (
+                    <button
+                      key={planView}
+                      aria-pressed={view === planView}
+                      onClick={() => setView(planView)}
+                    >
+                      {planView === "week" ? "Week" : "Month"}
+                    </button>
+                  ))}
+                </nav>
+
+                {view === "week" ? (
+                  <WeekPlan
+                    workouts={week.plannedWorkouts}
+                    currentDate={state.clock.now.slice(0, 10)}
+                    onSelect={setSelectedWorkout}
+                    adaptedWorkoutIds={adaptedWorkoutIds}
+                  />
+                ) : (
+                  <MonthPlan
+                    workouts={month.plannedWorkouts}
+                    onSelect={setSelectedWorkout}
+                    adaptedWorkoutIds={adaptedWorkoutIds}
+                  />
+                )}
+              </section>
+              <ContextRail
+                context={athleteContext.data}
+                plannedWorkouts={month.plannedWorkouts}
+                surface="today"
+              />
+            </div>
+          </section>
+
+          <section
+            ref={(element) => {
+              paneRefs.current.trends = element;
+            }}
+            className="workspace-pane"
+            id="trends"
+            aria-label="Trends"
+          >
+            <div className="pane-heading">
+              <span className="eyebrow">Shared Coaching Workspace</span>
+              <h2>Trends</h2>
+              <p>Recent Coaching Evidence from the current training build.</p>
+            </div>
+            <div className="workspace workspace--single">
+              <ContextRail
+                context={athleteContext.data}
+                plannedWorkouts={month.plannedWorkouts}
+                surface="trends"
+              />
+            </div>
+          </section>
+
+          <section
+            ref={(element) => {
+              paneRefs.current.coaching = element;
+            }}
+            className="workspace-pane"
+            id="coaching"
+            aria-label="Coaching"
+          >
+            <div className="pane-heading">
+              <span className="eyebrow">Shared Coaching Workspace</span>
+              <h2>Coaching</h2>
+              <p>Athlete Profile and the latest shared coaching context.</p>
+            </div>
+            <div className="workspace workspace--single">
+              <ContextRail
+                context={athleteContext.data}
+                plannedWorkouts={month.plannedWorkouts}
+                surface="coaching"
+              />
+            </div>
+          </section>
+        </div>
       </main>
 
       {!resetOpen && reviewState.status !== "reviewing" && selectedWorkout && (
