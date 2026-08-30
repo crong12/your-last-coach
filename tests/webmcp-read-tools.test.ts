@@ -422,7 +422,32 @@ describe("WebMCP coaching tools", () => {
   });
 
   it("stores one non-mutating fallback cancellation when the host aborts", async () => {
-    const application = await createApplication();
+    const fixtureSource = createDemoCoachingContextSource();
+    const initialState = structuredClone(await fixtureSource.loadContext());
+    initialState.trainingPlan.planVersion = 2;
+    let saveStarted!: () => void;
+    let releaseSave!: () => void;
+    const saveStartedPromise = new Promise<void>((resolve) => {
+      saveStarted = resolve;
+    });
+    const saveReleasePromise = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const application = createWorkspaceApplication({
+      initialState,
+      fixtureSource,
+      repository: {
+        async load() {
+          return null;
+        },
+        async save(_workspace: PersistedWorkspace) {
+          saveStarted();
+          await saveReleasePromise;
+          return "persistent";
+        },
+        async clear() {},
+      },
+    });
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
@@ -434,11 +459,14 @@ describe("WebMCP coaching tools", () => {
     );
     const controller = new AbortController();
 
-    await tools.open_workout_adaptation_review.execute(
+    const opening = tools.open_workout_adaptation_review.execute(
       reviewProposal() as unknown as Record<string, unknown>,
       { signal: controller.signal },
     );
+    await saveStartedPromise;
     controller.abort();
+    releaseSave();
+    await opening;
     await expect.poll(() => coordinator.getState()).toEqual({ status: "idle" });
 
     await expect(
@@ -794,12 +822,17 @@ describe("WebMCP coaching tools", () => {
     ).resolves.toMatchObject({ status: "error", code: "stale_plan" });
 
     coordinator.open(reviewProposal());
-    await expect(
-      tool.execute(
-        reviewProposal() as unknown as Record<string, unknown>,
-        execution,
-      ),
-    ).resolves.toMatchObject({ status: "error", code: "busy" });
+    const duplicate = tool.execute(
+      reviewProposal() as unknown as Record<string, unknown>,
+      execution,
+    );
+    await Promise.resolve();
+    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+    coordinator.discussFurther();
+    await expect(duplicate).resolves.toEqual({
+      status: "discuss_further",
+      reviewId: "review:webmcp",
+    });
   });
 
   it("registers three read tools and the retry-safe feedback mutation", async () => {

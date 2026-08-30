@@ -3,7 +3,10 @@ import type {
   PlannedWorkout,
   WorkspaceState,
 } from "./types";
-import { validatePendingAdaptationProposal } from "./review";
+import {
+  collectWorkspaceEvidenceRefs,
+  validatePendingAdaptationProposal,
+} from "./review";
 
 const WORKOUT_TYPES = new Set([
   "easy",
@@ -885,21 +888,7 @@ export function validateWorkspaceState(value: unknown): {
     }
   }
   validateCoachingTopics(value.coachingTopics, topicEvidenceRefs, errors);
-  const evidenceRefs = new Set<string>([
-    ...topicEvidenceRefs,
-    ...workoutIds.values(),
-  ]);
-  for (const workoutId of workoutIds)
-    evidenceRefs.add(`planned-workout:${workoutId}`);
-  for (const ref of [
-    "observation:training-load",
-    "observation:recovery",
-    "observation:sleep",
-    "observation:sleep-hrv",
-    "observation:resting-heart-rate",
-    "observation:daily-stress",
-  ])
-    evidenceRefs.add(ref);
+  const evidenceRefs = collectWorkspaceEvidenceRefs(value);
   const pending = value.pendingAdaptationProposal;
   if (pending !== undefined) {
     const trainingPlan = isRecord(value.trainingPlan)
@@ -943,6 +932,11 @@ export function validateWorkspaceState(value: unknown): {
     [...appliedReviewIds].some((reviewId) => !receiptReviewIds.has(reviewId))
   ) {
     errors.push("Applied review identifiers must match adaptation receipts");
+  }
+  if (
+    [...receiptReviewIds].some((reviewId) => declinedReviewIds.has(reviewId))
+  ) {
+    errors.push("terminal adaptation review IDs must be unique");
   }
   const pendingReviewId =
     isRecord(pending) &&

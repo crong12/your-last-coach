@@ -276,7 +276,7 @@ Controlled development harness only: a separate pending-call interface may be na
 }
 ```
 
-The named properties guarantee exactly one recommendation and one alternative. The app validates distinct option IDs, the expected `planVersion`, and every referenced Planned Workout. `get_training_plan` makes `planVersion` and stable workout IDs prominent; context reads return reusable evidence references. Rejections identify the invalid field and expected correction so the Coach Agent can retry.
+The named properties guarantee exactly one recommendation and one alternative. The app validates distinct option IDs, the expected `planVersion`, every referenced Planned Workout, and evidence references returned by the context selectors. `get_training_plan` makes `planVersion` and stable workout IDs prominent; context reads return reusable evidence references. Rejections identify the invalid field and expected correction so the Coach Agent can retry.
 
 ## Review lifecycle and mutation rules
 
@@ -286,7 +286,7 @@ The named properties guarantee exactly one recommendation and one alternative. T
 - Approval atomically applies the selected Workout Adaptation, increments `planVersion`, stores the terminal outcome, and settles the review.
 - The applied result identifies the review, cited evidence references, selected option identity, affected Planned Workout before/after values, application time, and plan versions before and after. This becomes Adaptation History. It excludes proposal rationale, free-form reasoning, and the discarded alternative.
 - `reviewId` and `requestId` are idempotency keys; reuse cannot apply or record twice.
-- **Keep current plan** clears the pending proposal, records a durable declined decision, and returns `declined` without changing the Training Plan. `discuss_further` remains distinct from decline. Cancellation, timeout, stale-plan change, and reset return `cancelled` where the fallback delivery is applicable. A published fallback proposal survives registration/page teardown and reload with its persisted expiry; a controlled-development pending call retains waiter-specific abort and teardown cancellation.
+- **Keep current plan** clears the pending proposal, records a durable declined decision, and returns `declined` without changing the Training Plan. `discuss_further` remains distinct from decline. Cancellation, timeout, stale-plan change, and reset return `cancelled` where the fallback delivery is applicable; a reset cancellation remains available for one exact-once read after the reset transaction. A published fallback proposal survives registration/page teardown and reload with its persisted expiry; a controlled-development pending call retains waiter-specific abort and teardown cancellation.
 - The shipped open/read fallback path uses the same proposal, validation, preview, approval, application, and idempotency semantics end to end.
 - A controlled development harness may exercise a pending-call path with the same application command for settlement tests; it is outside the shipped six-tool contract and is not a runtime registration choice.
 

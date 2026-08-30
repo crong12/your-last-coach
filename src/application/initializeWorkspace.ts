@@ -28,6 +28,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function migratePersistedWorkspace(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.state)) return value;
+  if ("declinedAdaptations" in value.state) return value;
+  return {
+    ...value,
+    state: {
+      ...value.state,
+      declinedAdaptations: [],
+    },
+  };
+}
+
 function isPersistedWorkspace(value: unknown): value is {
   schemaVersion: 1;
   seedVersion: "demo-athlete-v1";
@@ -107,15 +119,16 @@ export async function initializeWorkspace(
   options: InitializeWorkspaceOptions,
 ): Promise<InitializedWorkspace> {
   const saved = await options.repository.load();
-  if (isPersistedWorkspace(saved)) {
-    const pending = saved.state.pendingAdaptationProposal;
+  const migratedSaved = migratePersistedWorkspace(saved);
+  if (isPersistedWorkspace(migratedSaved)) {
+    const pending = migratedSaved.state.pendingAdaptationProposal;
     const expired =
       pending !== undefined &&
       Number.isFinite(Date.parse(pending.expiresAt)) &&
       Date.parse(pending.expiresAt) <= (options.now?.() ?? Date.now());
     if (expired) {
       const { pendingAdaptationProposal: _pending, ...stateWithoutPending } =
-        saved.state;
+        migratedSaved.state;
       const state = deepFreeze(structuredClone(stateWithoutPending));
       const timeoutResult: PersistedFallbackResult = {
         status: "cancelled",
@@ -149,12 +162,14 @@ export async function initializeWorkspace(
       };
     }
     return {
-      state: deepFreeze(structuredClone(saved.state)),
+      state: deepFreeze(structuredClone(migratedSaved.state)),
       notice: null,
       durability: options.repository.durability ?? "persistent",
-      ...(saved.undeliveredFallbackResult === undefined
+      ...(migratedSaved.undeliveredFallbackResult === undefined
         ? {}
-        : { undeliveredFallbackResult: saved.undeliveredFallbackResult }),
+        : {
+            undeliveredFallbackResult: migratedSaved.undeliveredFallbackResult,
+          }),
     };
   }
 

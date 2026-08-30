@@ -203,9 +203,10 @@ type PersistedWorkspace = {
 };
 ```
 
-There is no schema migration. An incomplete or invalid schema-v1 snapshot is
-rejected and replaced with the exact demo fixture through the existing refresh
-path.
+Schema-v1 envelopes from before the declined-decision field are migrated by
+defaulting missing `declinedAdaptations` to an empty array. Other incomplete or
+invalid snapshots are rejected and replaced with the exact demo fixture through
+the existing refresh path.
 
 All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
 
@@ -372,12 +373,12 @@ Initialization order:
 6. Register the six fallback tools when `document.modelContext` is available. The pending-call review mode is limited to controlled development tests and is not selected by the shipped app.
 7. Publish `connected`, `unavailable`, or `error` status to the UI.
 
-An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. The current schema has no migration path; a future schema version would require an explicit migration decision.
+An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. Migration is limited to the compatible schema-v1 default above; a future schema version would require an explicit migration decision.
 
 **Reset demo** uses a lightweight in-page confirmation. Approval of reset:
 
-- cancels an active controlled review with reason `reset` and clears a published fallback proposal;
-- clears the persisted envelope and undelivered fallback result;
+- cancels an active controlled review with reason `reset` and clears its published fallback proposal;
+- clears the persisted envelope while preserving one undelivered fallback `cancelled` result when reset settled a fallback review;
 - clears new Athlete Feedback, plan changes, idempotency records, receipts, selection, and preview;
 - restores the exact seeded Athlete Profile, Coaching Topic, fixed clock, and initial `planVersion`;
 - leaves browser capability detection and tool definitions available.

@@ -65,6 +65,85 @@ export interface PendingReviewValidationContext {
   evidenceRefs: Set<string>;
 }
 
+export function collectWorkspaceEvidenceRefs(value: unknown): Set<string> {
+  const refs = new Set<string>();
+  if (!isRecord(value)) return refs;
+
+  const add = (prefix: string, identifier: unknown) => {
+    if (typeof identifier === "string" && identifier.trim() !== "") {
+      refs.add(`${prefix}:${identifier}`);
+    }
+  };
+  const addEntries = (
+    field: string,
+    prefix: string,
+    identifierField = "id",
+  ) => {
+    const entries = value[field];
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      if (isRecord(entry)) add(prefix, entry[identifierField]);
+    }
+  };
+  const addEntriesFrom = (entries: unknown, prefix: string) => {
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      if (isRecord(entry)) add(prefix, entry.id);
+    }
+  };
+
+  const athlete = value.athlete;
+  if (isRecord(athlete)) add("athlete", athlete.id);
+  const targetRace = value.targetRace;
+  if (isRecord(targetRace)) add("target-race", targetRace.id);
+  const trainingPhase = value.trainingPhase;
+  if (isRecord(trainingPhase)) add("training-phase", trainingPhase.id);
+  const trainingPlan = value.trainingPlan;
+  if (isRecord(trainingPlan)) {
+    if (typeof trainingPlan.planVersion === "number") {
+      add("training-plan", `version:${trainingPlan.planVersion}`);
+    }
+    addEntriesFrom(trainingPlan.plannedWorkouts, "planned-workout");
+  }
+
+  for (const ref of [
+    "observation:training-load",
+    "observation:recovery",
+    "observation:sleep",
+    "observation:sleep-hrv",
+    "observation:resting-heart-rate",
+    "observation:daily-stress",
+  ]) {
+    refs.add(ref);
+  }
+  addEntries("workoutResults", "workout-result");
+  addEntries("athleteFeedback", "athlete-feedback");
+  addEntries("coachingTopics", "coaching-topic");
+
+  const topics = value.coachingTopics;
+  if (Array.isArray(topics)) {
+    for (const topic of topics) {
+      if (!isRecord(topic) || !Array.isArray(topic.evidenceRefs)) continue;
+      for (const ref of topic.evidenceRefs) {
+        if (typeof ref === "string" && ref.trim() !== "") refs.add(ref);
+      }
+    }
+  }
+
+  const receipts = value.adaptationReceipts;
+  if (Array.isArray(receipts)) {
+    for (const receipt of receipts) {
+      if (!isRecord(receipt)) continue;
+      add("plan-adaptation", receipt.reviewId);
+      if (!Array.isArray(receipt.evidenceRefs)) continue;
+      for (const ref of receipt.evidenceRefs) {
+        if (typeof ref === "string" && ref.trim() !== "") refs.add(ref);
+      }
+    }
+  }
+  return refs;
+}
+
 const WORKOUT_TYPES = new Set<WorkoutType>([
   "easy",
   "recovery",

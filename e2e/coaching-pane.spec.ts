@@ -499,6 +499,42 @@ test("opens a full-push adaptation review with a durable back route", async ({
   await expect(
     page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
+
+  const reopenedFromAgent = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(reopenedFromAgent).toMatchObject({
+    status: "review_opened",
+    reviewId: "review:coaching-pane",
+  });
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
+  );
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
+
   await page.screenshot({
     path: "test-results/issue-66-mobile-coaching-before-decision.png",
     fullPage: false,
@@ -532,6 +568,20 @@ test("opens a full-push adaptation review with a durable back route", async ({
   await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
     1,
   );
+  const returnedPaneNav = page.locator(".pane-nav");
+  const returnedCoachingHeading = page.getByRole("heading", {
+    name: "Coaching",
+    exact: true,
+  });
+  const [returnedPaneNavBox, returnedCoachingHeadingBox] = await Promise.all([
+    returnedPaneNav.boundingBox(),
+    returnedCoachingHeading.boundingBox(),
+  ]);
+  expect(returnedPaneNavBox).not.toBeNull();
+  expect(returnedCoachingHeadingBox).not.toBeNull();
+  expect(
+    returnedPaneNavBox!.y + returnedPaneNavBox!.height,
+  ).toBeLessThanOrEqual(returnedCoachingHeadingBox!.y);
   await page.screenshot({
     path: "test-results/issue-66-mobile-coaching-after-decision.png",
     fullPage: false,
@@ -647,6 +697,25 @@ test("opens the same review from WebMCP on desktop and keeps the action bar read
   await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
     1,
   );
+  const desktopReturnedPaneNav = page.locator(".pane-nav");
+  const desktopReturnedCoachingHeading = page.getByRole("heading", {
+    name: "Coaching",
+    exact: true,
+  });
+  const [desktopReturnedPaneNavBox, desktopReturnedCoachingHeadingBox] =
+    await Promise.all([
+      desktopReturnedPaneNav.boundingBox(),
+      desktopReturnedCoachingHeading.boundingBox(),
+    ]);
+  expect(desktopReturnedPaneNavBox).not.toBeNull();
+  expect(desktopReturnedCoachingHeadingBox).not.toBeNull();
+  expect(
+    desktopReturnedPaneNavBox!.y + desktopReturnedPaneNavBox!.height,
+  ).toBeLessThanOrEqual(desktopReturnedCoachingHeadingBox!.y);
+  await page.screenshot({
+    path: "test-results/issue-66-desktop-coaching-after-decision.png",
+    fullPage: false,
+  });
   await expect(
     page.evaluate(async () => {
       const registrations = (
@@ -728,6 +797,109 @@ test("cuts adaptation motion when reduced motion is requested", async ({
   expect(reducedMotion.scrollBehavior).toBe("auto");
   expect(normalTransitionSeconds).toBeGreaterThan(
     reducedMotion.transitionSeconds,
+  );
+});
+
+test("surfaces memory-only durability when fallback review cannot persist", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    };
+  });
+
+  const opened = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(opened).toMatchObject({
+    status: "review_opened",
+    durability: "memory_only",
+  });
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
+  );
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByText(
+      "Browser storage is unavailable. Changes will last only until this page is reloaded.",
+    ),
+  ).toBeVisible();
+});
+
+test("surfaces memory-only durability when pushed-screen approval cannot persist", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  const opened = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(opened).toMatchObject({ status: "review_opened" });
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await review
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    };
+  });
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByText(
+      "Browser storage is unavailable. Changes will last only until this page is reloaded.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
+    1,
   );
 });
 

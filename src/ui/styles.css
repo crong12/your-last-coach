@@ -770,6 +770,9 @@ button.previous-attempt:hover {
   margin: 5px 0 8px;
   font-size: clamp(32px, 5vw, 48px);
 }
+#coaching-pane-title {
+  scroll-margin-top: 96px;
+}
 .pane-heading p {
   margin: 0;
   color: var(--muted);
@@ -3038,149 +3041,5 @@ h1 {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
-  }
-}
-
-.review-backdrop {
-  padding: 24px;
-}
-
-.review-dialog {
-  position: relative;
-  width: min(920px, 100%);
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  padding: 34px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--paper);
-  box-shadow: 0 28px 80px rgb(36 48 42 / 24%);
-}
-
-.review-dialog > .icon-button {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-}
-
-.review-summary {
-  max-width: 720px;
-  margin: 8px 0 20px;
-  color: var(--ink-soft);
-  font-size: 17px;
-  line-height: 1.6;
-}
-
-.review-evidence {
-  padding: 16px 18px;
-  border-left: 3px solid var(--sea);
-  border-radius: 0 14px 14px 0;
-  background: color-mix(in srgb, var(--sea) 9%, var(--paper));
-}
-
-.review-evidence p,
-.review-evidence ul {
-  margin: 8px 0 0;
-  color: var(--ink-soft);
-  line-height: 1.5;
-}
-
-.review-options {
-  display: grid;
-  grid-template-columns: 1.12fr 1fr;
-  gap: 14px;
-  margin-top: 20px;
-}
-
-.review-option {
-  display: grid;
-  gap: 8px;
-  min-height: 184px;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--paper);
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.review-option--recommendation {
-  border-color: color-mix(in srgb, var(--sea) 55%, var(--line));
-  background: color-mix(in srgb, var(--sea) 8%, var(--paper));
-}
-
-.review-option--selected {
-  outline: 3px solid color-mix(in srgb, var(--sea) 35%, transparent);
-  border-color: var(--sea);
-}
-
-.review-option strong {
-  font-family: "Newsreader", serif;
-  font-size: 25px;
-}
-
-.review-option span:not(.eyebrow),
-.review-option small {
-  line-height: 1.45;
-}
-
-.review-option small {
-  color: var(--ink-soft);
-}
-
-.review-preview {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: 16px;
-  background: var(--canvas);
-}
-
-.review-preview h3,
-.review-preview p {
-  margin: 0;
-}
-
-.review-preview p {
-  margin-top: 4px;
-  color: var(--ink-soft);
-}
-
-.review-preview ol {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.review-preview li {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-
-.review-preview time {
-  color: var(--ink-soft);
-  font-weight: 600;
-}
-
-.review-actions {
-  justify-content: flex-start;
-  margin-top: 20px;
-}
-
-@media (max-width: 760px) {
-  .review-backdrop {
-    padding: 10px;
-  }
-  .review-dialog {
-    max-height: calc(100vh - 20px);
-    padding: 26px 18px;
-  }
-  .review-options {
-    grid-template-columns: 1fr;
   }
 }

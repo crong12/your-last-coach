@@ -30,7 +30,11 @@ export interface WorkspaceRepository {
 }
 
 export type ReviewOpenResult =
-  | { status: "review_opened"; reviewId: string }
+  | {
+      status: "review_opened";
+      reviewId: string;
+      durability?: Durability;
+    }
   | {
       status: "error";
       code: "invalid_input" | "stale_plan" | "busy";

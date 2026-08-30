@@ -17,6 +17,7 @@ import type {
 } from "../domain/types";
 import {
   validateAdaptationOption,
+  collectWorkspaceEvidenceRefs,
   validatePendingAdaptationProposal,
   validateReviewProposal,
   type AdaptationOption,
@@ -126,6 +127,7 @@ export interface WorkspaceApplication {
     proposal: ReviewProposal,
     delivery?: "primary" | "fallback",
   ): Promise<ReviewOpenResult>;
+  getDurability(): Durability;
   persistPendingPlanReview(reviewId: string): Promise<Durability>;
   getPendingAdaptationProposal(): PendingAdaptationProposal | null;
   getAdaptationRecord(reviewId: string): AdaptationRecord;
@@ -187,6 +189,8 @@ export function createWorkspaceApplication(
   } | null = null;
   let reviewGeneration = 0;
   let undeliveredFallbackResult = options.initialUndeliveredFallbackResult;
+  let currentDurability: Durability =
+    options.repository.durability ?? "persistent";
   let persistenceTail: Promise<void> = Promise.resolve();
   let pendingExpiryTimer: ReturnType<typeof setTimeout> | null = null;
   const staleReviewIds = new Set<string>();
@@ -198,37 +202,17 @@ export function createWorkspaceApplication(
     return { openedAt, expiresAt };
   };
 
-  const currentEvidenceRefs = (): Set<string> => {
-    const evidenceRefs = new Set<string>([
-      "observation:training-load",
-      "observation:recovery",
-      "observation:sleep",
-      "observation:sleep-hrv",
-      "observation:resting-heart-rate",
-      "observation:daily-stress",
-      `athlete:${state.athlete.id}`,
-      `target-race:${state.targetRace.id}`,
-      `training-phase:${state.trainingPhase.id}`,
-      `training-plan:version:${state.trainingPlan.planVersion}`,
-    ]);
-    for (const workout of state.trainingPlan.plannedWorkouts) {
-      evidenceRefs.add(`planned-workout:${workout.id}`);
-    }
-    for (const result of state.workoutResults) {
-      evidenceRefs.add(`workout-result:${result.id}`);
-    }
-    for (const feedback of state.athleteFeedback) {
-      evidenceRefs.add(`athlete-feedback:${feedback.id}`);
-    }
-    for (const topic of state.coachingTopics) {
-      evidenceRefs.add(`coaching-topic:${topic.id}`);
-      topic.evidenceRefs.forEach((ref) => evidenceRefs.add(ref));
-    }
-    return evidenceRefs;
-  };
+  const currentEvidenceRefs = (): Set<string> =>
+    collectWorkspaceEvidenceRefs(state);
 
   const publishState = (nextState: WorkspaceState) => {
     state = deepFreeze(structuredClone(nextState));
+    listeners.forEach((listener) => listener());
+  };
+
+  const markDurability = (durability: Durability) => {
+    if (currentDurability === durability) return;
+    currentDurability = durability;
     listeners.forEach((listener) => listener());
   };
 
@@ -241,7 +225,7 @@ export function createWorkspaceApplication(
     persistedState: WorkspaceState,
     fallbackResult = undeliveredFallbackResult,
   ): Promise<Durability> => {
-    let durability: Durability = "persistent";
+    let durability = currentDurability;
     const operation = persistenceTail.then(async () => {
       durability = await options.repository.save({
         schemaVersion: 1,
@@ -252,6 +236,7 @@ export function createWorkspaceApplication(
           ? {}
           : { undeliveredFallbackResult: fallbackResult }),
       });
+      markDurability(durability);
     });
     persistenceTail = operation.catch(() => undefined);
     return operation.then(() => durability);
@@ -515,6 +500,23 @@ export function createWorkspaceApplication(
         retryable: true,
       };
     }
+    if (
+      state.adaptationReceipts.some(
+        ({ reviewId }) => reviewId === proposal.reviewId,
+      ) ||
+      state.declinedAdaptations.some(
+        ({ reviewId }) => reviewId === proposal.reviewId,
+      ) ||
+      staleReviewIds.has(proposal.reviewId)
+    ) {
+      return {
+        status: "error",
+        code: "busy",
+        message:
+          "This Workout Adaptation review already has a terminal decision.",
+        retryable: false,
+      };
+    }
     const validated = validateReviewProposal(proposal, {
       planVersion: state.trainingPlan.planVersion,
       plannedWorkouts: state.trainingPlan.plannedWorkouts,
@@ -540,12 +542,18 @@ export function createWorkspaceApplication(
     };
     publishState({ ...state, pendingAdaptationProposal: pending });
     schedulePendingExpiry(pending);
+    let durability = currentDurability;
     try {
-      await persist(state);
+      durability = await persist(state);
     } catch {
-      // BrowserWorkspaceRepository keeps the current page's state in memory.
+      markDurability("memory_only");
+      durability = "memory_only";
     }
-    return { status: "review_opened", reviewId: validated.proposal.reviewId };
+    return {
+      status: "review_opened",
+      reviewId: validated.proposal.reviewId,
+      ...(durability === "memory_only" ? { durability } : {}),
+    };
   };
 
   const persistPendingPlanReview = async (reviewId: string) => {
@@ -555,7 +563,8 @@ export function createWorkspaceApplication(
     try {
       return await persist(state);
     } catch {
-      return options.repository.durability ?? "memory_only";
+      markDurability("memory_only");
+      return "memory_only";
     }
   };
 
@@ -659,6 +668,7 @@ export function createWorkspaceApplication(
         );
       } catch {
         // Keep the completed decision available in memory for this page.
+        markDurability("memory_only");
       }
       if (delivery === "fallback") undeliveredFallbackResult = result;
     }
@@ -698,6 +708,9 @@ export function createWorkspaceApplication(
     },
     query,
     openPlanReview,
+    getDurability() {
+      return currentDurability;
+    },
     persistPendingPlanReview,
     getPendingAdaptationProposal() {
       return reconcilePendingPlan();
@@ -741,6 +754,7 @@ export function createWorkspaceApplication(
           ? { ...claimed, durability }
           : claimed;
       } catch {
+        markDurability("memory_only");
         undeliveredFallbackResult = claimed;
         return {
           status: "error",
@@ -758,6 +772,18 @@ export function createWorkspaceApplication(
           (receipt) => receipt.reviewId === reviewId,
         );
         if (existing) return replay(existing);
+        if (
+          state.declinedAdaptations.some(
+            (decision) => decision.reviewId === reviewId,
+          )
+        ) {
+          return {
+            status: "error",
+            code: "invalid_input",
+            message: "This Workout Adaptation review was declined.",
+            retryable: false,
+          };
+        }
         if (approvalInFlight) {
           if (approvalInFlight.reviewId === reviewId)
             return approvalInFlight.promise;
@@ -891,6 +917,7 @@ export function createWorkspaceApplication(
           try {
             durability = await persist(nextState, persistedFallbackResult);
           } catch {
+            markDurability("memory_only");
             durability = "memory_only";
           }
           if (
@@ -994,6 +1021,7 @@ export function createWorkspaceApplication(
         try {
           durability = await persist(state);
         } catch {
+          markDurability("memory_only");
           durability = "memory_only";
         }
         return { status: "ok", feedback, durability };
@@ -1001,15 +1029,26 @@ export function createWorkspaceApplication(
       reviewGeneration += 1;
       activePlanReview = null;
       clearPendingExpiryTimer();
-      undeliveredFallbackResult = undefined;
+      const fallbackResultToPreserve = undeliveredFallbackResult;
       let durability: Durability = "persistent";
       try {
         await clearPersisted();
       } catch {
+        markDurability("memory_only");
         durability = "memory_only";
       }
-      durability = options.repository.durability ?? durability;
       state = await options.fixtureSource.loadContext();
+      undeliveredFallbackResult = fallbackResultToPreserve;
+      if (fallbackResultToPreserve !== undefined) {
+        try {
+          durability = await persist(state, fallbackResultToPreserve);
+        } catch {
+          markDurability("memory_only");
+          durability = "memory_only";
+        }
+      }
+      durability =
+        options.repository.durability ?? currentDurability ?? durability;
       listeners.forEach((listener) => listener());
       return { status: "reset", durability };
     }) as WorkspaceApplication["command"],

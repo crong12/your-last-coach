@@ -2622,147 +2622,6 @@ function selectAthleteContextForScreen(
   return application.query({ type: "get_athlete_context" }).data;
 }
 
-export function ReviewModal({
-  coordinator,
-  onApproved,
-}: {
-  coordinator: ReviewCoordinator;
-  onApproved?: (durability: Durability) => void;
-}) {
-  const [approvalError, setApprovalError] = useState<string | null>(null);
-  const review = useSyncExternalStore(
-    coordinator.subscribe,
-    coordinator.getState,
-    coordinator.getState,
-  );
-  const dialogRef = useRef<HTMLElement>(null);
-  const dismiss = () => {
-    if (review.status === "reviewing")
-      void coordinator.dismiss("athlete_dismissed", review.generation);
-  };
-  useModalFocus(dialogRef, dismiss, review.status === "reviewing");
-
-  if (review.status !== "reviewing") return null;
-  const { proposal } = review;
-  const approve = async () => {
-    setApprovalError(null);
-    const result = (await coordinator.approve(review.generation)) as {
-      status: string;
-      durability?: Durability;
-      message?: string;
-    };
-    if (result.status === "approved" && result.durability) {
-      onApproved?.(result.durability);
-    } else if (result.status === "error") {
-      setApprovalError(result.message ?? "The Training Plan was not changed.");
-    }
-  };
-  const optionButton = (
-    option: typeof proposal.recommended,
-    role: "recommendation" | "alternative",
-  ) => {
-    const selected = review.selectedOptionId === option.optionId;
-    const prefix =
-      role === "recommendation" ? "Coach's recommendation" : "Alternative";
-    return (
-      <button
-        className={`review-option review-option--${role} ${selected ? "review-option--selected" : ""}`}
-        aria-pressed={selected}
-        aria-label={`${prefix} — ${option.label}`}
-        {...(role === "recommendation" ? { "data-initial-focus": true } : {})}
-        onClick={() => coordinator.select(option.optionId, review.generation)}
-      >
-        <span className="eyebrow">{prefix}</span>
-        <strong>{option.label}</strong>
-        <span>{option.summary}</span>
-        <small>{option.tradeoff}</small>
-      </button>
-    );
-  };
-
-  return (
-    <div
-      className="dialog-backdrop review-backdrop"
-      role="presentation"
-      onMouseDown={() =>
-        void coordinator.dismiss("athlete_dismissed", review.generation)
-      }
-    >
-      <section
-        ref={dialogRef}
-        className="review-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="review-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <button
-          className="icon-button"
-          onClick={() =>
-            void coordinator.dismiss("athlete_dismissed", review.generation)
-          }
-          aria-label="Close adaptation review"
-        >
-          ×
-        </button>
-        <span className="eyebrow">Coach Recommendation</span>
-        <h2 id="review-title">Review Workout Adaptations</h2>
-        <p className="review-summary">{proposal.rationale.summary}</p>
-        <div className="review-evidence">
-          <strong>
-            {formatClassification(proposal.rationale.confidence)} confidence
-          </strong>
-          <p>{proposal.rationale.counterEvidence}</p>
-          <ul>
-            {proposal.rationale.limitations.map((limitation) => (
-              <li key={limitation}>{limitation}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="review-options">
-          {optionButton(proposal.recommended, "recommendation")}
-          {optionButton(proposal.alternative, "alternative")}
-        </div>
-        {review.preview.length > 0 && (
-          <section className="review-preview" aria-labelledby="preview-title">
-            <h3 id="preview-title">Calendar preview</h3>
-            <p>Selection only. Your Training Plan has not changed.</p>
-            <ol>
-              {review.preview.map((row) => (
-                <li key={`${review.selectedOptionId}-${row.date}`}>
-                  <time dateTime={row.date}>{formatShortDate(row.date)}</time>
-                  <span>
-                    {row.before?.title ?? "Rest"} → {row.after?.title ?? "Rest"}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-        <div className="dialog-actions review-actions">
-          <button
-            className="button button--quiet"
-            disabled={review.applying}
-            onClick={() => void coordinator.discussFurther(review.generation)}
-          >
-            None — discuss further
-          </button>
-          {review.selectedOptionId && (
-            <button
-              className="button button--primary"
-              disabled={review.applying}
-              onClick={approve}
-            >
-              {review.applying ? "Adapting plan…" : "Adapt my plan"}
-            </button>
-          )}
-        </div>
-        {approvalError && <p role="alert">{approvalError}</p>}
-      </section>
-    </div>
-  );
-}
-
 export function WorkspaceApp({
   application,
   paneNavigation,
@@ -2791,6 +2650,11 @@ export function WorkspaceApp({
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [notice, setNotice] = useState(initialNotice);
   const [durability, setDurability] = useState(initialDurability);
+  useEffect(() => {
+    const syncDurability = () => setDurability(application.getDurability());
+    syncDurability();
+    return application.subscribe(syncDurability);
+  }, [application]);
   const latestToolActivity = useSyncExternalStore(
     toolActivityStore.subscribe,
     toolActivityStore.getSnapshot,
@@ -3027,6 +2891,11 @@ export function WorkspaceApp({
           block: "center",
         });
         target?.focus({ preventScroll: true });
+        if (activeRoute.pane === "coaching") {
+          document
+            .getElementById("coaching-pane-title")
+            ?.scrollIntoView({ behavior: "auto", block: "start" });
+        }
       }
     });
     return () => {
@@ -3659,7 +3528,7 @@ export function WorkspaceApp({
             >
               <div className="pane-heading">
                 <span className="eyebrow">Shared Coaching Workspace</span>
-                <h2>Coaching</h2>
+                <h2 id="coaching-pane-title">Coaching</h2>
                 <p>
                   A readable account of Athlete Feedback, Workout Results, and
                   approved Plan Adaptations.

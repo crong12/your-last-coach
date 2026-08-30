@@ -165,6 +165,13 @@ export function createReviewCoordinator({
     getState: () => state,
     open(value, delivery = "primary", signal) {
       if (disposed) return missing();
+      const inputReviewId =
+        typeof value === "object" &&
+        value !== null &&
+        "reviewId" in value &&
+        typeof value.reviewId === "string"
+          ? value.reviewId
+          : null;
       if (
         delivery === "fallback" &&
         application.hasUndeliveredFallbackResult()
@@ -187,6 +194,11 @@ export function createReviewCoordinator({
         if (replayed) return replayed;
       }
       if (state.status === "reviewing") {
+        if (inputReviewId === state.proposal.reviewId) {
+          state = { ...state };
+          publish();
+          return { status: "review_opened", reviewId: inputReviewId };
+        }
         return {
           status: "error",
           code: "busy",
@@ -194,13 +206,6 @@ export function createReviewCoordinator({
           retryable: true,
         };
       }
-      const inputReviewId =
-        typeof value === "object" &&
-        value !== null &&
-        "reviewId" in value &&
-        typeof value.reviewId === "string"
-          ? value.reviewId
-          : null;
       const pending = application.getPendingAdaptationProposal();
       if (pending && pending.proposal.reviewId !== inputReviewId) {
         return {
@@ -283,14 +288,42 @@ export function createReviewCoordinator({
       const opened = this.open(value, delivery, signal) as {
         status: string;
         reviewId?: string;
+        durability?: "persistent" | "memory_only";
       };
       if (opened.status !== "review_opened" || !opened.reviewId) return opened;
       const persisted = await application.openPlanReview(
         value as ReviewProposal,
         delivery,
       );
-      if (persisted.status !== "review_opened") return persisted;
-      return opened;
+      if (persisted.status !== "review_opened") {
+        if (
+          state.status === "reviewing" &&
+          state.proposal.reviewId === opened.reviewId
+        ) {
+          if (timeout) clearTimeout(timeout);
+          timeout = null;
+          removeActiveAbort?.();
+          removeActiveAbort = null;
+          application.deactivatePlanReview(opened.reviewId);
+          state = { status: "idle" };
+          publish();
+        }
+        return persisted;
+      }
+      if (
+        delivery === "fallback" &&
+        state.status === "reviewing" &&
+        state.proposal.reviewId === opened.reviewId
+      ) {
+        removeActiveAbort?.();
+        removeActiveAbort = null;
+      }
+      return {
+        ...opened,
+        ...(persisted.durability === undefined
+          ? {}
+          : { durability: persisted.durability }),
+      };
     },
     select(optionId, generation) {
       if (!current(generation) || state.status !== "reviewing")

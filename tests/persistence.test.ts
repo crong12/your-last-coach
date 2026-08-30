@@ -241,6 +241,38 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
+  it("migrates a prior schema-v1 envelope without declinedAdaptations", async () => {
+    const envelope = await fixtureEnvelope(2);
+    const savedFeedback = {
+      id: "athlete-feedback:legacy-saved",
+      requestId: "legacy-saved",
+      relatedWorkoutId: "planned-2026-08-26-threshold",
+      rawText: "The saved threshold session felt heavy.",
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    };
+    envelope.state.athleteFeedback.push(savedFeedback);
+    envelope.state.processedRequestIds.push(savedFeedback.requestId);
+    envelope.state.trainingPlan.plannedWorkouts[0].title =
+      "Saved easy recovery";
+    delete (envelope.state as unknown as Record<string, unknown>)
+      .declinedAdaptations;
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(initialized.state.declinedAdaptations).toEqual([]);
+    expect(initialized.state.trainingPlan.planVersion).toBe(2);
+    expect(initialized.state.trainingPlan.plannedWorkouts[0].title).toBe(
+      "Saved easy recovery",
+    );
+    expect(initialized.state.athleteFeedback).toContainEqual(savedFeedback);
+  });
+
   it("restores a valid completed undelivered fallback result from schema version 1", async () => {
     const envelope = await approvedEnvelope();
     envelope.undeliveredFallbackResult = {
