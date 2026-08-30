@@ -95,14 +95,6 @@ function historyStateWithFocus(focus: WorkoutOriginReceipt) {
   };
 }
 
-function historyStateWithoutFocus() {
-  const current = window.history.state;
-  if (typeof current !== "object" || current === null) return null;
-  const next = { ...(current as Record<string, unknown>) };
-  delete next[NAVIGATION_FOCUS_STATE_KEY];
-  return next;
-}
-
 const WEEK_DATES = [
   "2026-08-24",
   "2026-08-25",
@@ -2118,21 +2110,16 @@ export function WorkspaceApp({
           const workoutFocus = workoutFocusFromHistoryState(
             window.history.state,
           );
-          if (origin) paneNavigation.restorePane(origin.pane);
-          pendingWorkoutOriginRef.current =
-            restoreCoordinates && workoutFocus?.workoutId === parsed.workoutId
-              ? workoutFocus
-              : null;
-          if (
+          const previousRoute = paneNavigation.getRoute();
+          const shouldRestoreWorkoutFocus =
             restoreCoordinates &&
-            workoutFocus?.workoutId === parsed.workoutId
-          ) {
-            window.history.replaceState(
-              historyStateWithoutFocus(),
-              "",
-              `${window.location.pathname}${window.location.search}${workspaceRouteHash(parsed)}`,
-            );
-          }
+            previousRoute.kind === "workout" &&
+            previousRoute.workoutId !== parsed.workoutId &&
+            workoutFocus?.workoutId === parsed.workoutId;
+          if (origin) paneNavigation.restorePane(origin.pane);
+          pendingWorkoutOriginRef.current = shouldRestoreWorkoutFocus
+            ? workoutFocus
+            : null;
           paneNavigation.restoreRoute(parsed);
           return;
         }
@@ -2216,10 +2203,10 @@ export function WorkspaceApp({
     pendingWorkoutOriginRef.current = null;
     restorationFrameRef.current = window.requestAnimationFrame(() => {
       restorationFrameRef.current = null;
+      document.getElementById(origin.invokerId)?.focus({ preventScroll: true });
       if (workoutScreenRef.current) {
         workoutScreenRef.current.scrollTop = origin.workoutScrollTop;
       }
-      document.getElementById(origin.invokerId)?.focus();
     });
     return () => {
       if (restorationFrameRef.current !== null) {

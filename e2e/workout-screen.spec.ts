@@ -305,9 +305,17 @@ test("walks pane to current to previous and restores each origin, focus, and for
   await expect(
     currentScreen.getByText("Delta vs current +3.5 km"),
   ).toBeVisible();
+  await currentScreen.evaluate((screen) => {
+    screen.scrollTop = 0;
+  });
   const previousRow = currentScreen.getByRole("button", {
     name: /previous attempt 6 August 2026.*11 km/i,
   });
+  await previousRow.scrollIntoViewIfNeeded();
+  const workoutOriginScrollTop = await currentScreen.evaluate(
+    (screen) => screen.scrollTop,
+  );
+  expect(workoutOriginScrollTop).toBeGreaterThan(0);
   await expect(previousRow).toBeVisible();
 
   await previousRow.click();
@@ -333,6 +341,9 @@ test("walks pane to current to previous and restores each origin, focus, and for
       name: /previous attempt 6 August 2026.*11 km/i,
     }),
   ).toBeFocused();
+  await expect
+    .poll(() => currentScreen.evaluate((screen) => screen.scrollTop))
+    .toBe(workoutOriginScrollTop);
   await expect(
     page.getByRole("button", { name: "Back to Today" }),
   ).toBeVisible();
@@ -371,6 +382,21 @@ test("walks pane to current to previous and restores each origin, focus, and for
   await expect(
     page.getByRole("button", { name: "Back to 5 × 1 km threshold" }),
   ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Back to 5 × 1 km threshold" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toBe("#workout/planned-2026-08-26-threshold");
+  await expect(
+    page.getByRole("button", {
+      name: /previous attempt 6 August 2026.*11 km/i,
+    }),
+  ).toBeFocused();
+  await expect
+    .poll(() => currentScreen.evaluate((screen) => screen.scrollTop))
+    .toBe(workoutOriginScrollTop);
 });
 
 test("records workout feedback through the shared application state and Coaching timeline", async ({
