@@ -229,7 +229,7 @@ test("opens the Demo Guide once, keeps it reachable, and reopens it after reset"
   ).toBeVisible();
 });
 
-test("contains and restores focus for guide, workout details, and reset", async ({
+test("contains and restores focus for guide, Workout screen, and reset", async ({
   page,
 }) => {
   await page.goto("/");
@@ -252,11 +252,16 @@ test("contains and restores focus for guide, workout details, and reset", async 
   const workout = page.getByRole("button", { name: /5 × 1 km threshold/ });
   await workout.focus();
   await workout.press("Enter");
-  const details = page.getByRole("dialog", { name: "5 × 1 km threshold" });
+  const workoutScreen = page.getByRole("main", { name: "Planned Workout" });
   await expect(
-    details.getByRole("button", { name: "Close workout details" }),
+    workoutScreen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
-  await page.keyboard.press("Escape");
+  await page.keyboard.press("Tab");
+  const workoutBack = workoutScreen.getByRole("button", {
+    name: "Back to Today",
+  });
+  await expect(workoutBack).toBeFocused();
+  await workoutBack.press("Enter");
   await expect(workout).toBeFocused();
 
   const resetButton = page.getByRole("button", { name: "Reset demo" });
@@ -756,7 +761,7 @@ test("shows the deterministic Week first and the same workouts in Month", async 
   await expect(page.getByText("24–30 August")).toBeVisible();
 });
 
-test("shows the partial Workout Result without conflating it with planned intent", async ({
+test("shows the planned Workout without pulling completed content forward", async ({
   page,
 }) => {
   await page.goto("/");
@@ -765,15 +770,19 @@ test("shows the partial Workout Result without conflating it with planned intent
   await expect(
     page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeVisible();
-  await expect(page.getByText("Planned prescription")).toBeVisible();
-  await expect(page.getByText("App-owned plan")).toBeVisible();
-  await expect(page.getByText("Workout Result")).toBeVisible();
   await expect(
-    page.getByText("Synthetic observation", { exact: true }),
+    page.getByText("Coach’s intent", { exact: true }).last(),
   ).toBeVisible();
-  await expect(page.getByText("of 5 work repetitions")).toBeVisible();
-  await expect(page.getByText("4:36/km · 165 bpm")).toBeVisible();
-  await expect(page.getByText("4:48/km · 176 bpm")).toBeVisible();
+  await expect(
+    page
+      .getByRole("main", { name: "Planned Workout" })
+      .getByText("Develop threshold pace under control"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Workout structure" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Targets" })).toBeVisible();
+  await expect(page.getByText("Workout Result")).not.toBeAttached();
 });
 
 test("shows recent training and the complete mixed recovery evidence", async ({
@@ -803,8 +812,10 @@ test("shows recent training and the complete mixed recovery evidence", async ({
   await expect(
     page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeVisible();
-  await expect(page.getByText("Planned prescription")).toBeVisible();
-  await expect(page.getByText("Workout Result")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Workout structure" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Targets" })).toBeVisible();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(720);

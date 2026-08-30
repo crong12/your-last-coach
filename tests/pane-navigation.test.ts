@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PANE_IDS,
   createPaneNavigation,
+  workspaceRouteFromHash,
+  workspaceRouteHash,
 } from "../src/application/createPaneNavigation";
-import { paneHash, paneIdFromHash } from "../src/ui/WorkspaceApp";
 
 describe("pane navigation", () => {
   it("starts at Today unless an external pane is restored", () => {
@@ -35,14 +36,62 @@ describe("pane hashes", () => {
     ["#trends", "trends"],
     ["#coaching", "coaching"],
   ] as const)("parses %s as %s", (hash, pane) => {
-    expect(paneIdFromHash(hash)).toBe(pane);
-    expect(paneHash(pane)).toBe(hash);
+    expect(workspaceRouteFromHash(hash)).toEqual({ kind: "pane", pane });
+    expect(workspaceRouteHash({ kind: "pane", pane })).toBe(hash);
   });
 
-  it.each(["", "#", "#TODAY", "#trends/", "#workout/one", "today"])(
-    "falls back safely for unsupported hash %j",
-    (hash) => {
-      expect(paneIdFromHash(hash)).toBe("today");
-    },
-  );
+  it("round-trips an encoded Workout ID", () => {
+    expect(workspaceRouteFromHash("#workout/session%20one")).toEqual({
+      kind: "workout",
+      workoutId: "session one",
+    });
+    expect(
+      workspaceRouteHash({ kind: "workout", workoutId: "session one" }),
+    ).toBe("#workout/session%20one");
+  });
+
+  it.each([
+    "",
+    "#",
+    "#TODAY",
+    "#trends/",
+    "#workout",
+    "#workout/",
+    "#workout/one/two",
+    "#workout/%E0%A4%A",
+    "today",
+  ])("rejects unsupported hash %j", (hash) => {
+    expect(workspaceRouteFromHash(hash)).toBeNull();
+  });
+});
+
+describe("Workout routes", () => {
+  it("retains the origin pane while a Workout is pushed", () => {
+    const navigation = createPaneNavigation("trends");
+
+    navigation.pushWorkout("planned-2026-08-30-long");
+
+    expect(navigation.getRoute()).toEqual({
+      kind: "workout",
+      workoutId: "planned-2026-08-30-long",
+    });
+    expect(navigation.getSelectedPane()).toBe("trends");
+  });
+
+  it("restores pane and Workout routes through the same observable state", () => {
+    const navigation = createPaneNavigation();
+    const observer = vi.fn();
+    navigation.subscribe(observer);
+
+    navigation.restoreRoute({ kind: "pane", pane: "coaching" });
+    navigation.restoreRoute({ kind: "workout", workoutId: "planned-one" });
+    navigation.restoreRoute({ kind: "workout", workoutId: "planned-one" });
+
+    expect(observer).toHaveBeenCalledTimes(2);
+    expect(navigation.getSelectedPane()).toBe("coaching");
+    expect(navigation.getRoute()).toEqual({
+      kind: "workout",
+      workoutId: "planned-one",
+    });
+  });
 });

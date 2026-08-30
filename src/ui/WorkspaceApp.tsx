@@ -9,7 +9,10 @@ import {
 import type { CoachAgentConnection } from "../adapters/webmcp/types";
 import type { DemoGuidePreference } from "../adapters/persistence/demoGuidePreference";
 import type { ToolActivityStore } from "../adapters/webmcp/toolActivityStore";
-import type { AthleteContextData } from "../application/readSelectors";
+import type {
+  AthleteContextData,
+  WorkoutContextData,
+} from "../application/readSelectors";
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
@@ -17,8 +20,11 @@ import {
   PANE_IDS,
   type PaneNavigation,
   type PaneId,
+  type WorkspaceRoute,
+  workspaceRouteFromHash,
+  workspaceRouteHash,
 } from "../application/createPaneNavigation";
-import type { PlannedWorkout, WorkoutResult } from "../domain/types";
+import type { PlannedWorkout } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 
 interface WorkspaceAppProps {
@@ -34,23 +40,56 @@ interface WorkspaceAppProps {
 
 type PlanView = "week" | "month";
 
-export function paneIdFromHash(hash: string): PaneId {
-  const candidate = hash.startsWith("#") ? hash.slice(1) : "";
-  return PANE_IDS.find((pane) => pane === candidate) ?? "today";
-}
-
-export function paneHash(pane: PaneId) {
-  return `#${pane}`;
-}
-
 const PANE_LABELS: Record<PaneId, string> = {
   today: "Today",
   trends: "Trends",
   coaching: "Coaching",
 };
 
-function isCanonicalPaneHash(hash: string) {
-  return PANE_IDS.some((pane) => paneHash(pane) === hash);
+const NAVIGATION_STATE_KEY = "yourLastCoachNavigation";
+
+interface PaneOriginReceipt {
+  version: 1;
+  kind: "pane-origin";
+  pane: PaneId;
+  windowScrollY: number;
+  paneScrollLeft: number;
+  invokerId: string;
+}
+
+function paneOriginFromHistoryState(value: unknown): PaneOriginReceipt | null {
+  if (typeof value !== "object" || value === null) return null;
+  const receipt = (value as Record<string, unknown>)[NAVIGATION_STATE_KEY];
+  if (typeof receipt !== "object" || receipt === null) return null;
+  const candidate = receipt as Record<string, unknown>;
+  if (
+    candidate.version !== 1 ||
+    candidate.kind !== "pane-origin" ||
+    !PANE_IDS.includes(candidate.pane as PaneId) ||
+    typeof candidate.windowScrollY !== "number" ||
+    !Number.isFinite(candidate.windowScrollY) ||
+    typeof candidate.paneScrollLeft !== "number" ||
+    !Number.isFinite(candidate.paneScrollLeft) ||
+    typeof candidate.invokerId !== "string"
+  )
+    return null;
+  return candidate as unknown as PaneOriginReceipt;
+}
+
+function historyStateWithOrigin(origin: PaneOriginReceipt) {
+  const current = window.history.state;
+  return {
+    ...(typeof current === "object" && current !== null ? current : {}),
+    [NAVIGATION_STATE_KEY]: origin,
+  };
+}
+
+function historyStateWithoutOrigin() {
+  const current = window.history.state;
+  if (typeof current !== "object" || current === null) return null;
+  const next = { ...(current as Record<string, unknown>) };
+  delete next[NAVIGATION_STATE_KEY];
+  return next;
 }
 
 const WEEK_DATES = [
@@ -125,6 +164,11 @@ function workoutTone(workout: PlannedWorkout) {
   return workout.type;
 }
 
+type WorkoutSelect = (
+  workout: PlannedWorkout,
+  invoker: HTMLButtonElement,
+) => void;
+
 function WorkoutButton({
   workout,
   onSelect,
@@ -132,14 +176,15 @@ function WorkoutButton({
   adapted = false,
 }: {
   workout: PlannedWorkout;
-  onSelect: (workout: PlannedWorkout) => void;
+  onSelect: WorkoutSelect;
   compact?: boolean;
   adapted?: boolean;
 }) {
   return (
     <button
+      id={`workout-entry-${workout.id}`}
       className={`workout-card workout-card--${workoutTone(workout)} ${compact ? "workout-card--compact" : ""} ${adapted ? "workout-card--adapted" : ""}`}
-      onClick={() => onSelect(workout)}
+      onClick={(event) => onSelect(workout, event.currentTarget)}
       aria-label={`${workout.title}, ${workout.date}, ${workout.distanceKm} kilometres, open details`}
     >
       <span className="workout-card__type">
@@ -162,7 +207,7 @@ function WeekPlan({
 }: {
   workouts: PlannedWorkout[];
   currentDate: string;
-  onSelect: (workout: PlannedWorkout) => void;
+  onSelect: WorkoutSelect;
   adaptedWorkoutIds: Set<string>;
 }) {
   const remainingDistanceKm = workouts
@@ -220,7 +265,7 @@ function MonthPlan({
   adaptedWorkoutIds,
 }: {
   workouts: PlannedWorkout[];
-  onSelect: (workout: PlannedWorkout) => void;
+  onSelect: WorkoutSelect;
   adaptedWorkoutIds: Set<string>;
 }) {
   const days = Array.from({ length: 31 }, (_, index) => index + 1);
@@ -272,96 +317,126 @@ function MonthPlan({
   );
 }
 
-function WorkoutDetails({
-  workout,
-  result,
-  onClose,
+function PlannedWorkoutScreen({
+  context,
+  backLabel,
+  onBack,
 }: {
-  workout: PlannedWorkout;
-  result?: WorkoutResult;
-  onClose: () => void;
+  context: WorkoutContextData;
+  backLabel: string;
+  onBack: () => void;
 }) {
-  const dialogRef = useRef<HTMLElement>(null);
-  useModalFocus(dialogRef, onClose);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const workout = context.plannedWorkout;
+  const repeatBlock = workout.prescription.blocks.find(
+    (block) => block.kind === "repeat",
+  );
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    titleRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        ref={dialogRef}
-        className="detail-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="workout-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+    <main className="workout-screen" aria-label="Planned Workout">
+      <header className="workout-screen__header">
         <button
-          className="icon-button"
-          onClick={onClose}
-          aria-label="Close workout details"
-          data-initial-focus
+          className="workout-screen__back"
+          onClick={onBack}
+          aria-label={backLabel}
         >
-          ×
+          <span aria-hidden="true">←</span>
+          Back
         </button>
-        <span className="eyebrow">Planned Workout · {workout.date}</span>
-        <h2 id="workout-title">{workout.title}</h2>
-        <p className="detail-purpose">{workout.purpose}</p>
-        <div className="detail-grid">
-          <section>
-            <span className="source-label">App-owned plan</span>
-            <h3>Planned prescription</h3>
-            <ol className="prescription-list">
-              {workout.prescription.blocks.map((block, index) => (
+        <span className="workout-screen__status">PLANNED</span>
+      </header>
+      <article className="workout-detail">
+        <header className="workout-detail__title">
+          <div className="workout-detail__meta">
+            <time dateTime={workout.date}>{formatDate(workout.date)}</time>
+            <span>{formatClassification(workout.type)}</span>
+          </div>
+          <h1 ref={titleRef} tabIndex={-1}>
+            {workout.title}
+          </h1>
+        </header>
+
+        <section
+          className="workout-detail__intent"
+          aria-labelledby="intent-title"
+        >
+          <span className="eyebrow">Purpose in the plan</span>
+          <h2 id="intent-title">Coach’s intent</h2>
+          <p>{workout.purpose}</p>
+        </section>
+
+        <section aria-labelledby="structure-title">
+          <span className="eyebrow">Planned structure</span>
+          <h2 id="structure-title">Workout structure</h2>
+          <ol className="workout-structure">
+            {workout.prescription.blocks.map((block, index) => {
+              const label =
+                block.kind === "warmup"
+                  ? "Warm-up"
+                  : block.kind === "cooldown"
+                    ? "Cool-down"
+                    : "Main set";
+              const value =
+                block.kind === "repeat"
+                  ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPace(block.targetPaceSecondsPerKm.min)}–${formatPace(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
+                  : `${block.distanceKm} km`;
+              return (
                 <li key={`${block.kind}-${index}`}>
-                  <strong>
-                    {block.kind === "repeat"
-                      ? `${block.repetitions} × ${block.workDistanceKm} km`
-                      : `${block.distanceKm} km`}
-                  </strong>
-                  <span>
-                    {block.kind === "repeat"
-                      ? `${formatPace(block.targetPaceSecondsPerKm.min)}–${formatPace(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds}s jog`
-                      : block.kind}
-                  </span>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
                 </li>
-              ))}
-            </ol>
-          </section>
-          <section className="result-panel">
-            <span className="source-label">Synthetic observation</span>
-            <h3>Workout Result</h3>
-            {result ? (
-              <>
-                <div className="result-score">
-                  <strong>
-                    {result.summary.completedWorkRepetitions ?? "Complete"}
-                  </strong>
-                  <span>
-                    {result.summary.plannedWorkRepetitions
-                      ? `of ${result.summary.plannedWorkRepetitions} work repetitions`
-                      : "recorded"}
-                  </span>
-                </div>
-                <ul className="lap-list">
-                  {result.laps
-                    .filter((lap) => lap.kind === "work")
-                    .map((lap, index) => (
-                      <li key={lap.id}>
-                        <span>Rep {index + 1}</span>
-                        <strong>
-                          {formatPace(lap.paceSecondsPerKm ?? 0)}/km ·{" "}
-                          {lap.averageHeartRateBpm} bpm
-                        </strong>
-                      </li>
-                    ))}
-                </ul>
-              </>
-            ) : (
-              <p>No Workout Result yet.</p>
-            )}
-          </section>
-        </div>
-      </section>
-    </div>
+              );
+            })}
+          </ol>
+        </section>
+
+        <section aria-labelledby="targets-title">
+          <span className="eyebrow">Prescription at a glance</span>
+          <h2 id="targets-title">Targets</h2>
+          <table className="workout-targets">
+            <tbody>
+              <tr>
+                <th scope="row">Target pace</th>
+                <td>
+                  {repeatBlock?.kind === "repeat"
+                    ? `${formatPace(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPace(repeatBlock.targetPaceSecondsPerKm.max)}/km`
+                    : "No separate pace target recorded"}
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Effort / heart-rate guidance</th>
+                <td>No separate guidance recorded</td>
+              </tr>
+              <tr>
+                <th scope="row">Planned distance</th>
+                <td>{workout.distanceKm} km</td>
+              </tr>
+              <tr>
+                <th scope="row">Planned duration</th>
+                <td>No duration recorded</td>
+              </tr>
+              <tr>
+                <th scope="row">Recovery protocol</th>
+                <td>
+                  {repeatBlock?.kind === "repeat"
+                    ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
+                    : "No separate recovery protocol recorded"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </article>
+    </main>
   );
 }
 
@@ -986,9 +1061,6 @@ export function WorkspaceApp({
     reviewCoordinator.getState,
   );
   const [view, setView] = useState<PlanView>("week");
-  const [selectedWorkout, setSelectedWorkout] = useState<PlannedWorkout | null>(
-    null,
-  );
   const [resetOpen, setResetOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(() =>
     demoGuidePreference.shouldOpen(),
@@ -1005,6 +1077,11 @@ export function WorkspaceApp({
     paneNavigation.getSelectedPane,
     paneNavigation.getSelectedPane,
   );
+  const activeRoute = useSyncExternalStore(
+    paneNavigation.subscribe,
+    paneNavigation.getRoute,
+    paneNavigation.getRoute,
+  );
   const panesRef = useRef<HTMLDivElement>(null);
   const paneRefs = useRef<Record<PaneId, HTMLElement | null>>({
     today: null,
@@ -1012,9 +1089,11 @@ export function WorkspaceApp({
     coaching: null,
   });
   const scrollFrameRef = useRef<number | null>(null);
+  const restorationFrameRef = useRef<number | null>(null);
+  const pendingOriginRef = useRef<PaneOriginReceipt | null>(null);
 
   const replacePaneHash = useCallback((pane: PaneId) => {
-    const nextHash = paneHash(pane);
+    const nextHash = workspaceRouteHash({ kind: "pane", pane });
     if (window.location.hash === nextHash) return;
     window.history.replaceState(
       window.history.state,
@@ -1062,34 +1141,95 @@ export function WorkspaceApp({
     [moveToPane, paneNavigation, replacePaneHash],
   );
 
-  useEffect(() => {
-    const restoredPane = paneIdFromHash(window.location.hash);
-    paneNavigation.restorePane(restoredPane);
-    if (!isCanonicalPaneHash(window.location.hash)) {
-      replacePaneHash(restoredPane);
-    }
-    moveToPane(restoredPane, true);
+  const restoreFromLocation = useCallback(
+    (restoreCoordinates: boolean) => {
+      const parsed = workspaceRouteFromHash(window.location.hash);
+      if (parsed?.kind === "workout") {
+        const workout = application.query({
+          type: "get_workout_context",
+          workoutId: parsed.workoutId,
+        });
+        if (workout.status === "ok") {
+          const origin = paneOriginFromHistoryState(window.history.state);
+          if (origin) paneNavigation.restorePane(origin.pane);
+          paneNavigation.restoreRoute(parsed);
+          return;
+        }
+      } else if (parsed?.kind === "pane") {
+        if (restoreCoordinates) {
+          const origin = paneOriginFromHistoryState(window.history.state);
+          pendingOriginRef.current =
+            origin?.pane === parsed.pane ? origin : null;
+        }
+        paneNavigation.restoreRoute(parsed);
+        moveToPane(parsed.pane, true);
+        return;
+      }
 
+      const today: WorkspaceRoute = { kind: "pane", pane: "today" };
+      window.history.replaceState(
+        historyStateWithoutOrigin(),
+        "",
+        `${window.location.pathname}${window.location.search}${workspaceRouteHash(today)}`,
+      );
+      pendingOriginRef.current = null;
+      paneNavigation.restoreRoute(today);
+      moveToPane("today", true);
+    },
+    [application, moveToPane, paneNavigation],
+  );
+
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    restoreFromLocation(false);
+
+    const onPopState = () => restoreFromLocation(true);
     const onHashChange = () => {
-      const pane = paneIdFromHash(window.location.hash);
-      paneNavigation.restorePane(pane);
-      if (!isCanonicalPaneHash(window.location.hash)) replacePaneHash(pane);
-      moveToPane(pane, true);
+      const currentHash = workspaceRouteHash(paneNavigation.getRoute());
+      if (window.location.hash === currentHash) return;
+      restoreFromLocation(false);
     };
     const mobileQuery = window.matchMedia("(max-width: 760px)");
     const onBreakpointChange = () =>
       moveToPane(paneNavigation.getSelectedPane(), true);
+    window.addEventListener("popstate", onPopState);
     window.addEventListener("hashchange", onHashChange);
     mobileQuery.addEventListener("change", onBreakpointChange);
     return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("hashchange", onHashChange);
       mobileQuery.removeEventListener("change", onBreakpointChange);
     };
-  }, [moveToPane, paneNavigation, replacePaneHash]);
+  }, [moveToPane, paneNavigation, restoreFromLocation]);
+
+  useEffect(() => {
+    if (activeRoute.kind !== "pane") return;
+    const origin = pendingOriginRef.current;
+    if (!origin || origin.pane !== activeRoute.pane) return;
+    pendingOriginRef.current = null;
+    restorationFrameRef.current = window.requestAnimationFrame(() => {
+      restorationFrameRef.current = null;
+      panesRef.current?.scrollTo({
+        left: origin.paneScrollLeft,
+        behavior: "auto",
+      });
+      window.scrollTo({ top: origin.windowScrollY, behavior: "auto" });
+      document.getElementById(origin.invokerId)?.focus();
+    });
+    return () => {
+      if (restorationFrameRef.current !== null) {
+        window.cancelAnimationFrame(restorationFrameRef.current);
+        restorationFrameRef.current = null;
+      }
+    };
+  }, [activeRoute]);
 
   useEffect(() => {
     const updateFromGeometry = () => {
       scrollFrameRef.current = null;
+      if (paneNavigation.getRoute().kind === "workout") return;
       let pane: PaneId;
       if (window.matchMedia("(max-width: 760px)").matches) {
         const container = panesRef.current;
@@ -1152,7 +1292,6 @@ export function WorkspaceApp({
   }, [paneNavigation, replacePaneHash, revealMobilePane]);
   useEffect(() => {
     if (reviewState.status !== "reviewing") return;
-    setSelectedWorkout(null);
     setGuideOpen(false);
   }, [reviewState.status]);
   const latestAdaptation = state.adaptationReceipts.at(-1);
@@ -1170,16 +1309,13 @@ export function WorkspaceApp({
     month: "2026-08",
   });
   const athleteContext = application.query({ type: "get_athlete_context" });
-  const selectedContext = selectedWorkout
-    ? application.query({
-        type: "get_workout_context",
-        workoutId: selectedWorkout.id,
-      })
-    : null;
-  const selectedResult =
-    selectedContext?.status === "ok"
-      ? (selectedContext.data.workoutResult ?? undefined)
-      : undefined;
+  const selectedContext =
+    activeRoute.kind === "workout"
+      ? application.query({
+          type: "get_workout_context",
+          workoutId: activeRoute.workoutId,
+        })
+      : null;
   const connectionLabel =
     coachAgentConnection.status === "connected"
       ? "connected"
@@ -1187,12 +1323,54 @@ export function WorkspaceApp({
         ? "error"
         : "unavailable";
 
+  const openWorkout: WorkoutSelect = (workout, invoker) => {
+    const origin: PaneOriginReceipt = {
+      version: 1,
+      kind: "pane-origin",
+      pane: paneNavigation.getSelectedPane(),
+      windowScrollY: window.scrollY,
+      paneScrollLeft: panesRef.current?.scrollLeft ?? 0,
+      invokerId: invoker.id,
+    };
+    const stateWithOrigin = historyStateWithOrigin(origin);
+    window.history.replaceState(
+      stateWithOrigin,
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash({ kind: "pane", pane: origin.pane })}`,
+    );
+    const workoutRoute: WorkspaceRoute = {
+      kind: "workout",
+      workoutId: workout.id,
+    };
+    window.history.pushState(
+      stateWithOrigin,
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash(workoutRoute)}`,
+    );
+    paneNavigation.pushWorkout(workout.id);
+  };
+
+  const closeWorkout = () => {
+    const origin = paneOriginFromHistoryState(window.history.state);
+    if (origin) {
+      window.history.back();
+      return;
+    }
+    const today: WorkspaceRoute = { kind: "pane", pane: "today" };
+    window.history.replaceState(
+      historyStateWithoutOrigin(),
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash(today)}`,
+    );
+    paneNavigation.restoreRoute(today);
+    moveToPane("today", true);
+  };
+
   const resetDemo = async () => {
     await Promise.resolve(reviewCoordinator.reset());
     const outcome = await application.command({ type: "reset_demo" });
     setDurability(outcome.durability);
     setView("week");
-    setSelectedWorkout(null);
     setResetOpen(false);
     demoGuidePreference.reset();
     toolActivityStore.clear();
@@ -1205,197 +1383,211 @@ export function WorkspaceApp({
     setGuideOpen(false);
   };
 
+  const workoutScreenActive =
+    !resetOpen &&
+    reviewState.status !== "reviewing" &&
+    activeRoute.kind === "workout" &&
+    selectedContext?.status === "ok";
+
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <a
-          className="brand"
-          href="#today"
-          aria-label="Your Last Coach home"
-          onClick={(event) => {
-            event.preventDefault();
-            selectPane("today");
-          }}
-        >
-          <span className="brand-mark" aria-hidden="true">
-            Y
-          </span>
-          <span>Your Last Coach</span>
-        </a>
-        <div className="topbar-actions">
-          <div className="status-wrap">
+      <div
+        className="app-underlay"
+        inert={workoutScreenActive ? true : undefined}
+        aria-hidden={workoutScreenActive ? true : undefined}
+      >
+        <header className="topbar">
+          <a
+            className="brand"
+            href="#today"
+            aria-label="Your Last Coach home"
+            onClick={(event) => {
+              event.preventDefault();
+              selectPane("today");
+            }}
+          >
+            <span className="brand-mark" aria-hidden="true">
+              Y
+            </span>
+            <span>Your Last Coach</span>
+          </a>
+          <div className="topbar-actions">
+            <div className="status-wrap">
+              <button
+                className="status-button"
+                aria-label={`Coach Agent connection: ${connectionLabel}`}
+                aria-haspopup="dialog"
+                onClick={() => setGuideOpen(true)}
+              >
+                <span
+                  className={`status-dot status-dot--${coachAgentConnection.status}`}
+                />
+                Coach Agent {connectionLabel}
+              </button>
+            </div>
             <button
-              className="status-button"
-              aria-label={`Coach Agent connection: ${connectionLabel}`}
-              aria-haspopup="dialog"
-              onClick={() => setGuideOpen(true)}
+              className="button button--quiet"
+              onClick={() => setResetOpen(true)}
             >
-              <span
-                className={`status-dot status-dot--${coachAgentConnection.status}`}
-              />
-              Coach Agent {connectionLabel}
+              Reset demo
             </button>
           </div>
-          <button
-            className="button button--quiet"
-            onClick={() => setResetOpen(true)}
+        </header>
+
+        {durability === "memory_only" && (
+          <div className="notice notice--warning" role="status">
+            Browser storage is unavailable. Changes will last only until this
+            page is reloaded.
+          </div>
+        )}
+        {notice && (
+          <div className="notice" role="status">
+            {notice}
+          </div>
+        )}
+
+        <main className="workspace-shell" id="training-plan">
+          <nav className="pane-nav" aria-label="Workspace sections">
+            {PANE_IDS.map((pane) => (
+              <button
+                key={pane}
+                className="pane-nav__button"
+                aria-label={`Show ${PANE_LABELS[pane]} pane`}
+                aria-current={selectedPane === pane ? "page" : undefined}
+                onClick={() => selectPane(pane)}
+              >
+                <span className="pane-nav__dot" aria-hidden="true" />
+                <span className="pane-nav__label">{PANE_LABELS[pane]}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div
+            ref={panesRef}
+            className="workspace-panes"
+            role="group"
+            aria-label="Workspace panes"
+            tabIndex={0}
           >
-            Reset demo
-          </button>
-        </div>
-      </header>
-
-      {durability === "memory_only" && (
-        <div className="notice notice--warning" role="status">
-          Browser storage is unavailable. Changes will last only until this page
-          is reloaded.
-        </div>
-      )}
-      {notice && (
-        <div className="notice" role="status">
-          {notice}
-        </div>
-      )}
-
-      <main className="workspace-shell" id="training-plan">
-        <nav className="pane-nav" aria-label="Workspace sections">
-          {PANE_IDS.map((pane) => (
-            <button
-              key={pane}
-              className="pane-nav__button"
-              aria-label={`Show ${PANE_LABELS[pane]} pane`}
-              aria-current={selectedPane === pane ? "page" : undefined}
-              onClick={() => selectPane(pane)}
+            <section
+              ref={(element) => {
+                paneRefs.current.today = element;
+              }}
+              className="workspace-pane"
+              id="today"
+              aria-label="Today"
             >
-              <span className="pane-nav__dot" aria-hidden="true" />
-              <span className="pane-nav__label">{PANE_LABELS[pane]}</span>
-            </button>
-          ))}
-        </nav>
+              <div className="workspace workspace--today">
+                <section className="plan-column">
+                  <header className="plan-hero">
+                    <div>
+                      <span className="eyebrow">
+                        Shared Coaching Workspace · {state.athlete.displayName}
+                      </span>
+                      <h1>Your Training Plan</h1>
+                      <p>
+                        Build aerobic strength, absorb the work, and arrive
+                        ready for {state.targetRace.name}.
+                      </p>
+                    </div>
+                    <div className="hero-meta">
+                      <span>{state.trainingPhase.name}</span>
+                      <strong>
+                        {formatClock(state.clock.now, state.clock.timeZone)}
+                      </strong>
+                      <small>
+                        Plan version {state.trainingPlan.planVersion}
+                      </small>
+                    </div>
+                  </header>
 
-        <div
-          ref={panesRef}
-          className="workspace-panes"
-          role="group"
-          aria-label="Workspace panes"
-          tabIndex={0}
-        >
-          <section
-            ref={(element) => {
-              paneRefs.current.today = element;
-            }}
-            className="workspace-pane"
-            id="today"
-            aria-label="Today"
-          >
-            <div className="workspace workspace--today">
-              <section className="plan-column">
-                <header className="plan-hero">
-                  <div>
-                    <span className="eyebrow">
-                      Shared Coaching Workspace · {state.athlete.displayName}
-                    </span>
-                    <h1>Your Training Plan</h1>
-                    <p>
-                      Build aerobic strength, absorb the work, and arrive ready
-                      for {state.targetRace.name}.
-                    </p>
-                  </div>
-                  <div className="hero-meta">
-                    <span>{state.trainingPhase.name}</span>
-                    <strong>
-                      {formatClock(state.clock.now, state.clock.timeZone)}
-                    </strong>
-                    <small>Plan version {state.trainingPlan.planVersion}</small>
-                  </div>
-                </header>
+                  <nav className="view-switch" aria-label="Training Plan view">
+                    {(["week", "month"] as const).map((planView) => (
+                      <button
+                        key={planView}
+                        aria-pressed={view === planView}
+                        onClick={() => setView(planView)}
+                      >
+                        {planView === "week" ? "Week" : "Month"}
+                      </button>
+                    ))}
+                  </nav>
 
-                <nav className="view-switch" aria-label="Training Plan view">
-                  {(["week", "month"] as const).map((planView) => (
-                    <button
-                      key={planView}
-                      aria-pressed={view === planView}
-                      onClick={() => setView(planView)}
-                    >
-                      {planView === "week" ? "Week" : "Month"}
-                    </button>
-                  ))}
-                </nav>
+                  {view === "week" ? (
+                    <WeekPlan
+                      workouts={week.plannedWorkouts}
+                      currentDate={state.clock.now.slice(0, 10)}
+                      onSelect={openWorkout}
+                      adaptedWorkoutIds={adaptedWorkoutIds}
+                    />
+                  ) : (
+                    <MonthPlan
+                      workouts={month.plannedWorkouts}
+                      onSelect={openWorkout}
+                      adaptedWorkoutIds={adaptedWorkoutIds}
+                    />
+                  )}
+                </section>
+                <ContextRail
+                  context={athleteContext.data}
+                  plannedWorkouts={month.plannedWorkouts}
+                  surface="today"
+                />
+              </div>
+            </section>
 
-                {view === "week" ? (
-                  <WeekPlan
-                    workouts={week.plannedWorkouts}
-                    currentDate={state.clock.now.slice(0, 10)}
-                    onSelect={setSelectedWorkout}
-                    adaptedWorkoutIds={adaptedWorkoutIds}
-                  />
-                ) : (
-                  <MonthPlan
-                    workouts={month.plannedWorkouts}
-                    onSelect={setSelectedWorkout}
-                    adaptedWorkoutIds={adaptedWorkoutIds}
-                  />
-                )}
-              </section>
-              <ContextRail
-                context={athleteContext.data}
-                plannedWorkouts={month.plannedWorkouts}
-                surface="today"
-              />
-            </div>
-          </section>
+            <section
+              ref={(element) => {
+                paneRefs.current.trends = element;
+              }}
+              className="workspace-pane"
+              id="trends"
+              aria-label="Trends"
+            >
+              <div className="pane-heading">
+                <span className="eyebrow">Shared Coaching Workspace</span>
+                <h2>Trends</h2>
+                <p>Recent Coaching Evidence from the current training build.</p>
+              </div>
+              <div className="workspace workspace--single">
+                <ContextRail
+                  context={athleteContext.data}
+                  plannedWorkouts={month.plannedWorkouts}
+                  surface="trends"
+                />
+              </div>
+            </section>
 
-          <section
-            ref={(element) => {
-              paneRefs.current.trends = element;
-            }}
-            className="workspace-pane"
-            id="trends"
-            aria-label="Trends"
-          >
-            <div className="pane-heading">
-              <span className="eyebrow">Shared Coaching Workspace</span>
-              <h2>Trends</h2>
-              <p>Recent Coaching Evidence from the current training build.</p>
-            </div>
-            <div className="workspace workspace--single">
-              <ContextRail
-                context={athleteContext.data}
-                plannedWorkouts={month.plannedWorkouts}
-                surface="trends"
-              />
-            </div>
-          </section>
+            <section
+              ref={(element) => {
+                paneRefs.current.coaching = element;
+              }}
+              className="workspace-pane"
+              id="coaching"
+              aria-label="Coaching"
+            >
+              <div className="pane-heading">
+                <span className="eyebrow">Shared Coaching Workspace</span>
+                <h2>Coaching</h2>
+                <p>Athlete Profile and the latest shared coaching context.</p>
+              </div>
+              <div className="workspace workspace--single">
+                <ContextRail
+                  context={athleteContext.data}
+                  plannedWorkouts={month.plannedWorkouts}
+                  surface="coaching"
+                />
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
 
-          <section
-            ref={(element) => {
-              paneRefs.current.coaching = element;
-            }}
-            className="workspace-pane"
-            id="coaching"
-            aria-label="Coaching"
-          >
-            <div className="pane-heading">
-              <span className="eyebrow">Shared Coaching Workspace</span>
-              <h2>Coaching</h2>
-              <p>Athlete Profile and the latest shared coaching context.</p>
-            </div>
-            <div className="workspace workspace--single">
-              <ContextRail
-                context={athleteContext.data}
-                plannedWorkouts={month.plannedWorkouts}
-                surface="coaching"
-              />
-            </div>
-          </section>
-        </div>
-      </main>
-
-      {!resetOpen && reviewState.status !== "reviewing" && selectedWorkout && (
-        <WorkoutDetails
-          workout={selectedWorkout}
-          result={selectedResult}
-          onClose={() => setSelectedWorkout(null)}
+      {workoutScreenActive && selectedContext?.status === "ok" && (
+        <PlannedWorkoutScreen
+          context={selectedContext.data}
+          backLabel={`Back to ${PANE_LABELS[paneOriginFromHistoryState(window.history.state)?.pane ?? paneNavigation.getSelectedPane()]}`}
+          onBack={closeWorkout}
         />
       )}
       {resetOpen ? (
@@ -1405,7 +1597,7 @@ export function WorkspaceApp({
           coordinator={reviewCoordinator}
           onApproved={setDurability}
         />
-      ) : !selectedWorkout && guideOpen ? (
+      ) : !workoutScreenActive && guideOpen ? (
         <DemoGuide
           connection={coachAgentConnection}
           latestActivity={latestToolActivity}
