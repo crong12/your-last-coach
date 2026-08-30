@@ -19,13 +19,13 @@ test("serves the built fallback workspace without external runtime requests", as
 
   await page.goto("/");
 
+  const today = page.getByRole("region", { name: "Today" });
   await expect(
-    page.getByRole("heading", { name: "Your Training Plan" }),
+    today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
   await expect(
     page.getByRole("status", { name: "Coach Agent connection: unavailable" }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 1")).toBeVisible();
   expect([...externalRequests]).toEqual([]);
 });
 
@@ -72,10 +72,7 @@ test("keeps the built candidate chartable through Trends and the Workout round t
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#today");
-  await page.getByRole("button", { name: "Month" }).click();
-  const workout = page.getByRole("button", {
-    name: /18 km long run, 2026-08-30/,
-  });
+  const workout = page.locator('[data-workout-id="planned-2026-08-30-long"]');
   await workout.scrollIntoViewIfNeeded();
   const origin = await page.evaluate(
     () =>

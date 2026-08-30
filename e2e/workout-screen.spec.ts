@@ -32,10 +32,7 @@ test("pushes a mobile Workout screen and restores its exact origin", async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#today");
-  await page.getByRole("button", { name: "Month" }).click();
-  const workout = page.getByRole("button", {
-    name: /18 km long run, 2026-08-30/,
-  });
+  const workout = page.locator('[data-workout-id="planned-2026-08-30-long"]');
   await workout.scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     history.replaceState({ preserved: "keep-me" }, "", location.href);
@@ -283,10 +280,9 @@ test("walks pane to current to previous and restores each origin, focus, and for
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#today");
-  await page.getByRole("button", { name: "Month" }).click();
-  const currentEntry = page.getByRole("button", {
-    name: /5 × 1 km threshold, 2026-08-26/,
-  });
+  const currentEntry = page.locator(
+    '[data-workout-id="planned-2026-08-26-threshold"]',
+  );
   await currentEntry.scrollIntoViewIfNeeded();
   const paneOrigin = await page.evaluate(() => ({
     scrollY: window.scrollY,
@@ -491,10 +487,7 @@ test("restores a desktop origin through visible back and browser forward", async
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#today");
-  await page.getByRole("button", { name: "Month" }).click();
-  const workout = page.getByRole("button", {
-    name: /18 km long run, 2026-08-30/,
-  });
+  const workout = page.locator('[data-workout-id="planned-2026-08-30-long"]');
   await workout.scrollIntoViewIfNeeded();
   const origin = await page.evaluate(
     () =>
@@ -559,9 +552,7 @@ test("uses cuts for the pushed screen when reduced motion is requested", async (
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/#today");
-  await page
-    .getByRole("button", { name: /18 km long run, 2026-08-30/ })
-    .click();
+  await page.locator('[data-workout-id="planned-2026-08-30-long"]').click();
 
   const animations = await page
     .getByRole("main", { name: "Planned Workout" })

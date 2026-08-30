@@ -18,6 +18,7 @@ import type {
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
+import { selectTodayPane } from "../application/today";
 import {
   NAVIGATION_FOCUS_STATE_KEY,
   NAVIGATION_STATE_KEY,
@@ -56,6 +57,7 @@ import {
   normalizeResultLaps,
 } from "./charts/resultDetailMath";
 import { TrendsPane } from "./charts/TrendsPane";
+import { TodayPane } from "./TodayPane";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -67,8 +69,6 @@ interface WorkspaceAppProps {
   demoGuidePreference: DemoGuidePreference;
   toolActivityStore: ToolActivityStore;
 }
-
-type PlanView = "week" | "month";
 
 const PANE_LABELS: Record<PaneId, string> = {
   today: "Today",
@@ -104,19 +104,6 @@ function historyStateWithFocus(focus: WorkoutOriginReceipt) {
     [NAVIGATION_FOCUS_STATE_KEY]: focus,
   };
 }
-
-const WEEK_DATES = [
-  "2026-08-24",
-  "2026-08-25",
-  "2026-08-26",
-  "2026-08-27",
-  "2026-08-28",
-  "2026-08-29",
-  "2026-08-30",
-] as const;
-
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MONTH_DAY_OFFSET = 5;
 
 function formatPace(seconds: number) {
   const minutes = Math.floor(seconds / 60);
@@ -172,160 +159,7 @@ function formatClassification(classification: string) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function workoutTone(workout: PlannedWorkout) {
-  if (workout.id === "planned-2026-08-26-threshold") return "incomplete";
-  return workout.type;
-}
-
 type WorkoutSelect = (workout: PlannedWorkout, invoker: HTMLElement) => void;
-
-function WorkoutButton({
-  workout,
-  onSelect,
-  compact = false,
-  adapted = false,
-}: {
-  workout: PlannedWorkout;
-  onSelect: WorkoutSelect;
-  compact?: boolean;
-  adapted?: boolean;
-}) {
-  return (
-    <button
-      id={`workout-entry-${workout.id}`}
-      className={`workout-card workout-card--${workoutTone(workout)} ${compact ? "workout-card--compact" : ""} ${adapted ? "workout-card--adapted" : ""}`}
-      onClick={(event) => onSelect(workout, event.currentTarget)}
-      aria-label={`${workout.title}, ${workout.date}, ${workout.distanceKm} kilometres, open details`}
-    >
-      <span className="workout-card__type">
-        {workoutTone(workout) === "incomplete"
-          ? "Partial result"
-          : workout.type.replace("_", " ")}
-      </span>
-      <strong>{workout.title}</strong>
-      {adapted && <small className="adapted-marker">Adapted</small>}
-      {!compact && <span>{workout.purpose}</span>}
-    </button>
-  );
-}
-
-function WeekPlan({
-  workouts,
-  currentDate,
-  onSelect,
-  adaptedWorkoutIds,
-}: {
-  workouts: PlannedWorkout[];
-  currentDate: string;
-  onSelect: WorkoutSelect;
-  adaptedWorkoutIds: Set<string>;
-}) {
-  const remainingDistanceKm = workouts
-    .filter((workout) => workout.date > currentDate)
-    .reduce((total, workout) => total + workout.distanceKm, 0);
-
-  return (
-    <section className="plan-panel" aria-labelledby="week-title">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">This week</span>
-          <h2 id="week-title">24–30 August</h2>
-        </div>
-        <p>
-          {remainingDistanceKm} km remain after Wednesday’s partial session.
-        </p>
-      </div>
-      <div className="week-route">
-        {WEEK_DATES.map((date, index) => {
-          const workout = workouts.find((item) => item.date === date);
-          const isToday = date === "2026-08-26";
-          return (
-            <article
-              className={`week-day ${isToday ? "week-day--today" : ""}`}
-              key={date}
-            >
-              <header>
-                <span>{DAY_NAMES[index]}</span>
-                <strong>{Number(date.slice(-2))}</strong>
-              </header>
-              <span className="route-node" aria-hidden="true" />
-              {workout ? (
-                <WorkoutButton
-                  workout={workout}
-                  onSelect={onSelect}
-                  adapted={adaptedWorkoutIds.has(workout.id)}
-                />
-              ) : (
-                <div className="rest-day">
-                  <span>Rest</span>
-                  <small>Space to recover</small>
-                </div>
-              )}
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function MonthPlan({
-  workouts,
-  onSelect,
-  adaptedWorkoutIds,
-}: {
-  workouts: PlannedWorkout[];
-  onSelect: WorkoutSelect;
-  adaptedWorkoutIds: Set<string>;
-}) {
-  const days = Array.from({ length: 31 }, (_, index) => index + 1);
-  return (
-    <section className="plan-panel" aria-labelledby="month-title">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Training Plan horizon</span>
-          <h2 id="month-title">August 2026</h2>
-        </div>
-        <p>{workouts.length} Planned Workouts from the same plan.</p>
-      </div>
-      <div className="month-scroll">
-        <div className="month-calendar">
-          {DAY_NAMES.map((day) => (
-            <span className="month-weekday" key={day}>
-              {day}
-            </span>
-          ))}
-          {Array.from({ length: MONTH_DAY_OFFSET }, (_, index) => (
-            <span
-              className="month-cell month-cell--empty"
-              key={`empty-${index}`}
-            />
-          ))}
-          {days.map((day) => {
-            const date = `2026-08-${String(day).padStart(2, "0")}`;
-            const workout = workouts.find((item) => item.date === date);
-            return (
-              <article
-                className={`month-cell ${day === 26 ? "month-cell--today" : ""}`}
-                key={day}
-              >
-                <span className="month-date">{day}</span>
-                {workout && (
-                  <WorkoutButton
-                    workout={workout}
-                    onSelect={onSelect}
-                    compact
-                    adapted={adaptedWorkoutIds.has(workout.id)}
-                  />
-                )}
-              </article>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function formatDuration(seconds: number) {
   const hours = Math.floor(seconds / 3600);
@@ -2642,7 +2476,6 @@ export function WorkspaceApp({
     reviewCoordinator.getState,
     reviewCoordinator.getState,
   );
-  const [view, setView] = useState<PlanView>("week");
   const [resetOpen, setResetOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(() =>
     demoGuidePreference.shouldOpen(),
@@ -2729,6 +2562,7 @@ export function WorkspaceApp({
 
   const selectPane = useCallback(
     (pane: PaneId, forceInstant = false) => {
+      restoredOriginRef.current = null;
       paneNavigation.selectPane(pane);
       replacePaneHash(pane);
       moveToPane(pane, forceInstant);
@@ -3100,16 +2934,6 @@ export function WorkspaceApp({
       items.at(-1)?.focus();
     }
   };
-  const latestAdaptation = state.adaptationReceipts.at(-1);
-  const adaptedWorkoutIds = new Set(
-    latestAdaptation?.affectedWorkouts
-      .filter(({ after }) => after !== null)
-      .map(({ workoutId }) => workoutId) ?? [],
-  );
-  const week = application.query({
-    type: "get_week_training_plan",
-    weekStart: "2026-08-24",
-  });
   const month = application.query({
     type: "get_month_training_plan",
     month: "2026-08",
@@ -3276,7 +3100,6 @@ export function WorkspaceApp({
     paneNavigation.restoreRoute(today);
     moveToPane("today", true);
     setDurability(outcome.durability);
-    setView("week");
     setResetOpen(false);
     demoGuidePreference.reset();
     toolActivityStore.clear();
@@ -3438,61 +3261,11 @@ export function WorkspaceApp({
               id="today"
               aria-label="Today"
             >
-              <div className="workspace workspace--today">
-                <section className="plan-column">
-                  <header className="plan-hero">
-                    <div>
-                      <span className="eyebrow">
-                        Shared Coaching Workspace · {state.athlete.displayName}
-                      </span>
-                      <h1>Your Training Plan</h1>
-                      <p>
-                        Build aerobic strength, absorb the work, and arrive
-                        ready for {state.targetRace.name}.
-                      </p>
-                    </div>
-                    <div className="hero-meta">
-                      <span>{state.trainingPhase.name}</span>
-                      <strong>
-                        {formatClock(state.clock.now, state.clock.timeZone)}
-                      </strong>
-                      <small>
-                        Plan version {state.trainingPlan.planVersion}
-                      </small>
-                    </div>
-                  </header>
-
-                  <nav className="view-switch" aria-label="Training Plan view">
-                    {(["week", "month"] as const).map((planView) => (
-                      <button
-                        key={planView}
-                        aria-pressed={view === planView}
-                        onClick={() => setView(planView)}
-                      >
-                        {planView === "week" ? "Week" : "Month"}
-                      </button>
-                    ))}
-                  </nav>
-
-                  {view === "week" ? (
-                    <WeekPlan
-                      workouts={week.plannedWorkouts}
-                      currentDate={state.clock.now.slice(0, 10)}
-                      onSelect={openWorkout}
-                      adaptedWorkoutIds={adaptedWorkoutIds}
-                    />
-                  ) : (
-                    <MonthPlan
-                      workouts={month.plannedWorkouts}
-                      onSelect={openWorkout}
-                      adaptedWorkoutIds={adaptedWorkoutIds}
-                    />
-                  )}
-                </section>
-                <ContextRail
-                  context={athleteContext.data}
-                  plannedWorkouts={month.plannedWorkouts}
-                  surface="today"
+              <div className="workspace workspace--single workspace--today">
+                <TodayPane
+                  projection={selectTodayPane(state)}
+                  onViewPendingProposal={() => selectPane("coaching", true)}
+                  onSelectWorkout={openWorkout}
                 />
               </div>
             </section>

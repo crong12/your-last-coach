@@ -565,9 +565,11 @@ test("opens a full-push adaptation review with a durable back route", async ({
       .getByRole("region", { name: "Coaching timeline" })
       .getByText("Recovery first", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
-    1,
-  );
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
   const returnedPaneNav = page.locator(".pane-nav");
   const returnedCoachingHeading = page.getByRole("heading", {
     name: "Coaching",
@@ -694,9 +696,11 @@ test("opens the same review from WebMCP on desktop and keeps the action bar read
       .getByRole("region", { name: "Coaching timeline" })
       .getByText("Recovery first", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
-    1,
-  );
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
   const desktopReturnedPaneNav = page.locator(".pane-nav");
   const desktopReturnedCoachingHeading = page.getByRole("heading", {
     name: "Coaching",
@@ -898,9 +902,11 @@ test("surfaces memory-only durability when pushed-screen approval cannot persist
       "Browser storage is unavailable. Changes will last only until this page is reloaded.",
     ),
   ).toBeVisible();
-  await expect(page.getByText("Plan version 2", { exact: true })).toHaveCount(
-    1,
-  );
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
 });
 
 test("shows a bounded unavailable state for an unknown adaptation deep link", async ({
