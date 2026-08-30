@@ -29,7 +29,9 @@ test("exposes the three-pane navigation and restores a mobile deep link", async 
   await expect(panes).toHaveAttribute("tabindex", "0");
   await expect(page.getByRole("region", { name: "Today" })).toBeAttached();
   await expect(page.getByRole("region", { name: "Trends" })).toBeAttached();
-  await expect(page.getByRole("region", { name: "Coaching" })).toBeAttached();
+  await expect(
+    page.getByRole("region", { name: "Coaching", exact: true }),
+  ).toBeAttached();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect
     .poll(() =>
@@ -84,7 +86,10 @@ test("mobile pane changes reveal a shorter destination from the bottom of a long
     element.scrollTo({ left: element.clientWidth * 2, behavior: "auto" }),
   );
 
-  const coaching = page.getByRole("region", { name: "Coaching" });
+  const coaching = page.getByRole("region", {
+    name: "Coaching",
+    exact: true,
+  });
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#coaching");
   await expect
     .poll(() =>
@@ -106,7 +111,10 @@ test("desktop stacks sections and keeps the sticky section nav in sync", async (
   await page.goto("/#coaching");
   const today = page.getByRole("region", { name: "Today" });
   const trends = page.getByRole("region", { name: "Trends" });
-  const coaching = page.getByRole("region", { name: "Coaching" });
+  const coaching = page.getByRole("region", {
+    name: "Coaching",
+    exact: true,
+  });
   const navigation = page.getByRole("navigation", {
     name: "Workspace sections",
   });
@@ -152,7 +160,7 @@ test("canonicalizes malformed routes and preserves selection across reload and r
   await expect
     .poll(() =>
       page
-        .getByRole("region", { name: "Coaching" })
+        .getByRole("region", { name: "Coaching", exact: true })
         .evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeLessThanOrEqual(200);

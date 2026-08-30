@@ -143,6 +143,38 @@ function acceptedReviewProposal() {
   };
 }
 
+async function openAppMenu(page: Page) {
+  await page.getByRole("button", { name: "Open app menu" }).click();
+}
+
+async function openResetDialog(page: Page, force = false) {
+  if (force) {
+    await page.evaluate(() =>
+      (
+        document.querySelector(".app-menu__trigger") as HTMLButtonElement
+      ).click(),
+    );
+  } else {
+    await page.getByRole("button", { name: "Open app menu" }).click();
+  }
+  if (force) {
+    await page.evaluate(() =>
+      (
+        document.querySelector(
+          ".app-menu__item:nth-child(2)",
+        ) as HTMLButtonElement
+      ).click(),
+    );
+  } else {
+    await page.getByRole("menuitem", { name: "Reset demo" }).click();
+  }
+}
+
+async function openGuideDialog(page: Page) {
+  await openAppMenu(page);
+  await page.getByRole("menuitem", { name: "Demo Guide" }).click();
+}
+
 test("shows a calm loading state while Coach Agent tools register", async ({
   page,
 }) => {
@@ -214,9 +246,7 @@ test("opens the Demo Guide once, keeps it reachable, and reopens it after reset"
       );
   });
 
-  await page
-    .getByRole("button", { name: "Coach Agent connection: connected" })
-    .click();
+  await openGuideDialog(page);
   await expect(guide).toBeVisible();
   await expect(guide.getByText("Get training plan completed.")).toBeVisible();
   await guide.getByRole("button", { name: "Reset demo" }).click();
@@ -233,11 +263,10 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
   page,
 }) => {
   await page.goto("/");
-  const status = page.getByRole("button", {
-    name: "Coach Agent connection: unavailable",
-  });
-  await status.focus();
-  await status.press("Enter");
+  const menuTrigger = page.getByRole("button", { name: "Open app menu" });
+  await menuTrigger.focus();
+  await menuTrigger.press("Enter");
+  await page.getByRole("menuitem", { name: "Demo Guide" }).click();
   const guide = page.getByRole("dialog", { name: "Demo Guide" });
   await expect(
     guide.getByRole("button", { name: "Close Demo Guide" }),
@@ -247,7 +276,7 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
     guide.getByRole("button", { name: "Continue to workspace" }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(status).toBeFocused();
+  await expect(menuTrigger).toBeFocused();
 
   const workout = page.getByRole("button", { name: /5 × 1 km threshold/ });
   await workout.focus();
@@ -264,15 +293,13 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
   await workoutBack.press("Enter");
   await expect(workout).toBeFocused();
 
-  const resetButton = page.getByRole("button", { name: "Reset demo" });
-  await resetButton.focus();
-  await resetButton.press("Enter");
+  await openResetDialog(page);
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
   await expect(
     reset.getByRole("button", { name: "Keep current plan" }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(resetButton).toBeFocused();
+  await expect(menuTrigger).toBeFocused();
 });
 
 test("an external review displaces an unseen Demo Guide without marking or reopening it", async ({
@@ -354,12 +381,7 @@ test("reset temporarily owns an active review and either restores or cancels it"
   const review = page.getByRole("dialog", {
     name: "Review Workout Adaptations",
   });
-  const openReset = () =>
-    page.evaluate(() =>
-      (
-        document.querySelector(".topbar-actions .button") as HTMLButtonElement
-      ).click(),
-    );
+  const openReset = () => openResetDialog(page, true);
   await openReset();
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
   await expect(reset).toBeVisible();
@@ -452,9 +474,7 @@ test("completes fallback discussion, approval, view changes, and reset by keyboa
   await week.press("Enter");
   await expect(page.getByText("24–30 August")).toBeVisible();
 
-  const resetButton = page.getByRole("button", { name: "Reset demo" });
-  await resetButton.focus();
-  await resetButton.press("Enter");
+  await openResetDialog(page);
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
@@ -570,15 +590,22 @@ test("reviews both ranked Workout Adaptations and leaves every exit non-mutating
 });
 
 test("shows the shared coaching briefing", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/#coaching");
 
+  const profile = page.getByRole("region", { name: "Athlete Profile" });
   await expect(
-    page.getByRole("heading", { name: "Athlete Profile" }),
+    profile.getByRole("heading", { name: "Athlete Profile" }),
   ).toBeVisible();
-  await expect(page.getByText("Preferred long run")).toBeVisible();
-  await expect(page.getByText("Sunday", { exact: true })).toBeVisible();
-  await expect(page.getByText("Maximum weekday session")).toBeVisible();
-  await expect(page.getByText("60 minutes", { exact: true })).toBeVisible();
+  await expect(profile.getByText("Target Race", { exact: true })).toBeVisible();
+  await expect(
+    profile.getByText("Availability", { exact: true }),
+  ).toBeVisible();
+  await expect(profile.getByText("Constraints", { exact: true })).toBeVisible();
+  await expect(
+    profile.getByText("Performance context", { exact: true }),
+  ).toBeVisible();
+  await expect(profile.getByText(/Sunday/)).toBeVisible();
+  await expect(profile.getByText(/60 minutes/).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
@@ -695,29 +722,30 @@ test("persists feedback context and plan adaptations across reload and reset", a
   await expect(page.getByText("Plan version 2")).toBeVisible();
   await expect(page.getByText("Adapted", { exact: true })).toHaveCount(2);
 
-  const history = page.getByRole("region", {
-    name: "Recent plan adaptations",
-  });
-  await expect(history).toBeVisible();
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(timeline).toBeVisible();
   await expect(
-    history.getByText("Recovery first", { exact: true }),
+    timeline.getByText("Recovery first", { exact: true }),
   ).toBeVisible();
-  await expect(history.getByText("Plan 1 → 2", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("1 → 2", { exact: true })).toBeVisible();
   await expect(
-    history.getByText("26 August 2026", { exact: true }),
+    timeline
+      .locator("#coaching-entry-approved-adaptation-playwright")
+      .locator("time"),
   ).toBeVisible();
   await expect(
-    history.getByText("3 workouts affected", { exact: true }),
+    timeline.getByText("Workouts affected", { exact: true }),
   ).toBeVisible();
+  await expect(timeline.locator("dd").filter({ hasText: "3" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Reset demo" }).click();
+  await openResetDialog(page);
   await page
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Recent plan adaptations" }),
-  ).toHaveCount(0);
+  await expect(page.getByText("Recovery first", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
   ).toBeVisible();
@@ -782,7 +810,11 @@ test("shows the planned Workout without pulling completed content forward", asyn
     page.getByRole("heading", { name: "Workout structure" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Targets" })).toBeVisible();
-  await expect(page.getByText("Workout Result")).not.toBeAttached();
+  await expect(
+    page
+      .getByRole("main", { name: "Planned Workout" })
+      .getByText("Workout Result"),
+  ).not.toBeAttached();
 });
 
 test("shows recent training and the complete mixed recovery evidence", async ({
@@ -828,7 +860,7 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   await page.goto("/");
 
   await expect(
-    page.getByRole("button", { name: "Coach Agent connection: connected" }),
+    page.getByRole("status", { name: "Coach Agent connection: connected" }),
   ).toBeVisible();
   const result = await page.evaluate(async () => {
     const harness = (
@@ -1114,7 +1146,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
 
   await page.reload();
   await expect(
-    page.getByRole("button", {
+    page.getByRole("status", {
       name: "Coach Agent connection: connected",
     }),
   ).toBeVisible();
@@ -1155,16 +1187,19 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
     appliedAt: "2026-08-26T20:15:00+01:00",
     evidenceRefs: expect.arrayContaining(proposal.evidenceRefs),
   });
-  const history = page.getByRole("region", {
-    name: "Recent plan adaptations",
-  });
-  await expect(history).toBeVisible();
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(timeline).toBeVisible();
   await expect(
-    history.getByText(proposal.recommended.label, { exact: true }),
+    timeline.getByText(proposal.recommended.label, { exact: true }),
   ).toBeVisible();
-  await expect(history.getByText("Plan 1 → 2", { exact: true })).toBeVisible();
+  await expect(timeline.getByText("1 → 2", { exact: true })).toBeVisible();
   await expect(
-    history.getByText("26 August 2026", { exact: true }),
+    timeline
+      .locator("#coaching-entry-approved-adaptation-fresh-agent-lifecycle")
+      .locator("time"),
+  ).toBeVisible();
+  await expect(
+    timeline.getByText("Workouts affected", { exact: true }),
   ).toBeVisible();
 });
 
@@ -1217,7 +1252,9 @@ test("records, persists, and resets Athlete Feedback through the injected host",
 
   await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
   await expect(
-    page.getByRole("heading", { name: "Athlete Feedback" }),
+    page
+      .locator("#coaching-entry-athlete-feedback-hero-feedback-request")
+      .getByText("Athlete Feedback", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText(rawText)).toBeVisible();
   await expect(page.getByText("9/10 effort")).toBeVisible();
@@ -1229,15 +1266,15 @@ test("records, persists, and resets Athlete Feedback through the injected host",
   await page.reload();
   await expect(page.getByText(rawText)).toBeVisible();
 
-  await page.getByRole("button", { name: "Reset demo" }).click();
+  await openResetDialog(page);
   await page
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
-  const feedback = page.getByRole("region", { name: "Athlete Feedback" });
-  await expect(feedback).toBeVisible();
+  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await expect(timeline).toBeVisible();
   await expect(
-    feedback.getByText(
+    timeline.getByText(
       "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
     ),
   ).toBeVisible();
@@ -1255,7 +1292,7 @@ test("persists the seeded envelope across reload and resets with in-page approva
 
   await page.reload();
   await expect(page.getByText("Plan version 1")).toBeVisible();
-  await page.getByRole("button", { name: "Reset demo" }).click();
+  await openResetDialog(page);
   await expect(
     page.getByRole("heading", { name: "Reset the demo?" }),
   ).toBeVisible();
@@ -1264,7 +1301,7 @@ test("persists the seeded envelope across reload and resets with in-page approva
     page.getByRole("heading", { name: "Reset the demo?" }),
   ).toBeHidden();
 
-  await page.getByRole("button", { name: "Reset demo" }).click();
+  await openResetDialog(page);
   await page
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
@@ -1341,8 +1378,12 @@ test("renders context from a valid modified saved workspace", async ({
   await expect(
     page.getByText(/arrive ready for South Downs Marathon/),
   ).toBeVisible();
-  await expect(page.getByText("9 May 2027")).toBeVisible();
-  await expect(page.getByText("4:00", { exact: true })).toBeVisible();
+  await expect(page.getByText("9 May 2027").first()).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Today" })
+      .getByText("4:00", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("29 km remain after Wednesday’s partial session."),
   ).toBeVisible();
@@ -1369,7 +1410,7 @@ test("remains usable without WebMCP and warns when storage is memory-only", asyn
   await page.goto("/");
 
   await expect(
-    page.getByRole("button", { name: "Coach Agent connection: unavailable" }),
+    page.getByRole("status", { name: "Coach Agent connection: unavailable" }),
   ).toBeVisible();
   await expect(
     page.getByText("Changes will last only until this page is reloaded."),
@@ -1407,9 +1448,7 @@ test("keeps the guide and fallback review contained at a narrow viewport", async
   await page.setViewportSize({ width: 390, height: 844 });
   await installWebMcpHarness(page, "fallback");
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Coach Agent connection: connected" })
-    .press("Enter");
+  await openGuideDialog(page);
   const guide = page.getByRole("dialog", { name: "Demo Guide" });
   await expect(guide).toBeVisible();
   const guideContinue = guide.getByRole("button", {

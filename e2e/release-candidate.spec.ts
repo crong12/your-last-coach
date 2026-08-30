@@ -17,7 +17,7 @@ test("serves the built fallback workspace without external runtime requests", as
     page.getByRole("heading", { name: "Your Training Plan" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Coach Agent connection: unavailable" }),
+    page.getByRole("status", { name: "Coach Agent connection: unavailable" }),
   ).toBeVisible();
   await expect(page.getByText("Plan version 1")).toBeVisible();
   expect([...externalRequests]).toEqual([]);
