@@ -492,8 +492,26 @@ describe("WebMCP coaching tools", () => {
     coordinator.select("recovery-first");
     await coordinator.approve();
 
-    expect(saves).toHaveLength(1);
+    expect(saves).toHaveLength(3);
     expect(saves[0]).toMatchObject({
+      state: {
+        trainingPlan: { planVersion: 2 },
+        pendingAdaptationProposal: {
+          proposal: { reviewId: "review:webmcp" },
+          selectedOptionId: null,
+        },
+      },
+    });
+    expect(saves[1]).toMatchObject({
+      state: {
+        trainingPlan: { planVersion: 2 },
+        pendingAdaptationProposal: {
+          proposal: { reviewId: "review:webmcp" },
+          selectedOptionId: "recovery-first",
+        },
+      },
+    });
+    expect(saves[2]).toMatchObject({
       schemaVersion: 1,
       state: { trainingPlan: { planVersion: 3 } },
       undeliveredFallbackResult: {
@@ -529,8 +547,8 @@ describe("WebMCP coaching tools", () => {
       status: "not_ready",
       reviewId: "review:webmcp",
     });
-    expect(saves).toHaveLength(2);
-    expect(saves[1].undeliveredFallbackResult).toBeUndefined();
+    expect(saves).toHaveLength(4);
+    expect(saves[3].undeliveredFallbackResult).toBeUndefined();
   });
 
   it("stores a non-mutating fallback discussion, blocks another open, and serializes reads", async () => {
@@ -579,13 +597,58 @@ describe("WebMCP coaching tools", () => {
     });
   });
 
-  it("orders teardown cancellation after an in-flight fallback approval save", async () => {
+  it("delivers a declined fallback decision exactly once", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+    });
+    const tools = Object.fromEntries(
+      registrations.map(({ tool }) => [tool.name, tool]),
+    );
+    const execution = { signal: new AbortController().signal };
+
+    await expect(
+      tools.open_workout_adaptation_review.execute(
+        reviewProposal() as unknown as Record<string, unknown>,
+        execution,
+      ),
+    ).resolves.toMatchObject({ status: "review_opened" });
+    await expect(coordinator.decline()).resolves.toEqual({
+      status: "declined",
+      reviewId: "review:webmcp",
+    });
+    await expect(
+      tools.read_workout_adaptation_decision.execute(
+        { reviewId: "review:webmcp" },
+        execution,
+      ),
+    ).resolves.toEqual({ status: "declined", reviewId: "review:webmcp" });
+    await expect(
+      tools.read_workout_adaptation_decision.execute(
+        { reviewId: "review:webmcp" },
+        execution,
+      ),
+    ).resolves.toEqual({
+      status: "not_ready",
+      reviewId: "review:webmcp",
+    });
+    expect(application.getState().trainingPlan.planVersion).toBe(2);
+  });
+
+  it("keeps a published fallback proposal through registration teardown", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const initialState = structuredClone(await fixtureSource.loadContext());
     initialState.trainingPlan.planVersion = 2;
     let releaseFirstSave!: () => void;
+    let firstSaveStarted!: () => void;
     const firstSaveGate = new Promise<void>(
       (resolve) => (releaseFirstSave = resolve),
+    );
+    const firstSaveStartedPromise = new Promise<void>(
+      (resolve) => (firstSaveStarted = resolve),
     );
     const saves: PersistedWorkspace[] = [];
     const application = createWorkspaceApplication({
@@ -597,7 +660,10 @@ describe("WebMCP coaching tools", () => {
         },
         async save(workspace) {
           saves.push(structuredClone(workspace));
-          if (saves.length === 1) await firstSaveGate;
+          if (saves.length === 1) {
+            firstSaveStarted();
+            await firstSaveGate;
+          }
           return "persistent";
         },
         async clear() {},
@@ -613,40 +679,55 @@ describe("WebMCP coaching tools", () => {
       registrations.map(({ tool }) => [tool.name, tool]),
     );
     const execution = { signal: new AbortController().signal };
-    await tools.open_workout_adaptation_review.execute(
+    const opening = tools.open_workout_adaptation_review.execute(
       reviewProposal() as unknown as Record<string, unknown>,
       execution,
     );
+    await firstSaveStartedPromise;
+    releaseFirstSave();
+    await opening;
     coordinator.select("recovery-first");
 
     const approval = coordinator.approve();
     await Promise.resolve();
     registration.cleanup();
     registration.cleanup();
-    releaseFirstSave();
 
     await expect(approval).resolves.toMatchObject({
-      status: "error",
-      code: "cancelled",
+      status: "approved",
+      reviewId: "review:webmcp",
     });
     await expect(
       application.readFallbackResult("review:webmcp"),
     ).resolves.toEqual({
-      status: "cancelled",
+      status: "approved",
       reviewId: "review:webmcp",
-      reason: "teardown",
+      planVersionBefore: 2,
+      planVersionAfter: 3,
+      durability: "persistent",
+      selectedOption: {
+        optionId: "recovery-first",
+        label: "Recovery first",
+      },
+      affectedWorkouts: expect.any(Array),
+      appliedAt: expect.any(String),
+      evidenceRefs: expect.any(Array),
     });
-    expect(application.getState().trainingPlan.planVersion).toBe(2);
-    expect(saves).toHaveLength(3);
+    expect(application.getState().trainingPlan.planVersion).toBe(3);
+    expect(saves).toHaveLength(4);
     expect(saves[0]).toMatchObject({
-      state: { trainingPlan: { planVersion: 3 } },
-      undeliveredFallbackResult: { status: "approved" },
+      state: {
+        trainingPlan: { planVersion: 2 },
+        pendingAdaptationProposal: {
+          proposal: { reviewId: "review:webmcp" },
+        },
+      },
     });
-    expect(saves[1]).toMatchObject({
-      state: { trainingPlan: { planVersion: 2 } },
+    expect(saves[2]).toMatchObject({
+      state: { trainingPlan: { planVersion: 3 } },
       undeliveredFallbackResult: {
-        status: "cancelled",
-        reason: "teardown",
+        status: "approved",
+        reviewId: "review:webmcp",
       },
     });
   });

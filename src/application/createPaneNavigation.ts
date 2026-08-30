@@ -3,7 +3,9 @@ export const PANE_IDS = ["today", "trends", "coaching"] as const;
 export type PaneId = (typeof PANE_IDS)[number];
 
 export type WorkspaceRoute =
-  { kind: "pane"; pane: PaneId } | { kind: "workout"; workoutId: string };
+  | { kind: "pane"; pane: PaneId }
+  | { kind: "workout"; workoutId: string }
+  | { kind: "adaptation"; reviewId: string };
 
 export const NAVIGATION_STATE_KEY = "yourLastCoachNavigation";
 export const NAVIGATION_FOCUS_STATE_KEY = "yourLastCoachNavigationFocus";
@@ -106,19 +108,25 @@ export function workspaceRouteFromHash(hash: string): WorkspaceRoute | null {
   const pane = PANE_IDS.find((candidate) => candidate === fragment);
   if (pane) return { kind: "pane", pane };
   const workoutMatch = /^workout\/([^/]+)$/.exec(fragment);
-  if (!workoutMatch) return null;
+  const adaptationMatch = /^adaptation\/([^/]+)$/.exec(fragment);
+  if (!workoutMatch && !adaptationMatch) return null;
   try {
-    const workoutId = decodeURIComponent(workoutMatch[1]);
-    return workoutId === "" ? null : { kind: "workout", workoutId };
+    if (workoutMatch) {
+      const workoutId = decodeURIComponent(workoutMatch[1]);
+      return workoutId === "" ? null : { kind: "workout", workoutId };
+    }
+    const reviewId = decodeURIComponent(adaptationMatch![1]);
+    return reviewId === "" ? null : { kind: "adaptation", reviewId };
   } catch {
     return null;
   }
 }
 
 export function workspaceRouteHash(route: WorkspaceRoute): string {
-  return route.kind === "pane"
-    ? `#${route.pane}`
-    : `#workout/${encodeURIComponent(route.workoutId)}`;
+  if (route.kind === "pane") return `#${route.pane}`;
+  if (route.kind === "workout")
+    return `#workout/${encodeURIComponent(route.workoutId)}`;
+  return `#adaptation/${encodeURIComponent(route.reviewId)}`;
 }
 
 export interface PaneNavigation {
@@ -128,6 +136,7 @@ export interface PaneNavigation {
   selectPane(pane: PaneId): void;
   restorePane(pane: PaneId): void;
   pushWorkout(workoutId: string): void;
+  pushAdaptation(reviewId: string): void;
   restoreRoute(route: WorkspaceRoute): void;
 }
 
@@ -150,6 +159,12 @@ export function createPaneNavigation(
       route.kind === "workout" &&
       nextRoute.kind === "workout" &&
       route.workoutId === nextRoute.workoutId
+    )
+      return;
+    if (
+      route.kind === "adaptation" &&
+      nextRoute.kind === "adaptation" &&
+      route.reviewId === nextRoute.reviewId
     )
       return;
     route = nextRoute;
@@ -175,6 +190,9 @@ export function createPaneNavigation(
     restorePane: setSelectedPane,
     pushWorkout(workoutId) {
       setRoute({ kind: "workout", workoutId });
+    },
+    pushAdaptation(reviewId) {
+      setRoute({ kind: "adaptation", reviewId });
     },
     restoreRoute: setRoute,
   };

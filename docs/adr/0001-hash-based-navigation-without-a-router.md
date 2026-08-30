@@ -23,6 +23,7 @@ Navigation state lives in the URL hash, with no router dependency:
 - Pushed screens: e.g. `#workout/<id>` and the adaptation review route. Opening a pushed screen uses `pushState`, so browser/OS back pops the screen and returns to the pane (mobile) or scroll position (desktop) beneath it.
 - Deep links restore state on load: a pane hash opens that pane (mobile) or scrolls to that section (desktop); a pushed-screen hash opens the screen above its parent pane. A bare URL lands on Today.
 - Screens opened by WebMCP tools go through the same route mechanism as user gestures; there is one navigation state, owned by the application layer.
+- The adaptation review route reads its pending, approved, declined, stale, or unknown record from application-owned state. A valid pending route survives reload with its persisted expiry; Back leaves it undecided and returns to the recorded origin.
 
 ## Consequences
 

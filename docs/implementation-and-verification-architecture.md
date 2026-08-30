@@ -91,12 +91,12 @@ Owns the immutable `demo-athlete-v1` seed, fixed clock, source-labelled Athlete 
 
 Owns:
 
-- the pure workspace reducer;
+- the pure workspace reducer and serializable review records;
 - typed commands and queries;
 - selectors used by both UI and WebMCP reads, including the bounded Coaching Briefing;
 - validation of Plan Approval and Workout Changes;
 - plan-version and idempotency checks;
-- the transient review state machine;
+- the application-owned pending proposal and declined decision lifecycle;
 - structured application outcomes.
 
 React components and WebMCP callbacks never edit Training Plan objects directly.
@@ -115,7 +115,7 @@ Owns only host mechanics:
 - registration after successful application initialization;
 - translation between tool payloads and typed application commands/queries;
 - `AbortSignal`, unload, cleanup, and single-settlement behaviour;
-- the stored two-call fallback delivery;
+- the stored two-call fallback delivery, including explicit `declined` results;
 - structured safe errors.
 
 It does not generate Coach Recommendations, interpret Athlete evidence, or mutate the Training Plan independently.
@@ -124,7 +124,7 @@ The shipped attached-site path exposes the six fallback tools documented in the 
 
 ### `ui`
 
-Renders the weekly and monthly Training Plan views, workout detail, the bounded Athlete Profile and active Coaching Topics, shared evidence, Athlete Feedback, temporary review modal, calendar preview, Adaptation History, Demo Guide, WebMCP connection status, persistence warnings, and reset flow.
+Renders the weekly and monthly Training Plan views, workout detail, the bounded Athlete Profile and active Coaching Topics, shared evidence, Athlete Feedback, the actionable Coaching review card and timeline, full-push adaptation screen, calendar preview, Adaptation History, Demo Guide, WebMCP connection status, persistence warnings, and reset flow.
 
 Presentation components consume selectors and dispatch application commands. Component-local state is limited to non-authoritative presentation concerns.
 
@@ -177,6 +177,8 @@ type WorkspaceState = {
   };
   athleteFeedback: AthleteFeedback[];
   coachingTopics: CoachingTopic[];
+  pendingAdaptationProposal?: PendingAdaptationProposal;
+  declinedAdaptations: DeclinedPlanAdaptation[];
   processedRequestIds: string[];
   appliedReviewIds: string[];
   adaptationReceipts: AppliedPlanAdaptation[];
@@ -235,24 +237,31 @@ The WebMCP adapter exposes this projection as `get_coaching_briefing` and adds a
 
 For `demo-athlete-v1`, the selector always returns the seeded profile and shin-discomfort topic. Relevance is expressed by the topic's follow-up condition. The Coach Agent may acknowledge the topic when the Athlete reports on a run, but cannot diagnose, silently resolve, or allow it to override stronger current evidence.
 
-## Transient review state
+## Review lifecycle state
 
-The active review is a separate in-memory state machine because Promise resolvers, abort listeners, registration handles, selection, and preview cannot meaningfully survive reload:
+The application persists the validated pending proposal, its absolute expiry, delivery mode, and optional selection. It also persists declined timeline records. The coordinator keeps only runtime interaction state because Promise resolvers, abort listeners, registration handles, applying flags, and derived preview cannot meaningfully survive reload:
 
 ```text
-idle -> reviewing -> applied | discuss_further | cancelled
+none -> pending -> approved | declined | discuss_further | cancelled
 ```
 
-The review coordinator exclusively owns:
+The application exclusively owns:
+
+- one pending proposal and its plan-version check;
+- pending selection persistence and stale/expiry reconciliation;
+- declined records and fallback terminal delivery;
+- atomic approval, reset, and idempotency state.
+
+The review coordinator owns only runtime orchestration:
 
 - the active `reviewId`;
 - the proposal and expected `planVersion`;
 - the selected option and derived preview;
 - the controlled-development pending-call resolver;
 - abort and unload cleanup;
-- exactly-once terminal settlement.
+- exactly-once settlement for controlled-development waiters.
 
-An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A compatibility-fallback review applies through the same application command; only its completed, undelivered terminal result persists for later delivery. The exact fallback terminal statuses and approved receipt payload are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
+An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A published fallback proposal survives registration/page teardown and reload with its persisted deadline; timeout, reset, stale-plan change, and other explicit fallback cancellation paths store `cancelled`, while **Keep current plan** stores `declined`. Approval uses the same application command in both paths. The exact fallback terminal statuses and approved/declined payloads are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
 
 ## Planned Workout and Workout Result
 
@@ -345,7 +354,7 @@ The application command:
 4. increments `planVersion`;
 5. records the `reviewId` and the durable Adaptation History receipt atomically in state; the receipt contains evidence references, selected option identity, affected before/after values, application time, and plan versions;
 6. attempts to persist the complete resulting snapshot;
-7. produces the terminal result for the controlled-development pending call or stored fallback delivery.
+7. produces the terminal result for the controlled-development pending call or stored fallback delivery. **Keep current plan** clears the proposal, records a declined timeline decision, and stores `declined` without changing the Training Plan.
 
 The controlled-development pending-call path and shipped fallback path invoke the same command. If browser persistence fails, the in-memory application remains authoritative for the current page, the terminal result includes `durability: "memory_only"`, and the UI warns that reload will lose the changes.
 
@@ -367,7 +376,7 @@ An invalid saved snapshot is replaced rather than heuristically repaired. The UI
 
 **Reset demo** uses a lightweight in-page confirmation. Approval of reset:
 
-- cancels an active review with reason `reset`;
+- cancels an active controlled review with reason `reset` and clears a published fallback proposal;
 - clears the persisted envelope and undelivered fallback result;
 - clears new Athlete Feedback, plan changes, idempotency records, receipts, selection, and preview;
 - restores the exact seeded Athlete Profile, Coaching Topic, fixed clock, and initial `planVersion`;

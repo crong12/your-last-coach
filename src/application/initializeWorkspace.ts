@@ -11,6 +11,7 @@ import { isWorkspaceState } from "../domain/validation";
 interface InitializeWorkspaceOptions {
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
+  now?: () => number;
 }
 
 export interface InitializedWorkspace {
@@ -70,6 +71,15 @@ function isPersistedWorkspace(value: unknown): value is {
       )
     );
   }
+  if (result.status === "declined") {
+    const decision = value.state.declinedAdaptations.find(
+      (candidate) => candidate.reviewId === result.reviewId,
+    );
+    return (
+      decision !== undefined &&
+      Object.keys(result).every((key) => ["status", "reviewId"].includes(key))
+    );
+  }
   if (result.status !== "approved") return false;
   return (
     receipt !== undefined &&
@@ -98,6 +108,46 @@ export async function initializeWorkspace(
 ): Promise<InitializedWorkspace> {
   const saved = await options.repository.load();
   if (isPersistedWorkspace(saved)) {
+    const pending = saved.state.pendingAdaptationProposal;
+    const expired =
+      pending !== undefined &&
+      Number.isFinite(Date.parse(pending.expiresAt)) &&
+      Date.parse(pending.expiresAt) <= (options.now?.() ?? Date.now());
+    if (expired) {
+      const { pendingAdaptationProposal: _pending, ...stateWithoutPending } =
+        saved.state;
+      const state = deepFreeze(structuredClone(stateWithoutPending));
+      const timeoutResult: PersistedFallbackResult = {
+        status: "cancelled",
+        reviewId: pending.proposal.reviewId,
+        reason: "timeout",
+      };
+      const persistedFallbackResult =
+        pending.delivery === "fallback" ? timeoutResult : undefined;
+      let durability: Durability =
+        options.repository.durability ?? "persistent";
+      try {
+        durability = await options.repository.save({
+          schemaVersion: 1,
+          seedVersion: "demo-athlete-v1",
+          savedAt: state.clock.now,
+          state,
+          ...(persistedFallbackResult === undefined
+            ? {}
+            : { undeliveredFallbackResult: persistedFallbackResult }),
+        });
+      } catch {
+        durability = "memory_only";
+      }
+      return {
+        state,
+        notice: null,
+        durability,
+        ...(persistedFallbackResult === undefined
+          ? {}
+          : { undeliveredFallbackResult: persistedFallbackResult }),
+      };
+    }
     return {
       state: deepFreeze(structuredClone(saved.state)),
       notice: null,

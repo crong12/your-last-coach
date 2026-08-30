@@ -24,11 +24,11 @@ When one or more proposed Workout Adaptations are pending, a pinned card sits ab
 - Proposal title, the Coach Agent's one-line rationale, timestamp, and its Coaching Evidence provenance line.
 - Primary action **Review proposal** → pushes `#adaptation/<id>`.
 
-Prominence comes from position and the pane's only coral accent — no notification chrome, no badges, no counts in the section nav. The Today pane's chip (per its spec) is the only cross-pane echo. When nothing is pending the card does not exist.
+Prominence comes from position and the pane's only coral accent — no notification chrome, no badges, no counts in the section nav, and no Today-chip echo. A published fallback proposal is application-owned and remains available through registration or page teardown until the Athlete decides, the persisted deadline expires, the Training Plan becomes stale, or the demo is reset. When nothing is pending the card does not exist.
 
 ## 2. Coaching timeline
 
-**Form: a single vertical narrative stream**, newest first, with a hairline spine connecting entries. Rejected: separate event-stream tabs and grouping by Coaching Topic — one story, in order, matches the coaching-relationship framing; topic grouping can be revisited if volume ever demands it. ⚠️ *Iteration point: newest-first vs oldest-first reading order may flip after real use.*
+**Form: a single vertical narrative stream**, newest first, with a hairline spine connecting entries. Rejected: separate event-stream tabs and grouping by Coaching Topic — one story, in order, matches the coaching-relationship framing; topic grouping can be revisited if volume ever demands it. ⚠️ _Iteration point: newest-first vs oldest-first reading order may flip after real use._
 
 Entry types, each visually typed by eyebrow + icon, sharing one card grammar:
 
@@ -43,7 +43,7 @@ Entry types, each visually typed by eyebrow + icon, sharing one card grammar:
 
 ## 3. Adaptation review-and-approval flow
 
-The current modal dies. Review is a **pushed screen** (`#adaptation/<id>`, full-push per #46) — the product's most consequential act deserves a full page, and the back gesture safely abandons review without deciding.
+The old modal is retired. Review is a **pushed screen** (`#adaptation/<id>`, full-push per #46) — the product's most consequential act deserves a full page, and the back gesture safely leaves review without deciding.
 
 Screen composition:
 
@@ -51,14 +51,14 @@ Screen composition:
 - **Plan-versus-proposed comparison**: the affected Planned Workout(s) side by side — current plan vs proposed change, differences highlighted (quiet ink for equal values, ochre/ember only where a change warrants attention semantics).
 - Rationale block: the Coach Agent's full reasoning with its provenance line and uncertainty statement.
 - Ranked alternatives when present (the demo proposes two ranked adaptations): the non-primary option rendered collapsed beneath.
-- Decision bar (sticky at screen bottom): **Adapt my plan** (primary, coral) and **Keep current plan** (secondary). Explicit tap required; no default; deciding pops back to Coaching with the timeline updated. This preserves the WebMCP contract: `open_workout_adaptation_review` opens this same route; `read_workout_adaptation_decision` reads what the Athlete chose.
+- Decision bar (sticky at screen bottom): **Adapt my plan** (primary, coral) and **Keep current plan** (secondary). Explicit selection and tap are required; no option is selected by default. Approval pops back to Coaching with an Adaptation History receipt; keeping the current plan pops back with a durable declined timeline entry and no Training Plan mutation. `open_workout_adaptation_review` opens this same route; `read_workout_adaptation_decision` reads the explicit terminal result.
 
 ## 4. Context-rail dissolution (what moves, what dies)
 
 The desktop context rail does not survive the pane structure:
 
 - **Target Race card** → dies here; its content is the Today hero.
-- **Athlete Profile card** → becomes a compact summary card at the bottom of this pane (name, goal framing, training availability, constraints) — it is coaching context, and the Coach Agent's briefing draws from it. Tap → expands inline (no pushed screen for v1). ⚠️ *Iteration point: may move behind a header affordance if the pane gets long.*
+- **Athlete Profile card** → becomes a compact summary card at the bottom of this pane (name, goal framing, training availability, constraints) — it is coaching context, and the Coach Agent's briefing draws from it. Tap → expands inline (no pushed screen for v1). ⚠️ _Iteration point: may move behind a header affordance if the pane gets long._
 - **Monitoring card** → dies; superseded entirely by the Trends pane.
 
 ## 5. Demo chrome placement
@@ -73,8 +73,8 @@ Demo Guide and Reset leave the coaching surface: they move to an overflow menu (
 ## Accessibility & motion
 
 - The timeline is a list with typed, fully-labelled entries; the pinned review card is announced first.
-- The decision bar buttons carry explicit accessible names ("Adapt my plan: <proposal title>").
-- Reduced motion: push transitions are cuts; no timeline entrance animations.
+- The decision bar buttons carry explicit accessible names ("Adapt my plan: <proposal title>"). The pushed screen moves focus to its heading; Back and Escape leave the proposal undecided and restore the originating Coaching target.
+- Reduced motion: push and disclosure transitions are cuts; no timeline entrance animations.
 
 ## Open iteration points
 

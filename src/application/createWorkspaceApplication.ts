@@ -1,16 +1,24 @@
 import type { WorkspaceRepository } from "./ports";
-import type { Durability } from "./ports";
-import type { PersistedFallbackResult } from "./ports";
+import type {
+  AdaptationRecord,
+  Durability,
+  PersistedFallbackResult,
+  ReviewOpenResult,
+} from "./ports";
 import type {
   CoachingContextSource,
   AppliedPlanAdaptation,
   AthleteFeedback,
+  DeclinedPlanAdaptation,
   IsoDate,
+  PendingAdaptationProposal,
   PlannedWorkout,
   WorkspaceState,
 } from "../domain/types";
 import {
   validateAdaptationOption,
+  validatePendingAdaptationProposal,
+  validateReviewProposal,
   type AdaptationOption,
   type ReviewProposal,
 } from "../domain/review";
@@ -32,6 +40,8 @@ interface CreateWorkspaceApplicationOptions {
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
   initialUndeliveredFallbackResult?: PersistedFallbackResult;
+  reviewTimeoutMs?: number;
+  now?: () => number;
 }
 
 type CalendarQuery =
@@ -112,6 +122,23 @@ export interface WorkspaceApplication {
   command(
     command: Extract<WorkspaceCommand, { type: "apply_plan_approval" }>,
   ): Promise<PlanApprovalResult | PlanApprovalError>;
+  openPlanReview(
+    proposal: ReviewProposal,
+    delivery?: "primary" | "fallback",
+  ): Promise<ReviewOpenResult>;
+  persistPendingPlanReview(reviewId: string): Promise<Durability>;
+  getPendingAdaptationProposal(): PendingAdaptationProposal | null;
+  getAdaptationRecord(reviewId: string): AdaptationRecord;
+  selectPlanReviewOption(reviewId: string, optionId: string): void;
+  declinePlanReview(reviewId: string): Promise<
+    | { status: "declined"; reviewId: string }
+    | {
+        status: "error";
+        code: "not_found" | "busy";
+        message: string;
+        retryable: boolean;
+      }
+  >;
   activatePlanReview(
     proposal: ReviewProposal,
     delivery?: "primary" | "fallback",
@@ -145,6 +172,8 @@ export function createWorkspaceApplication(
   options: CreateWorkspaceApplicationOptions,
 ): WorkspaceApplication {
   let state = deepFreeze(structuredClone(options.initialState));
+  const reviewTimeoutMs = options.reviewTimeoutMs ?? 300_000;
+  const now = options.now ?? Date.now;
   const listeners = new Set<() => void>();
   const approvalDurability = new Map<string, Durability>();
   let approvalInFlight: {
@@ -159,6 +188,54 @@ export function createWorkspaceApplication(
   let reviewGeneration = 0;
   let undeliveredFallbackResult = options.initialUndeliveredFallbackResult;
   let persistenceTail: Promise<void> = Promise.resolve();
+  let pendingExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+  const staleReviewIds = new Set<string>();
+
+  const reviewOpenTimestamps = () => {
+    const openedAtMs = now();
+    const openedAt = new Date(openedAtMs).toISOString();
+    const expiresAt = new Date(openedAtMs + reviewTimeoutMs).toISOString();
+    return { openedAt, expiresAt };
+  };
+
+  const currentEvidenceRefs = (): Set<string> => {
+    const evidenceRefs = new Set<string>([
+      "observation:training-load",
+      "observation:recovery",
+      "observation:sleep",
+      "observation:sleep-hrv",
+      "observation:resting-heart-rate",
+      "observation:daily-stress",
+      `athlete:${state.athlete.id}`,
+      `target-race:${state.targetRace.id}`,
+      `training-phase:${state.trainingPhase.id}`,
+      `training-plan:version:${state.trainingPlan.planVersion}`,
+    ]);
+    for (const workout of state.trainingPlan.plannedWorkouts) {
+      evidenceRefs.add(`planned-workout:${workout.id}`);
+    }
+    for (const result of state.workoutResults) {
+      evidenceRefs.add(`workout-result:${result.id}`);
+    }
+    for (const feedback of state.athleteFeedback) {
+      evidenceRefs.add(`athlete-feedback:${feedback.id}`);
+    }
+    for (const topic of state.coachingTopics) {
+      evidenceRefs.add(`coaching-topic:${topic.id}`);
+      topic.evidenceRefs.forEach((ref) => evidenceRefs.add(ref));
+    }
+    return evidenceRefs;
+  };
+
+  const publishState = (nextState: WorkspaceState) => {
+    state = deepFreeze(structuredClone(nextState));
+    listeners.forEach((listener) => listener());
+  };
+
+  const clearPendingExpiryTimer = () => {
+    if (pendingExpiryTimer) clearTimeout(pendingExpiryTimer);
+    pendingExpiryTimer = null;
+  };
 
   const persist = (
     persistedState: WorkspaceState,
@@ -344,11 +421,290 @@ export function createWorkspaceApplication(
     };
   }) as WorkspaceApplication["query"];
 
+  const pendingFor = (reviewId: string) => {
+    const pending = state.pendingAdaptationProposal;
+    return pending?.proposal.reviewId === reviewId ? pending : null;
+  };
+
+  const schedulePendingExpiry = (pending: PendingAdaptationProposal) => {
+    clearPendingExpiryTimer();
+    const delay = Math.max(0, Date.parse(pending.expiresAt) - now());
+    pendingExpiryTimer = setTimeout(() => {
+      pendingExpiryTimer = null;
+      if (
+        state.pendingAdaptationProposal?.proposal.reviewId !==
+        pending.proposal.reviewId
+      )
+        return;
+      void cancelPlanReview({
+        status: "cancelled",
+        reviewId: pending.proposal.reviewId,
+        reason: "timeout",
+      });
+    }, delay);
+  };
+
+  const reconcilePendingPlan = () => {
+    const pending = state.pendingAdaptationProposal;
+    if (
+      pending === undefined ||
+      pending.proposal.expectedPlanVersion === state.trainingPlan.planVersion
+    )
+      return pending ?? null;
+
+    clearPendingExpiryTimer();
+    const nextState = withoutPending(state);
+    const staleResult: PersistedFallbackResult = {
+      status: "cancelled",
+      reviewId: pending.proposal.reviewId,
+      reason: "stale_plan_changed",
+    };
+    const persistedFallbackResult =
+      pending.delivery === "fallback" ? staleResult : undefined;
+    staleReviewIds.add(pending.proposal.reviewId);
+    if (pending.delivery === "fallback")
+      undeliveredFallbackResult = staleResult;
+    publishState(nextState);
+    void persist(nextState, persistedFallbackResult).catch(() => undefined);
+    return null;
+  };
+
+  const withoutPending = (value: WorkspaceState): WorkspaceState => {
+    const { pendingAdaptationProposal: _pending, ...rest } = value;
+    return rest;
+  };
+
+  const reviewProposalFor = (reviewId: string) => {
+    const pending = pendingFor(reviewId);
+    if (pending) return pending.proposal;
+    if (activePlanReview?.proposal.reviewId === reviewId)
+      return activePlanReview.proposal;
+    return null;
+  };
+
+  const reviewDeliveryFor = (reviewId: string) => {
+    const pending = pendingFor(reviewId);
+    if (pending) return pending.delivery;
+    if (activePlanReview?.proposal.reviewId === reviewId)
+      return activePlanReview.delivery;
+    return null;
+  };
+
+  const openPlanReview = async (
+    proposal: ReviewProposal,
+    delivery: "primary" | "fallback" = "fallback",
+  ): Promise<ReviewOpenResult> => {
+    if (delivery === "fallback" && undeliveredFallbackResult !== undefined) {
+      return {
+        status: "error",
+        code: "busy",
+        message:
+          "A completed Workout Adaptation decision is awaiting delivery.",
+        retryable: true,
+      };
+    }
+    const existingPending = reconcilePendingPlan();
+    if (existingPending) {
+      if (existingPending.proposal.reviewId === proposal.reviewId) {
+        return { status: "review_opened", reviewId: proposal.reviewId };
+      }
+      return {
+        status: "error",
+        code: "busy",
+        message: "Another Workout Adaptation review is already active.",
+        retryable: true,
+      };
+    }
+    const validated = validateReviewProposal(proposal, {
+      planVersion: state.trainingPlan.planVersion,
+      plannedWorkouts: state.trainingPlan.plannedWorkouts,
+      evidenceRefs: currentEvidenceRefs(),
+    });
+    if (!validated.valid) {
+      return {
+        status: "error",
+        code: validated.stale ? "stale_plan" : "invalid_input",
+        message: validated.stale
+          ? "The proposal is based on a stale Training Plan version."
+          : "The Workout Adaptation proposal is invalid.",
+        retryable: true,
+        issues: validated.issues,
+      };
+    }
+    const timestamps = reviewOpenTimestamps();
+    const pending: PendingAdaptationProposal = {
+      proposal: validated.proposal,
+      ...timestamps,
+      delivery,
+      selectedOptionId: null,
+    };
+    publishState({ ...state, pendingAdaptationProposal: pending });
+    schedulePendingExpiry(pending);
+    try {
+      await persist(state);
+    } catch {
+      // BrowserWorkspaceRepository keeps the current page's state in memory.
+    }
+    return { status: "review_opened", reviewId: validated.proposal.reviewId };
+  };
+
+  const persistPendingPlanReview = async (reviewId: string) => {
+    reconcilePendingPlan();
+    const pending = pendingFor(reviewId);
+    if (!pending) return options.repository.durability ?? "persistent";
+    try {
+      return await persist(state);
+    } catch {
+      return options.repository.durability ?? "memory_only";
+    }
+  };
+
+  const getAdaptationRecord = (reviewId: string): AdaptationRecord => {
+    if (typeof reviewId !== "string" || reviewId.trim() === "") {
+      return { status: "unknown" };
+    }
+    reconcilePendingPlan();
+    const pending = pendingFor(reviewId);
+    if (pending) return { status: "pending", pending };
+    const receipt = state.adaptationReceipts.find(
+      (candidate) => candidate.reviewId === reviewId,
+    );
+    if (receipt) return { status: "approved", receipt };
+    const decision = state.declinedAdaptations.find(
+      (candidate) => candidate.reviewId === reviewId,
+    );
+    if (decision) return { status: "declined", decision };
+    if (staleReviewIds.has(reviewId)) return { status: "stale", reviewId };
+    return { status: "unknown" };
+  };
+
+  const selectPlanReviewOption = (reviewId: string, optionId: string) => {
+    reconcilePendingPlan();
+    const pending = pendingFor(reviewId);
+    if (!pending) return;
+    if (
+      optionId !== pending.proposal.recommended.optionId &&
+      optionId !== pending.proposal.alternative.optionId
+    )
+      return;
+    publishState({
+      ...state,
+      pendingAdaptationProposal: {
+        ...pending,
+        selectedOptionId: optionId,
+      },
+    });
+    void persistPendingPlanReview(reviewId);
+  };
+
+  const cancelPlanReview = async (
+    result?: Exclude<PersistedFallbackResult, { status: "approved" }>,
+  ) => {
+    const reviewId = result?.reviewId ?? activePlanReview?.proposal.reviewId;
+    const proposal = reviewId ? reviewProposalFor(reviewId) : null;
+    const delivery = reviewId ? reviewDeliveryFor(reviewId) : null;
+    reviewGeneration += 1;
+    activePlanReview = null;
+    let nextState = state;
+    if (
+      reviewId &&
+      state.pendingAdaptationProposal?.proposal.reviewId === reviewId
+    ) {
+      nextState = withoutPending(nextState);
+    }
+    if (result?.status === "declined" && proposal) {
+      const decision: DeclinedPlanAdaptation = {
+        status: "declined",
+        reviewId: proposal.reviewId,
+        selectedOption: state.pendingAdaptationProposal?.selectedOptionId
+          ? (() => {
+              const option = [proposal.recommended, proposal.alternative].find(
+                ({ optionId }) =>
+                  optionId ===
+                  state.pendingAdaptationProposal?.selectedOptionId,
+              );
+              return option
+                ? { optionId: option.optionId, label: option.label }
+                : null;
+            })()
+          : null,
+        recommendation: {
+          label: proposal.recommended.label,
+          summary: proposal.recommended.summary,
+        },
+        declinedAt: state.clock.now,
+        planVersion: state.trainingPlan.planVersion,
+        evidenceRefs: [...proposal.evidenceRefs],
+      };
+      nextState = {
+        ...nextState,
+        declinedAdaptations: [
+          ...nextState.declinedAdaptations.filter(
+            ({ reviewId: candidate }) => candidate !== reviewId,
+          ),
+          decision,
+        ],
+      };
+    }
+    const stateChanged = nextState !== state;
+    if (result || stateChanged) {
+      const persistedFallbackResult =
+        delivery === "fallback" ? result : undeliveredFallbackResult;
+      try {
+        await persist(
+          nextState,
+          result === undefined
+            ? undeliveredFallbackResult
+            : persistedFallbackResult,
+        );
+      } catch {
+        // Keep the completed decision available in memory for this page.
+      }
+      if (delivery === "fallback") undeliveredFallbackResult = result;
+    }
+    if (stateChanged) publishState(nextState);
+    if (stateChanged) clearPendingExpiryTimer();
+  };
+
+  const declinePlanReview = async (reviewId: string) => {
+    const proposal = reviewProposalFor(reviewId);
+    if (!proposal) {
+      return {
+        status: "error" as const,
+        code: "not_found" as const,
+        message: "No matching Workout Adaptation review exists.",
+        retryable: false,
+      };
+    }
+    if (approvalInFlight) {
+      return {
+        status: "error" as const,
+        code: "busy" as const,
+        message: "Plan Approval is being applied.",
+        retryable: true,
+      };
+    }
+    await cancelPlanReview({ status: "declined", reviewId });
+    return { status: "declined" as const, reviewId };
+  };
+
+  if (state.pendingAdaptationProposal) {
+    schedulePendingExpiry(state.pendingAdaptationProposal);
+  }
+
   return {
     getState() {
       return state;
     },
     query,
+    openPlanReview,
+    persistPendingPlanReview,
+    getPendingAdaptationProposal() {
+      return reconcilePendingPlan();
+    },
+    getAdaptationRecord,
+    selectPlanReviewOption,
+    declinePlanReview,
     activatePlanReview(proposal, delivery = "primary") {
       activePlanReview = {
         proposal,
@@ -369,26 +725,7 @@ export function createWorkspaceApplication(
     hasUndeliveredFallbackResult() {
       return undeliveredFallbackResult !== undefined;
     },
-    async cancelPlanReview(result) {
-      const restoreAfterApproval = approvalInFlight !== null;
-      reviewGeneration += 1;
-      activePlanReview = null;
-      if (result) {
-        try {
-          await persist(state, result);
-        } catch {
-          // Keep the completed decision available in memory for this page.
-        }
-        undeliveredFallbackResult = result;
-      } else if (restoreAfterApproval) {
-        try {
-          await persist(state);
-        } catch {
-          // BrowserWorkspaceRepository already retains the authoritative page
-          // state in memory when durable storage is unavailable.
-        }
-      }
-    },
+    cancelPlanReview,
     async readFallbackResult(reviewId) {
       if (typeof reviewId !== "string" || reviewId.trim() === "") {
         return invalidFeedback("reviewId must be a non-empty string.");
@@ -450,11 +787,16 @@ export function createWorkspaceApplication(
             retryable: true,
           };
         }
+        const pendingReview = pendingFor(reviewId);
+        const reviewProposal =
+          pendingReview?.proposal ?? activePlanReview?.proposal;
+        const reviewDelivery =
+          pendingReview?.delivery ?? activePlanReview?.delivery;
         if (
-          !activePlanReview ||
-          activePlanReview.proposal.reviewId !== reviewId ||
-          activePlanReview.proposal.expectedPlanVersion !==
-            command.expectedPlanVersion
+          !reviewProposal ||
+          reviewProposal.expectedPlanVersion !== command.expectedPlanVersion ||
+          (activePlanReview !== null &&
+            activePlanReview.proposal.reviewId !== reviewId)
         ) {
           return {
             status: "error",
@@ -477,8 +819,8 @@ export function createWorkspaceApplication(
           };
         }
         const activeOption = [
-          activePlanReview.proposal.recommended,
-          activePlanReview.proposal.alternative,
+          reviewProposal.recommended,
+          reviewProposal.alternative,
         ].find(({ optionId }) => optionId === validated.option.optionId);
         if (
           !activeOption ||
@@ -491,10 +833,9 @@ export function createWorkspaceApplication(
             retryable: false,
           };
         }
-        const approvalGeneration = activePlanReview.generation;
-        const proposalEvidenceRefs = [
-          ...activePlanReview.proposal.evidenceRefs,
-        ];
+        const approvalGeneration =
+          activePlanReview?.generation ?? reviewGeneration;
+        const proposalEvidenceRefs = [...reviewProposal.evidenceRefs];
         const promise = (async () => {
           const { plannedWorkouts, affectedWorkouts } = applyOption(
             state.trainingPlan.plannedWorkouts,
@@ -513,7 +854,7 @@ export function createWorkspaceApplication(
             evidenceRefs: proposalEvidenceRefs,
           };
           const nextState = deepFreeze({
-            ...state,
+            ...withoutPending(state),
             trainingPlan: {
               planVersion: receipt.planVersionAfter,
               buildStartDate: state.trainingPlan.buildStartDate,
@@ -541,8 +882,9 @@ export function createWorkspaceApplication(
               issues: nextValidation.errors,
             };
           }
+          clearPendingExpiryTimer();
           const persistedFallbackResult: PersistedFallbackResult | undefined =
-            activePlanReview?.delivery === "fallback"
+            reviewDelivery === "fallback"
               ? { status: "approved", ...receipt }
               : undeliveredFallbackResult;
           let durability: Durability = "persistent";
@@ -553,7 +895,8 @@ export function createWorkspaceApplication(
           }
           if (
             reviewGeneration !== approvalGeneration ||
-            activePlanReview?.generation !== approvalGeneration
+            (activePlanReview !== null &&
+              activePlanReview.generation !== approvalGeneration)
           ) {
             return {
               status: "error" as const,
@@ -657,6 +1000,7 @@ export function createWorkspaceApplication(
       }
       reviewGeneration += 1;
       activePlanReview = null;
+      clearPendingExpiryTimer();
       undeliveredFallbackResult = undefined;
       let durability: Durability = "persistent";
       try {

@@ -36,10 +36,18 @@ import {
 import type {
   AppliedPlanAdaptation,
   AthleteFeedback,
+  DeclinedPlanAdaptation,
+  PendingAdaptationProposal,
   PlannedWorkout,
   WorkoutResult,
   WorkspaceState,
 } from "../domain/types";
+import {
+  buildReviewPreview,
+  type AdaptationOption,
+  type ReviewProposal,
+  type ReviewPreviewRow,
+} from "../domain/review";
 import { useModalFocus } from "./useModalFocus";
 import { HrvChart } from "./charts/HrvChart";
 import { ResultDetailChart } from "./charts/ResultDetailChart";
@@ -1156,6 +1164,13 @@ type CoachingTimelineEntry =
       timestamp: string;
       receipt: AppliedPlanAdaptation;
       relatedEntries: CoachingTimelineLink[];
+    }
+  | {
+      kind: "declined-adaptation";
+      id: string;
+      timestamp: string;
+      decision: DeclinedPlanAdaptation;
+      relatedEntries: CoachingTimelineLink[];
     };
 
 const coachingEntryId = (
@@ -1167,7 +1182,9 @@ const coachingEntryId = (
       ? "athlete-feedback"
       : kind === "workout-result"
         ? "workout-result"
-        : "approved-adaptation";
+        : kind === "approved-adaptation"
+          ? "approved-adaptation"
+          : "declined-adaptation";
   const normalizedSourceId = sourceId
     .replace(/^(athlete-feedback:|result-|review:)/, "")
     .replace(/[^a-z0-9]+/gi, "-")
@@ -1244,6 +1261,7 @@ function sourceLabelForEvidenceRef(
 function projectCoachingTimeline(
   context: AthleteContextData,
   plannedWorkouts: PlannedWorkout[],
+  declinedAdaptations: DeclinedPlanAdaptation[] = [],
 ): CoachingTimelineEntry[] {
   const feedbackEntries = context.recentAthleteFeedback.map((feedback) => ({
     kind: "feedback" as const,
@@ -1287,10 +1305,18 @@ function projectCoachingTimeline(
     receipt,
     relatedEntries: [] as CoachingTimelineLink[],
   }));
+  const declinedEntries = declinedAdaptations.map((decision) => ({
+    kind: "declined-adaptation" as const,
+    id: coachingEntryId("declined-adaptation", decision.reviewId),
+    timestamp: decision.declinedAt,
+    decision,
+    relatedEntries: [] as CoachingTimelineLink[],
+  }));
   const entries: CoachingTimelineEntry[] = [
     ...feedbackEntries,
     ...resultEntries,
     ...adaptationEntries,
+    ...declinedEntries,
   ];
   const resultEntryById = new Map(
     resultEntries.map((entry) => [entry.result.id, entry]),
@@ -1346,27 +1372,39 @@ function projectCoachingTimeline(
       }
     }
   }
+  for (const declinedEntry of declinedEntries) {
+    for (const ref of declinedEntry.decision.evidenceRefs) {
+      const result = workoutResultForEvidenceRef(ref, context);
+      const resultEntry = result ? resultEntryById.get(result.id) : undefined;
+      if (resultEntry) connectThread(declinedEntry, resultEntry);
+      if (ref.startsWith("athlete-feedback:")) {
+        const feedbackId = ref.slice("athlete-feedback:".length);
+        const feedbackEntry = feedbackEntryById.get(feedbackId);
+        if (feedbackEntry) connectThread(declinedEntry, feedbackEntry);
+      }
+    }
+  }
   return entries.sort(
     (a, b) =>
       timelineTimestamp(b.timestamp) - timelineTimestamp(a.timestamp) ||
-      (a.kind === "approved-adaptation"
-        ? -1
-        : a.kind === "workout-result"
-          ? 0
-          : 1) -
-        (b.kind === "approved-adaptation"
-          ? -1
-          : b.kind === "workout-result"
-            ? 0
-            : 1) ||
+      timelineEntryPriority(a.kind) - timelineEntryPriority(b.kind) ||
       a.id.localeCompare(b.id),
   );
+}
+
+function timelineEntryPriority(kind: CoachingTimelineEntry["kind"]) {
+  if (kind === "approved-adaptation" || kind === "declined-adaptation") {
+    return -1;
+  }
+  if (kind === "workout-result") return 0;
+  return 1;
 }
 
 function timelineEntryLabel(kind: CoachingTimelineEntry["kind"]) {
   if (kind === "feedback") return "Athlete Feedback";
   if (kind === "workout-result") return "Workout Result";
-  return "Approved Adaptation";
+  if (kind === "approved-adaptation") return "Approved Adaptation";
+  return "Declined Adaptation";
 }
 
 function TimelineThreadLinks({
@@ -1427,7 +1465,8 @@ function threadLinkLabel(
   if (direction === "related") {
     return `Related ${timelineEntryLabel(related.kind)}`;
   }
-  return entry.kind === "approved-adaptation"
+  return entry.kind === "approved-adaptation" ||
+    entry.kind === "declined-adaptation"
     ? `Based on ${timelineEntryLabel(related.kind)}`
     : `In response to ${timelineEntryLabel(related.kind)}`;
 }
@@ -1459,7 +1498,9 @@ function CoachingTimelineEntryView({
               ? "“"
               : entry.kind === "workout-result"
                 ? "⌁"
-                : "↗"}
+                : entry.kind === "approved-adaptation"
+                  ? "↗"
+                  : "—"}
           </span>
           <span className="eyebrow">{typeLabel}</span>
           <time dateTime={entry.timestamp}>
@@ -1571,6 +1612,32 @@ function CoachingTimelineEntryView({
             </p>
           </>
         )}
+        {entry.kind === "declined-adaptation" && (
+          <>
+            <h3>{entry.decision.recommendation.label}</h3>
+            <p className="coaching-entry__summary">kept current plan</p>
+            <dl className="coaching-entry__facts">
+              <div>
+                <dt>Plan version</dt>
+                <dd>{entry.decision.planVersion}</dd>
+              </div>
+              <div>
+                <dt>Decision</dt>
+                <dd>{formatDate(entry.decision.declinedAt.slice(0, 10))}</dd>
+              </div>
+            </dl>
+            <p className="coaching-entry__provenance">
+              Based on:{" "}
+              {[
+                ...new Set(
+                  entry.decision.evidenceRefs.map((ref) =>
+                    sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
+                  ),
+                ),
+              ].join(" · ") || "No linked Coaching Evidence available."}
+            </p>
+          </>
+        )}
         <TimelineThreadLinks entry={entry} entries={entries} />
       </article>
     </li>
@@ -1629,18 +1696,99 @@ function AthleteProfileSummary({ context }: { context: AthleteContextData }) {
   );
 }
 
-function CoachingPane({
+function evidenceSummary(
+  evidenceRefs: string[],
+  context: AthleteContextData,
+  plannedWorkouts: PlannedWorkout[],
+) {
+  return (
+    [...new Set(evidenceRefs)]
+      .map((ref) => sourceLabelForEvidenceRef(ref, context, plannedWorkouts))
+      .join(" · ") || "No linked Coaching Evidence available."
+  );
+}
+
+function PendingAdaptationCard({
+  pending,
   context,
   plannedWorkouts,
+  onReview,
+}: {
+  pending: PendingAdaptationProposal;
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onReview: (reviewId: string, invoker: HTMLButtonElement) => void;
+}) {
+  return (
+    <section
+      className="coaching-review-card"
+      aria-labelledby="coaching-review-card-title"
+    >
+      <header className="coaching-review-card__header">
+        <span className="eyebrow">
+          <span className="attention-dot" aria-hidden="true" />
+          Awaiting your review
+        </span>
+        <time dateTime={pending.openedAt}>
+          Opened {formatClock(pending.openedAt, "Europe/London")}
+        </time>
+      </header>
+      <h3 id="coaching-review-card-title">
+        {pending.proposal.recommended.label}
+      </h3>
+      <p>{pending.proposal.rationale.summary}</p>
+      <p className="coaching-review-card__provenance">
+        Based on:{" "}
+        {evidenceSummary(
+          pending.proposal.evidenceRefs,
+          context,
+          plannedWorkouts,
+        )}
+      </p>
+      <button
+        id="coaching-review-card"
+        className="button button--primary"
+        type="button"
+        onClick={(event) =>
+          onReview(pending.proposal.reviewId, event.currentTarget)
+        }
+      >
+        Review proposal
+      </button>
+    </section>
+  );
+}
+
+export function CoachingPane({
+  context,
+  plannedWorkouts,
+  pending,
+  declinedAdaptations = [],
+  onReview,
   onSelectWorkout,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
+  pending?: PendingAdaptationProposal | null;
+  declinedAdaptations?: DeclinedPlanAdaptation[];
+  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
   onSelectWorkout?: WorkoutSelect;
 }) {
-  const entries = projectCoachingTimeline(context, plannedWorkouts);
+  const entries = projectCoachingTimeline(
+    context,
+    plannedWorkouts,
+    declinedAdaptations,
+  );
   return (
     <div className="coaching-pane">
+      {pending && onReview && (
+        <PendingAdaptationCard
+          pending={pending}
+          context={context}
+          plannedWorkouts={plannedWorkouts}
+          onReview={onReview}
+        />
+      )}
       <section
         className="coaching-timeline"
         aria-labelledby="coaching-timeline-title"
@@ -1648,7 +1796,9 @@ function CoachingPane({
         <div className="section-heading section-heading--small">
           <div>
             <span className="eyebrow">Shared coaching story</span>
-            <h2 id="coaching-timeline-title">Coaching timeline</h2>
+            <h2 id="coaching-timeline-title" tabIndex={-1}>
+              Coaching timeline
+            </h2>
           </div>
         </div>
         {entries.length === 0 ? (
@@ -1683,6 +1833,9 @@ function ContextRail({
   context,
   plannedWorkouts,
   surface,
+  pending,
+  declinedAdaptations,
+  onReview,
   onSelectWorkout,
   onViewAdaptation,
   state,
@@ -1690,6 +1843,9 @@ function ContextRail({
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
   surface: PaneId;
+  pending?: PendingAdaptationProposal | null;
+  declinedAdaptations?: DeclinedPlanAdaptation[];
+  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
   onSelectWorkout?: WorkoutSelect;
   onViewAdaptation?: (adaptationId: string) => void;
   state?: WorkspaceState;
@@ -1706,6 +1862,9 @@ function ContextRail({
       <CoachingPane
         context={context}
         plannedWorkouts={plannedWorkouts}
+        pending={pending}
+        declinedAdaptations={declinedAdaptations}
+        onReview={onReview}
         onSelectWorkout={onSelectWorkout}
       />
     );
@@ -1857,6 +2016,610 @@ function ContextRail({
       )}
     </div>
   );
+}
+
+function AdaptationComparison({
+  rows,
+  titleId = "comparison-title",
+}: {
+  rows: ReviewPreviewRow[];
+  titleId?: string;
+}) {
+  const changedFields = (row: ReviewPreviewRow) => {
+    if (!row.before && row.after) return "New Planned Workout";
+    if (row.before && !row.after) return "Removed from plan";
+    if (!row.before || !row.after) return "No change recorded";
+    const fields = (
+      ["date", "title", "purpose", "distanceKm", "prescription"] as const
+    ).filter(
+      (field) =>
+        JSON.stringify(row.before?.[field]) !==
+        JSON.stringify(row.after?.[field]),
+    );
+    return fields.length > 0
+      ? `Changed: ${fields
+          .map((field) =>
+            field === "distanceKm"
+              ? "distance"
+              : field.charAt(0).toUpperCase() + field.slice(1),
+          )
+          .join(", ")}`
+      : "No changed fields";
+  };
+  return (
+    <section className="adaptation-comparison" aria-labelledby={titleId}>
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Plan comparison</span>
+          <h2 id={titleId}>What would change</h2>
+        </div>
+        <span className="adaptation-comparison__note">Preview only</span>
+      </div>
+      <div className="adaptation-comparison__table-wrap">
+        <table className="adaptation-comparison__table">
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Current plan</th>
+              <th scope="col">Proposed plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.date}>
+                <th scope="row">
+                  <time dateTime={row.date}>{formatShortDate(row.date)}</time>
+                </th>
+                <td className={row.before === null ? "is-changed" : undefined}>
+                  {row.before ? (
+                    <>
+                      <strong>{row.before.title}</strong>
+                      <span>{row.before.distanceKm} km</span>
+                    </>
+                  ) : (
+                    "Rest"
+                  )}
+                </td>
+                <td
+                  className={row.after === null ? "is-changed" : "is-changed"}
+                >
+                  {row.after ? (
+                    <>
+                      <strong>{row.after.title}</strong>
+                      <span>{row.after.distanceKm} km</span>
+                    </>
+                  ) : (
+                    "Rest"
+                  )}
+                  <small>{changedFields(row)}</small>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="adaptation-comparison__caption">
+        This preview does not change your Training Plan.
+      </p>
+    </section>
+  );
+}
+
+function AdaptationOptionContent({
+  option,
+  selected,
+  role,
+  plannedWorkouts,
+  onSelect,
+}: {
+  option: AdaptationOption;
+  selected: boolean;
+  role: "recommendation" | "alternative";
+  plannedWorkouts: PlannedWorkout[];
+  onSelect: () => void;
+}) {
+  const prefix =
+    role === "recommendation" ? "Coach's recommendation" : "Alternative";
+  const rows = buildReviewPreview(plannedWorkouts, option);
+  return (
+    <article
+      className={`adaptation-option adaptation-option--${role} ${selected ? "adaptation-option--selected" : ""}`}
+    >
+      <button
+        className="adaptation-option__select"
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        aria-pressed={selected}
+        aria-label={`${prefix} — ${option.label}`}
+        onClick={onSelect}
+      >
+        <span className="adaptation-option__radio" aria-hidden="true" />
+        <span>
+          <span className="eyebrow">{prefix}</span>
+          <strong>{option.label}</strong>
+        </span>
+      </button>
+      <p>{option.summary}</p>
+      <p className="adaptation-option__tradeoff">
+        <strong>Trade-off</strong> {option.tradeoff}
+      </p>
+      <AdaptationComparison
+        rows={rows}
+        titleId={`comparison-title-${option.optionId}`}
+      />
+    </article>
+  );
+}
+
+function AdaptationUnavailable({
+  onBack,
+  message = "This proposal is no longer available in the current Training Plan.",
+}: {
+  onBack: () => void;
+  message?: string;
+}) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+  return (
+    <main
+      className="adaptation-screen adaptation-screen--unavailable"
+      aria-label="Workout Adaptation unavailable"
+    >
+      <header className="adaptation-screen__header">
+        <button
+          className="adaptation-screen__back"
+          type="button"
+          onClick={onBack}
+        >
+          <span aria-hidden="true">←</span> Back to Coaching
+        </button>
+        <span className="adaptation-screen__eyebrow">Workout Adaptation</span>
+      </header>
+      <section
+        className="adaptation-unavailable"
+        aria-labelledby="adaptation-unavailable-title"
+      >
+        <span className="eyebrow">Workout Adaptation</span>
+        <h1 id="adaptation-unavailable-title" ref={titleRef} tabIndex={-1}>
+          Adaptation unavailable
+        </h1>
+        <p>{message}</p>
+      </section>
+    </main>
+  );
+}
+
+function DeclinedAdaptationScreen({
+  decision,
+  context,
+  plannedWorkouts,
+  onBack,
+}: {
+  decision: DeclinedPlanAdaptation;
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onBack: () => void;
+}) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+  return (
+    <main
+      className="adaptation-screen adaptation-screen--record"
+      aria-label="Workout Adaptation record"
+    >
+      <header className="adaptation-screen__header">
+        <button
+          className="adaptation-screen__back"
+          type="button"
+          onClick={onBack}
+        >
+          <span aria-hidden="true">←</span> Back to Coaching
+        </button>
+        <span className="adaptation-screen__eyebrow">Workout Adaptation</span>
+        <span className="adaptation-screen__status">KEPT BY YOU</span>
+      </header>
+      <article className="adaptation-record">
+        <span className="eyebrow">Workout Adaptation record</span>
+        <h1 ref={titleRef} tabIndex={-1}>
+          Current plan kept
+        </h1>
+        <p className="adaptation-record__lede">
+          {decision.recommendation.label} ·{" "}
+          {formatDate(decision.declinedAt.slice(0, 10))}
+        </p>
+        <dl className="adaptation-record__facts">
+          <div>
+            <dt>Plan version</dt>
+            <dd>{decision.planVersion}</dd>
+          </div>
+          <div>
+            <dt>Decision</dt>
+            <dd>Keep current plan</dd>
+          </div>
+        </dl>
+        <p>{decision.recommendation.summary}</p>
+        <p className="adaptation-record__provenance">
+          Based on:{" "}
+          {evidenceSummary(decision.evidenceRefs, context, plannedWorkouts)}
+        </p>
+      </article>
+    </main>
+  );
+}
+
+function ApprovedAdaptationScreen({
+  receipt,
+  context,
+  plannedWorkouts,
+  onBack,
+}: {
+  receipt: AppliedPlanAdaptation;
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onBack: () => void;
+}) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+  return (
+    <main
+      className="adaptation-screen adaptation-screen--record"
+      aria-label="Workout Adaptation record"
+    >
+      <header className="adaptation-screen__header">
+        <button
+          className="adaptation-screen__back"
+          type="button"
+          onClick={onBack}
+        >
+          <span aria-hidden="true">←</span> Back to Coaching
+        </button>
+        <span className="adaptation-screen__eyebrow">Workout Adaptation</span>
+        <span className="adaptation-screen__status">APPROVED BY YOU</span>
+      </header>
+      <article className="adaptation-record">
+        <span className="eyebrow">Workout Adaptation record</span>
+        <h1 ref={titleRef} tabIndex={-1}>
+          Adaptation approved
+        </h1>
+        <p className="adaptation-record__lede">
+          {receipt.selectedOption.label} ·{" "}
+          {formatDate(receipt.appliedAt.slice(0, 10))}
+        </p>
+        <dl className="adaptation-record__facts">
+          <div>
+            <dt>Plan version</dt>
+            <dd>
+              {receipt.planVersionBefore} → {receipt.planVersionAfter}
+            </dd>
+          </div>
+          <div>
+            <dt>Selected</dt>
+            <dd>{receipt.selectedOption.label}</dd>
+          </div>
+        </dl>
+        <section aria-labelledby="record-changes-title">
+          <span className="eyebrow">Exact application receipt</span>
+          <h2 id="record-changes-title">Changed workouts</h2>
+          <ul className="adaptation-record__changes">
+            {receipt.affectedWorkouts.map(({ workoutId, before, after }) => (
+              <li key={workoutId}>
+                <strong>{after?.title ?? before?.title ?? workoutId}</strong>
+                <span>
+                  {before?.distanceKm ?? "Rest"} → {after?.distanceKm ?? "Rest"}
+                  {after ? " km" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <p className="adaptation-record__provenance">
+          Based on:{" "}
+          {[
+            ...new Set(
+              receipt.evidenceRefs.map((ref) =>
+                sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
+              ),
+            ),
+          ].join(" · ")}
+        </p>
+      </article>
+    </main>
+  );
+}
+
+export function AdaptationScreen({
+  application,
+  coordinator,
+  reviewId,
+  onBack,
+  onDecided,
+  backLabel = "Back",
+}: {
+  application: WorkspaceApplication;
+  coordinator: ReviewCoordinator;
+  reviewId: string;
+  onBack: () => void;
+  onDecided: (result: unknown) => void;
+  backLabel?: string;
+}) {
+  const workspace = useSyncExternalStore(
+    application.subscribe,
+    application.getState,
+    application.getState,
+  );
+  const coordinatorState = useSyncExternalStore(
+    coordinator.subscribe,
+    coordinator.getState,
+    coordinator.getState,
+  );
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const record = application.getAdaptationRecord(reviewId);
+  const pending = record.status === "pending" ? record.pending : null;
+  const review =
+    coordinatorState.status === "reviewing" &&
+    coordinatorState.proposal.reviewId === reviewId
+      ? coordinatorState
+      : null;
+  const proposal: ReviewProposal | null =
+    pending?.proposal ?? review?.proposal ?? null;
+  const selectedOptionId =
+    pending?.selectedOptionId ?? review?.selectedOptionId ?? null;
+  const selectedOption = proposal
+    ? [proposal.recommended, proposal.alternative].find(
+        ({ optionId }) => optionId === selectedOptionId,
+      )
+    : undefined;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    titleRef.current?.focus();
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onBack();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onBack]);
+
+  useEffect(() => {
+    if (pending && coordinatorState.status === "idle") {
+      coordinator.open(pending.proposal, pending.delivery);
+    }
+  }, [coordinator, coordinatorState.status, pending]);
+
+  if (record.status === "approved") {
+    return (
+      <ApprovedAdaptationScreen
+        receipt={record.receipt}
+        context={selectAthleteContextForScreen(application)}
+        plannedWorkouts={workspace.trainingPlan.plannedWorkouts}
+        onBack={onBack}
+      />
+    );
+  }
+  if (record.status === "declined") {
+    return (
+      <DeclinedAdaptationScreen
+        decision={record.decision}
+        context={selectAthleteContextForScreen(application)}
+        plannedWorkouts={workspace.trainingPlan.plannedWorkouts}
+        onBack={onBack}
+      />
+    );
+  }
+  if (record.status === "stale") {
+    return (
+      <AdaptationUnavailable
+        onBack={onBack}
+        message="This proposal is no longer available because your Training Plan changed."
+      />
+    );
+  }
+  if (!proposal) return <AdaptationUnavailable onBack={onBack} />;
+
+  const recommendationRows = buildReviewPreview(
+    workspace.trainingPlan.plannedWorkouts,
+    proposal.recommended,
+  );
+  const generation = review?.generation;
+  const busy = review?.applying || review?.settling;
+  const approve = async () => {
+    if (!generation || !selectedOptionId) return;
+    const result = await coordinator.approve(generation);
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      "status" in result &&
+      result.status === "approved"
+    ) {
+      onDecided(result);
+    }
+  };
+  const decline = async () => {
+    const result = await coordinator.decline(generation);
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      "status" in result &&
+      result.status === "declined"
+    ) {
+      onDecided(result);
+    }
+  };
+
+  return (
+    <main className="adaptation-screen" aria-label="Workout Adaptation review">
+      <header className="adaptation-screen__header">
+        <button
+          className="adaptation-screen__back"
+          type="button"
+          onClick={onBack}
+        >
+          <span aria-hidden="true">←</span> {backLabel}
+        </button>
+        <span className="adaptation-screen__eyebrow">Workout Adaptation</span>
+        <span className="adaptation-screen__status">AWAITING YOUR REVIEW</span>
+      </header>
+      <article className="adaptation-content">
+        <header className="adaptation-content__hero">
+          <span className="eyebrow">Coach Recommendation</span>
+          <h1 ref={titleRef} tabIndex={-1}>
+            Workout Adaptation
+          </h1>
+          <p className="adaptation-content__lede">
+            {proposal.rationale.summary}
+          </p>
+          <p className="adaptation-content__meta">
+            Proposed{" "}
+            {formatClock(
+              pending?.openedAt ?? workspace.clock.now,
+              workspace.clock.timeZone,
+            )}{" "}
+            · Coach Agent
+          </p>
+          <p className="adaptation-content__provenance">
+            Based on:{" "}
+            {[
+              ...new Set(
+                proposal.evidenceRefs.map((ref) =>
+                  sourceLabelForEvidenceRef(
+                    ref,
+                    selectAthleteContextForScreen(application),
+                    workspace.trainingPlan.plannedWorkouts,
+                  ),
+                ),
+              ),
+            ].join(" · ")}
+          </p>
+        </header>
+        <section
+          className="adaptation-rationale"
+          aria-labelledby="rationale-title"
+        >
+          <div>
+            <span className="eyebrow">Reasoning</span>
+            <h2 id="rationale-title">Why this is on the table</h2>
+          </div>
+          <p>{proposal.rationale.counterEvidence}</p>
+          <p className="adaptation-rationale__confidence">
+            {formatClassification(proposal.rationale.confidence)} confidence
+          </p>
+          <ul>
+            {proposal.rationale.limitations.map((limitation) => (
+              <li key={limitation}>{limitation}</li>
+            ))}
+          </ul>
+        </section>
+        <section
+          className="adaptation-options"
+          role="radiogroup"
+          aria-labelledby="options-title"
+        >
+          <div className="section-heading section-heading--small">
+            <div>
+              <span className="eyebrow">Choose deliberately</span>
+              <h2 id="options-title">Two ways forward</h2>
+            </div>
+            <span className="adaptation-options__hint">
+              Nothing is selected yet
+            </span>
+          </div>
+          <article
+            className={`adaptation-option adaptation-option--recommendation ${selectedOptionId === proposal.recommended.optionId ? "adaptation-option--selected" : ""}`}
+          >
+            <button
+              className="adaptation-option__select"
+              type="button"
+              role="radio"
+              aria-checked={selectedOptionId === proposal.recommended.optionId}
+              aria-pressed={selectedOptionId === proposal.recommended.optionId}
+              aria-label={`Coach's recommendation — ${proposal.recommended.label}`}
+              onClick={() =>
+                coordinator.select(proposal!.recommended.optionId, generation)
+              }
+            >
+              <span className="adaptation-option__radio" aria-hidden="true" />
+              <span>
+                <span className="eyebrow">Coach's recommendation</span>
+                <strong>{proposal.recommended.label}</strong>
+              </span>
+            </button>
+            <p>{proposal.recommended.summary}</p>
+            <p className="adaptation-option__tradeoff">
+              <strong>Trade-off</strong> {proposal.recommended.tradeoff}
+            </p>
+            <AdaptationComparison rows={recommendationRows} />
+          </article>
+          <details className="adaptation-alternative">
+            <summary>
+              <span className="eyebrow">Alternative</span>
+              <strong>{proposal.alternative.label}</strong>
+            </summary>
+            <AdaptationOptionContent
+              option={proposal.alternative}
+              role="alternative"
+              selected={selectedOptionId === proposal.alternative.optionId}
+              plannedWorkouts={workspace.trainingPlan.plannedWorkouts}
+              onSelect={() =>
+                coordinator.select(proposal!.alternative.optionId, generation)
+              }
+            />
+          </details>
+        </section>
+        {selectedOption && (
+          <p className="adaptation-selection-note" role="status">
+            Previewing {selectedOption.label}. Your Training Plan has not
+            changed.
+          </p>
+        )}
+      </article>
+      <footer className="adaptation-actions" aria-label="Adaptation decision">
+        <div className="adaptation-actions__state" role="status">
+          {selectedOption
+            ? `Previewing ${selectedOption.label}. Your Training Plan has not changed.`
+            : "Choose an option to preview it before adapting your plan."}
+        </div>
+        <div className="adaptation-actions__buttons">
+          <button
+            className="button button--quiet adaptation-actions__decline"
+            type="button"
+            disabled={Boolean(busy)}
+            onClick={decline}
+          >
+            Keep current plan
+          </button>
+          <button
+            className="button button--primary adaptation-actions__approve"
+            type="button"
+            disabled={!selectedOptionId || Boolean(busy)}
+            aria-label={`Adapt my plan: ${selectedOption?.label ?? proposal.recommended.label}`}
+            onClick={approve}
+          >
+            {busy ? "Saving…" : "Adapt my plan"}
+          </button>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function selectAthleteContextForScreen(
+  application: WorkspaceApplication,
+): AthleteContextData {
+  return application.query({ type: "get_athlete_context" }).data;
 }
 
 export function ReviewModal({
@@ -2055,6 +2818,7 @@ export function WorkspaceApp({
   const workoutScreenRef = useRef<HTMLElement | null>(null);
   const pendingWorkoutOriginRef = useRef<WorkoutOriginReceipt | null>(null);
   const restoredOriginRef = useRef<PaneOriginReceipt | null>(null);
+  const pendingTimelineFocusRef = useRef<string | null>(null);
   const appMenuRef = useRef<HTMLDivElement>(null);
   const appMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const appMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -2131,6 +2895,25 @@ export function WorkspaceApp({
   const restoreFromLocation = useCallback(
     (restoreCoordinates: boolean) => {
       const parsed = workspaceRouteFromHash(window.location.hash);
+      if (parsed?.kind === "adaptation") {
+        const origin = paneOriginFromHistoryState(window.history.state);
+        paneNavigation.restorePane(origin?.pane ?? "coaching");
+        paneNavigation.restoreRoute(parsed);
+        return;
+      }
+      if (
+        parsed === null &&
+        window.location.hash.toLowerCase().startsWith("#adaptation")
+      ) {
+        const fallbackRoute: WorkspaceRoute = {
+          kind: "adaptation",
+          reviewId: "__unavailable__",
+        };
+        const origin = paneOriginFromHistoryState(window.history.state);
+        paneNavigation.restorePane(origin?.pane ?? "coaching");
+        paneNavigation.restoreRoute(fallbackRoute);
+        return;
+      }
       if (parsed?.kind === "workout") {
         const workout = application.query({
           type: "get_workout_context",
@@ -2189,6 +2972,16 @@ export function WorkspaceApp({
     const onHashChange = () => {
       const currentHash = workspaceRouteHash(paneNavigation.getRoute());
       if (window.location.hash === currentHash) return;
+      if (paneNavigation.getRoute().kind === "adaptation") {
+        const origin = paneOriginFromHistoryState(window.history.state);
+        if (
+          origin &&
+          window.location.hash ===
+            workspaceRouteHash({ kind: "pane", pane: origin.pane })
+        ) {
+          return;
+        }
+      }
       restoreFromLocation(false);
     };
     const mobileQuery = window.matchMedia("(max-width: 760px)");
@@ -2208,18 +3001,33 @@ export function WorkspaceApp({
   useEffect(() => {
     if (activeRoute.kind !== "pane") return;
     const origin = pendingOriginRef.current;
-    if (!origin || origin.pane !== activeRoute.pane) return;
+    const timelineFocusId = pendingTimelineFocusRef.current;
+    if (
+      (!origin || origin.pane !== activeRoute.pane) &&
+      timelineFocusId === null
+    )
+      return;
     pendingOriginRef.current = null;
+    pendingTimelineFocusRef.current = null;
     restorationFrameRef.current = window.requestAnimationFrame(() => {
       restorationFrameRef.current = null;
-      panesRef.current?.scrollTo({
-        left: origin.paneScrollLeft,
-        behavior: "auto",
-      });
-      window.scrollTo({ top: origin.windowScrollY, behavior: "auto" });
-      document.getElementById(origin.invokerId)?.focus();
-      pendingOriginRef.current = null;
-      restoredOriginRef.current = origin;
+      if (origin && origin.pane === activeRoute.pane) {
+        panesRef.current?.scrollTo({
+          left: origin.paneScrollLeft,
+          behavior: "auto",
+        });
+        window.scrollTo({ top: origin.windowScrollY, behavior: "auto" });
+        document.getElementById(origin.invokerId)?.focus();
+        restoredOriginRef.current = origin;
+      }
+      if (timelineFocusId) {
+        const target = document.getElementById(timelineFocusId);
+        target?.scrollIntoView({
+          behavior: "auto",
+          block: "center",
+        });
+        target?.focus({ preventScroll: true });
+      }
     });
     return () => {
       if (restorationFrameRef.current !== null) {
@@ -2252,7 +3060,7 @@ export function WorkspaceApp({
   useEffect(() => {
     const updateFromGeometry = () => {
       scrollFrameRef.current = null;
-      if (paneNavigation.getRoute().kind === "workout") return;
+      if (paneNavigation.getRoute().kind !== "pane") return;
       if (pendingOriginRef.current) return;
       if (restoredOriginRef.current) {
         if (window.scrollY === restoredOriginRef.current.windowScrollY) {
@@ -2326,6 +3134,46 @@ export function WorkspaceApp({
     if (reviewState.status !== "reviewing") return;
     setGuideOpen(false);
   }, [reviewState.status]);
+  const openAdaptationRoute = useCallback(
+    (reviewId: string, invoker?: HTMLElement) => {
+      const currentRoute = paneNavigation.getRoute();
+      if (
+        currentRoute.kind === "adaptation" &&
+        currentRoute.reviewId === reviewId
+      )
+        return;
+      const pane = paneNavigation.getSelectedPane();
+      const origin: PaneOriginReceipt = {
+        version: 1,
+        kind: "pane-origin",
+        pane,
+        windowScrollY: window.scrollY,
+        paneScrollLeft: panesRef.current?.scrollLeft ?? 0,
+        invokerId: invoker?.id || "coaching-timeline-title",
+      };
+      const stateWithOrigin = historyStateWithOrigin(origin);
+      window.history.replaceState(
+        stateWithOrigin,
+        "",
+        `${window.location.pathname}${window.location.search}${workspaceRouteHash({ kind: "pane", pane })}`,
+      );
+      const adaptationRoute: WorkspaceRoute = {
+        kind: "adaptation",
+        reviewId,
+      };
+      window.history.pushState(
+        stateWithOrigin,
+        "",
+        `${window.location.pathname}${window.location.search}${workspaceRouteHash(adaptationRoute)}`,
+      );
+      paneNavigation.pushAdaptation(reviewId);
+    },
+    [paneNavigation],
+  );
+  useEffect(() => {
+    if (reviewState.status !== "reviewing") return;
+    openAdaptationRoute(reviewState.proposal.reviewId);
+  }, [openAdaptationRoute, reviewState]);
   useEffect(() => {
     if (!appMenuOpen) return;
     appMenuItemRefs.current[0]?.focus();
@@ -2467,6 +3315,62 @@ export function WorkspaceApp({
     paneNavigation.pushWorkout(workout.id);
   };
 
+  const closeAdaptation = () => {
+    const origin = paneOriginFromHistoryState(window.history.state);
+    if (origin) {
+      window.history.back();
+      return;
+    }
+    const coaching: WorkspaceRoute = { kind: "pane", pane: "coaching" };
+    window.history.replaceState(
+      historyStateWithoutOrigin(),
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash(coaching)}`,
+    );
+    paneNavigation.restoreRoute(coaching);
+    moveToPane("coaching", true);
+  };
+
+  const handleAdaptationDecided = (result: unknown) => {
+    const routeReviewId =
+      activeRoute.kind === "adaptation" ? activeRoute.reviewId : null;
+    const resultReviewId =
+      typeof result === "object" &&
+      result !== null &&
+      "reviewId" in result &&
+      typeof result.reviewId === "string"
+        ? result.reviewId
+        : routeReviewId;
+    if (!resultReviewId) return;
+    const resultStatus =
+      typeof result === "object" &&
+      result !== null &&
+      "status" in result &&
+      typeof result.status === "string"
+        ? result.status
+        : null;
+    const entryKind =
+      resultStatus === "approved"
+        ? "approved-adaptation"
+        : resultStatus === "declined"
+          ? "declined-adaptation"
+          : null;
+    if (entryKind) {
+      pendingTimelineFocusRef.current = coachingEntryId(
+        entryKind,
+        resultReviewId,
+      );
+    }
+    const coaching: WorkspaceRoute = { kind: "pane", pane: "coaching" };
+    window.history.replaceState(
+      historyStateWithoutOrigin(),
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash(coaching)}`,
+    );
+    paneNavigation.restoreRoute(coaching);
+    moveToPane("coaching", true);
+  };
+
   const closeWorkout = () => {
     const origin =
       workoutOriginFromHistoryState(window.history.state) ??
@@ -2488,6 +3392,16 @@ export function WorkspaceApp({
   const resetDemo = async () => {
     await Promise.resolve(reviewCoordinator.reset());
     const outcome = await application.command({ type: "reset_demo" });
+    const today: WorkspaceRoute = { kind: "pane", pane: "today" };
+    window.history.replaceState(
+      historyStateWithoutOrigin(),
+      "",
+      `${window.location.pathname}${window.location.search}${workspaceRouteHash(today)}`,
+    );
+    pendingOriginRef.current = null;
+    pendingTimelineFocusRef.current = null;
+    paneNavigation.restoreRoute(today);
+    moveToPane("today", true);
     setDurability(outcome.durability);
     setView("week");
     setResetOpen(false);
@@ -2504,7 +3418,6 @@ export function WorkspaceApp({
 
   const workoutScreenActive =
     !resetOpen &&
-    reviewState.status !== "reviewing" &&
     activeRoute.kind === "workout" &&
     selectedContext?.status === "ok";
   const paneOrigin = paneOriginFromHistoryState(window.history.state);
@@ -2519,13 +3432,16 @@ export function WorkspaceApp({
     workoutOrigin && workoutOriginContext?.status === "ok"
       ? `Back to ${workoutOriginContext.data.plannedWorkout.title}`
       : `Back to ${PANE_LABELS[paneOrigin?.pane ?? paneNavigation.getSelectedPane()]}`;
+  const adaptationScreenActive =
+    !resetOpen && activeRoute.kind === "adaptation";
+  const pushedScreenActive = workoutScreenActive || adaptationScreenActive;
 
   return (
     <div className="app-shell">
       <div
         className="app-underlay"
-        inert={workoutScreenActive ? true : undefined}
-        aria-hidden={workoutScreenActive ? true : undefined}
+        inert={pushedScreenActive ? true : undefined}
+        aria-hidden={pushedScreenActive ? true : undefined}
       >
         <header className="topbar">
           <a
@@ -2754,6 +3670,9 @@ export function WorkspaceApp({
                   context={athleteContext.data}
                   plannedWorkouts={month.plannedWorkouts}
                   surface="coaching"
+                  pending={state.pendingAdaptationProposal}
+                  declinedAdaptations={state.declinedAdaptations}
+                  onReview={openAdaptationRoute}
                   onSelectWorkout={openWorkout}
                 />
               </div>
@@ -2778,10 +3697,14 @@ export function WorkspaceApp({
       )}
       {resetOpen ? (
         <ResetDialog onCancel={() => setResetOpen(false)} onReset={resetDemo} />
-      ) : reviewState.status === "reviewing" ? (
-        <ReviewModal
+      ) : adaptationScreenActive && activeRoute.kind === "adaptation" ? (
+        <AdaptationScreen
+          application={application}
           coordinator={reviewCoordinator}
-          onApproved={setDurability}
+          reviewId={activeRoute.reviewId}
+          backLabel={`Back to ${PANE_LABELS[paneOriginFromHistoryState(window.history.state)?.pane ?? "coaching"]}`}
+          onBack={closeAdaptation}
+          onDecided={handleAdaptationDecided}
         />
       ) : !workoutScreenActive && guideOpen ? (
         <DemoGuide

@@ -1,6 +1,7 @@
 import type {
   IsoDate,
   PlannedWorkout,
+  PendingAdaptationProposal,
   WorkoutBlock,
   WorkoutType,
 } from "./types";
@@ -56,6 +57,12 @@ export interface ReviewPreviewRow {
   date: IsoDate;
   before: PlannedWorkout | null;
   after: PlannedWorkout | null;
+}
+
+export interface PendingReviewValidationContext {
+  planVersion: number;
+  plannedWorkouts: PlannedWorkout[];
+  evidenceRefs: Set<string>;
 }
 
 const WORKOUT_TYPES = new Set<WorkoutType>([
@@ -633,6 +640,121 @@ export function validateReviewProposal(
         ),
       }
     : { valid: false, issues, stale };
+}
+
+export function validatePendingAdaptationProposal(
+  value: unknown,
+  context: PendingReviewValidationContext,
+):
+  | { valid: true; pending: PendingAdaptationProposal }
+  | { valid: false; issues: ReviewValidationIssue[] } {
+  const issues: ReviewValidationIssue[] = [];
+  if (!isRecord(value)) {
+    return {
+      valid: false,
+      issues: [
+        {
+          path: "pendingAdaptationProposal",
+          message: "Pending adaptation proposal must be an object.",
+          expected: "one complete pending adaptation proposal",
+        },
+      ],
+    };
+  }
+  if (
+    !hasOnly(value, [
+      "proposal",
+      "openedAt",
+      "expiresAt",
+      "delivery",
+      "selectedOptionId",
+    ])
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal",
+      "Pending adaptation proposal contains an unsupported field.",
+      "proposal, openedAt, expiresAt, delivery, and selectedOptionId",
+    );
+  }
+  const proposal = validateReviewProposal(value.proposal, context);
+  if (!proposal.valid) issues.push(...proposal.issues);
+
+  const openedAt = value.openedAt;
+  const expiresAt = value.expiresAt;
+  if (!isTimestamp(openedAt)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.openedAt",
+      "openedAt must be a valid timestamp.",
+      "an ISO timestamp",
+    );
+  }
+  if (!isTimestamp(expiresAt)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.expiresAt",
+      "expiresAt must be a valid timestamp.",
+      "an ISO timestamp after openedAt",
+    );
+  }
+  if (
+    isTimestamp(openedAt) &&
+    isTimestamp(expiresAt) &&
+    Date.parse(expiresAt) <= Date.parse(openedAt)
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.expiresAt",
+      "expiresAt must be after openedAt.",
+      "an expiry timestamp later than openedAt",
+    );
+  }
+  if (value.delivery !== "primary" && value.delivery !== "fallback") {
+    issue(
+      issues,
+      "pendingAdaptationProposal.delivery",
+      "delivery is invalid.",
+      "primary or fallback",
+    );
+  }
+  if (value.selectedOptionId !== null && !isText(value.selectedOptionId)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.selectedOptionId",
+      "selectedOptionId must be null or a known option ID.",
+      "null, recommended.optionId, or alternative.optionId",
+    );
+  } else if (
+    proposal.valid &&
+    value.selectedOptionId !== null &&
+    value.selectedOptionId !== proposal.proposal.recommended.optionId &&
+    value.selectedOptionId !== proposal.proposal.alternative.optionId
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.selectedOptionId",
+      "selectedOptionId does not identify an option in the proposal.",
+      "recommended.optionId or alternative.optionId",
+    );
+  }
+  if (issues.length > 0) return { valid: false, issues };
+  return {
+    valid: true,
+    pending: deepFreeze(
+      structuredClone(value as unknown as PendingAdaptationProposal),
+    ),
+  };
+}
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    isText(value) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      value,
+    ) &&
+    Number.isFinite(Date.parse(value))
+  );
 }
 
 export function buildReviewPreview(

@@ -1,3 +1,5 @@
+import type { ReviewProposal } from "./review";
+
 export interface AthleteProfileValue<T> {
   value: T;
   provenance: "seeded_athlete_profile";
@@ -164,6 +166,24 @@ export interface AppliedPlanAdaptation {
   evidenceRefs: string[];
 }
 
+export interface PendingAdaptationProposal {
+  proposal: ReviewProposal;
+  openedAt: string;
+  expiresAt: string;
+  delivery: "primary" | "fallback";
+  selectedOptionId: string | null;
+}
+
+export interface DeclinedPlanAdaptation {
+  status: "declined";
+  reviewId: string;
+  selectedOption: { optionId: string; label: string } | null;
+  recommendation: { label: string; summary: string };
+  declinedAt: string;
+  planVersion: number;
+  evidenceRefs: string[];
+}
+
 export interface CoachingTopic {
   id: string;
   title: string;
@@ -194,6 +214,8 @@ export interface WorkspaceState {
   processedRequestIds: string[];
   appliedReviewIds: string[];
   adaptationReceipts: AppliedPlanAdaptation[];
+  declinedAdaptations: DeclinedPlanAdaptation[];
+  pendingAdaptationProposal?: PendingAdaptationProposal;
   mutationHistory: WorkspaceMutation[];
 }
 

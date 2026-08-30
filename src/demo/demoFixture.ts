@@ -657,6 +657,7 @@ export const DEMO_WORKSPACE_STATE = {
   processedRequestIds: [],
   appliedReviewIds: [],
   adaptationReceipts: [],
+  declinedAdaptations: [],
   mutationHistory: [],
 } satisfies WorkspaceState;
 
