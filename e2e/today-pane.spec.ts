@@ -157,10 +157,7 @@ test("renders the normal Today pane on mobile with seven honest day tiles", asyn
     .locator(".today-week-grid")
     .evaluate((element) => element.scrollWidth <= element.clientWidth);
   expect(weekWidth).toBe(true);
-  await page.screenshot({
-    path: "/tmp/issue-62-today-mobile.png",
-    fullPage: true,
-  });
+  await today.screenshot({ path: "/tmp/issue-62-today-mobile.png" });
 });
 
 test("contains the Today 5+2 layout at 360px without nested horizontal scrolling", async ({
@@ -263,10 +260,7 @@ test("keeps the desktop Today composition bounded and captures it", async ({
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(1280);
-  await page.screenshot({
-    path: "/tmp/issue-62-today-desktop.png",
-    fullPage: true,
-  });
+  await today.screenshot({ path: "/tmp/issue-62-today-desktop.png" });
 });
 
 test("keeps the normal Today surface static under reduced motion", async ({
