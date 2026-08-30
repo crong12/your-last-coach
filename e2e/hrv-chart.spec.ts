@@ -123,7 +123,7 @@ test("contains the static chart on desktop and under reduced motion", async ({
   });
 });
 
-test("activates a visible adaptation diamond through browser hit testing", async ({
+test("preserves passive annotation hit testing and activates adaptation", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -147,12 +147,51 @@ test("activates a visible adaptation diamond through browser hit testing", async
       textTransform: "uppercase",
     });
 
+  const layerOrder = await page.evaluate(() => {
+    const passive = document.querySelector(
+      '[data-chart-annotation-layer="passive"]',
+    );
+    const series = document.querySelector("[data-chart-series]");
+    const interactive = document.querySelector(
+      '[data-chart-annotation-layer="interactive"]',
+    );
+    return {
+      passiveBeforeSeries: Boolean(
+        passive &&
+        series &&
+        passive.compareDocumentPosition(series) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+      seriesBeforeInteractive: Boolean(
+        series &&
+        interactive &&
+        series.compareDocumentPosition(interactive) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+      passivePointerEvents: passive
+        ? getComputedStyle(passive).pointerEvents
+        : null,
+    };
+  });
+  expect(layerOrder).toEqual({
+    passiveBeforeSeries: true,
+    seriesBeforeInteractive: true,
+    passivePointerEvents: "none",
+  });
+
   const marker = page.locator('[data-chart-annotation-kind="adaptation"]');
   const diamond = marker.locator("[data-chart-adaptation-diamond]");
   await expect(diamond).toBeVisible();
+
+  const ordinaryPoint = page.getByRole("button", {
+    name: "Inspect HRV for 24 August, 51 milliseconds",
+  });
+  await ordinaryPoint.click();
+  const readout = page.locator('[data-chart-readout="hrv"]');
+  await expect(readout).toHaveText("24 Aug · 51 ms");
+
   await diamond.click();
 
-  const readout = page.locator('[data-chart-readout="hrv"]');
   await expect(readout).toContainText(
     "25 Aug · Approved adaptation: Reduce load",
   );

@@ -224,6 +224,24 @@ export function ChartPlot({
     const date = parseChartDate(annotation.date);
     return date !== null && isInDomain(date, xScale);
   });
+  const passiveAnnotations = renderableAnnotations.filter(
+    (annotation) => annotation.kind !== "adaptation",
+  );
+  const interactiveAnnotations = renderableAnnotations.filter(
+    (annotation) => annotation.kind === "adaptation",
+  );
+  const renderAnnotation = (annotation: ChartAnnotation) => {
+    const parsedDate = parseChartDate(annotation.date);
+    if (!parsedDate) return null;
+    return (
+      <AnnotationMark
+        key={annotationKey(annotation)}
+        annotation={annotation}
+        x={xScale(parsedDate)}
+        onSelect={() => onSelectAnnotation(annotation)}
+      />
+    );
+  };
 
   return (
     <div className="chart-card__plot">
@@ -274,22 +292,23 @@ export function ChartPlot({
             );
           })}
         </g>
+        <g
+          data-chart-annotations
+          data-chart-annotation-layer="passive"
+          aria-label="Chart annotations"
+          pointerEvents="none"
+        >
+          {passiveAnnotations.map(renderAnnotation)}
+        </g>
         <g data-chart-series clipPath={`url(#${clipId})`}>
           {children}
         </g>
-        <g data-chart-annotations aria-label="Chart annotations">
-          {renderableAnnotations.map((annotation) => {
-            const parsedDate = parseChartDate(annotation.date);
-            if (!parsedDate) return null;
-            return (
-              <AnnotationMark
-                key={annotationKey(annotation)}
-                annotation={annotation}
-                x={xScale(parsedDate)}
-                onSelect={() => onSelectAnnotation(annotation)}
-              />
-            );
-          })}
+        <g
+          data-chart-annotations
+          data-chart-annotation-layer="interactive"
+          aria-label="Interactive chart annotations"
+        >
+          {interactiveAnnotations.map(renderAnnotation)}
         </g>
         <g data-chart-x-labels aria-hidden="true">
           {xLabels.map((date, index) => {

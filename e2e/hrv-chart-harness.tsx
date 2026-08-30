@@ -6,7 +6,7 @@ import { HrvChart } from "../src/ui/charts/HrvChart";
 createRoot(document.getElementById("root")!).render(
   <HrvChart
     points={[
-      { date: "2026-08-24", value: 0 },
+      { date: "2026-08-24", value: 51 },
       { date: "2026-08-25", value: 100 },
       { date: "2026-08-26", value: null },
     ]}
@@ -15,6 +15,11 @@ createRoot(document.getElementById("root")!).render(
         kind: "phase",
         date: "2026-08-24",
         label: "Base phase",
+      },
+      {
+        kind: "race",
+        date: "2026-08-24",
+        label: "Race day",
       },
       {
         kind: "adaptation",
