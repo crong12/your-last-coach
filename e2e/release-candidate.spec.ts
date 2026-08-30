@@ -55,11 +55,26 @@ test("keeps the built candidate chartable through Trends and the Workout round t
   const workout = page.getByRole("button", {
     name: /18 km long run, 2026-08-30/,
   });
+  await workout.scrollIntoViewIfNeeded();
+  const origin = await page.evaluate(
+    () =>
+      new Promise<{ hash: string }>((resolve) => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => resolve({ hash: location.hash })),
+        );
+      }),
+  );
+  const originLabel =
+    origin.hash === "#trends"
+      ? "Trends"
+      : origin.hash === "#coaching"
+        ? "Coaching"
+        : "Today";
   await workout.click();
   await expect(
     page.getByRole("main", { name: "Planned Workout" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Back to Today" }).click();
-  await expect(page).toHaveURL(/#today$/);
+  await page.getByRole("button", { name: `Back to ${originLabel}` }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(origin.hash);
   await expect(workout).toBeFocused();
 });
