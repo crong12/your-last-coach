@@ -89,9 +89,13 @@ function trendFor(current: number | null, average: number | null) {
 function SleepChart({
   projection,
   source = SOURCE,
+  displayFrom,
+  displayTo,
 }: {
   projection: ReturnType<typeof projectReadinessSeries>;
   source?: string;
+  displayFrom?: string;
+  displayTo?: string;
 }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(
     projection.latest?.date ?? projection.points[0]?.date ?? null,
@@ -139,11 +143,16 @@ function SleepChart({
   const average = projection.average;
   const current = projection.latest?.value ?? null;
   const trend = trendFor(current, average);
+  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}. Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
   const hasObserved = projection.coverage.observed > 0;
   const plot = hasObserved ? (
     (() => {
       const xScale = createTimeScale(
-        projection.points.map(({ date }) => date),
+        [
+          displayFrom ?? projection.points[0]?.date,
+          ...projection.points.map(({ date }) => date),
+          displayTo ?? projection.points.at(-1)?.date,
+        ].filter((date): date is string => date !== undefined),
         [CHART_PLOT.left, CHART_PLOT.right],
       );
       const yScale = createLinearScale(
@@ -172,7 +181,7 @@ function SleepChart({
         <ChartPlot
           id="sleep"
           title="Sleep duration trend"
-          description={`Sleep duration, current value ${current === null ? "unavailable" : formatDuration(current)}, ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`}
+          description={description}
           points={projection.points}
           xScale={xScale}
           yScale={yScale}
@@ -509,6 +518,14 @@ function VolumeLoadChart({
         xScale,
         loadScale,
       );
+      const passiveLabels = annotations
+        .filter(
+          (annotation) =>
+            annotation.kind !== "adaptation" &&
+            annotationIsInRange(annotation, rangeFrom, rangeTo),
+        )
+        .map(({ label }) => label);
+      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
       return (
         <div className="chart-card__plot chart-card__plot--volume-load">
           <svg
@@ -522,11 +539,7 @@ function VolumeLoadChart({
             <title id="volume-load-title">
               Weekly volume and Training Load
             </title>
-            <desc id="volume-load-description">
-              Weekly distance and Training Load, {projection.coverage.results}{" "}
-              Workout Results, {projection.coverage.availableLoads} with
-              available load.
-            </desc>
+            <desc id="volume-load-description">{description}</desc>
             <g data-chart-grid aria-hidden="true">
               {[42, 106, 170, 242, 307, 372].map((y) => (
                 <line
@@ -811,8 +824,14 @@ function PaceHeartRateChart({
           >
             <title id="pace-heart-rate-title">Pace versus heart rate</title>
             <desc id="pace-heart-rate-description">
-              Derived from your runs. {projection.points.length} eligible
-              Outdoor Run pairs; faster pace is to the right.
+              Derived from your runs. Current:{" "}
+              {selected ? formatPace(selected.paceSecondsPerKm) : "—"}.
+              Direction: No fitted trend. Coverage: {projection.points.length}{" "}
+              eligible Outdoor Run pairs
+              {projection.excludedOutdoorRuns
+                ? `, ${projection.excludedOutdoorRuns} missing a measure.`
+                : "."}{" "}
+              Faster pace is to the right.
             </desc>
             <g data-chart-grid aria-hidden="true">
               {yScale.ticks(3).map((tick) => {
@@ -1166,7 +1185,10 @@ export function TrendsPane({
           unit="ms"
           chartId="hrv"
           seriesId="hrv"
+          average={hrv.average}
           groupLabel={GROUP_LABEL}
+          displayFrom={rangeWindow.from}
+          displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
         />
         <HrvChart
@@ -1177,10 +1199,17 @@ export function TrendsPane({
           unit="bpm"
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
+          average={restingHeartRate.average}
           groupLabel={GROUP_LABEL}
+          displayFrom={rangeWindow.from}
+          displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
         />
-        <SleepChart projection={sleep} />
+        <SleepChart
+          projection={sleep}
+          displayFrom={rangeWindow.from}
+          displayTo={rangeWindow.to}
+        />
       </section>
       <section
         className="trends-group"

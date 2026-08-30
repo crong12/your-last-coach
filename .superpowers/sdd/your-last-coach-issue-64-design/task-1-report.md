@@ -48,7 +48,7 @@ All commands below exited `0` in the issue-64 worktree after commit preparation:
 - `CI=1 npm run test:e2e` — `53 passed`.
 - `CI=1 npm run test:static` — `2 passed`; static candidate made no external runtime requests.
 - Dependency/config audit — no `package.json`, lockfile, Vite, TypeScript, or Playwright config diff; chart imports use only `d3-scale` and `d3-shape`.
-- Personal-only audit — no Spotify, organization, company, or private references were added. The one matching provenance sentence in `src/demo/demoFixture.ts` is pre-existing and unchanged.
+- Personal-only audit — no out-of-scope references were added.
 
 ## Screenshots and visual inspection
 
@@ -60,3 +60,31 @@ All commands below exited `0` in the issue-64 worktree after commit preparation:
 
 - The Impeccable detector was run exactly once as required: `node /Users/chinrongo/.agents/skills/impeccable/scripts/detect.mjs --json <changed targets>` exited `2` with existing palette/side-tab advisories and one new repeated-summary side-tab advisory. The new repeated-summary rule was changed from `border-left` to `border-top` afterward; the detector was not rerun to preserve the exactly-once audit requirement. The desktop Build volume chart also has dense phase labels where the two early phase boundaries are close together; this is follow-up visual polish.
 - This local implementation proves the deterministic synthetic fixture and static/runtime UI only. It does not prove live COROS/FIT ingestion, deployment, or enabled-host WebMCP behavior; those are outside issue #64's accepted slice.
+
+## Blocking review fix wave
+
+The scoped Sol review found four release blockers. One bounded fix wave addressed them without adding a chart primitive or dependency:
+
+1. **Build evidence horizon:** the existing Playwright expectation first exposed 247 synthesized Build marks through race day. Focused unit and browser expectations were changed to require 26 evidence days, five evidence weeks, no mark after the fixture clock, and a race flag at the full Build axis boundary. The projection now separates `evidenceTo` from the display range.
+2. **Trailing average:** adversarial HRV, Resting heart rate, and Sleep fixtures first failed because earlier history influenced the displayed average. The projection now uses the final seven calendar dates and recorded values only; focused tests assert 55 ms, 52 bpm, and 442 minutes.
+3. **Accessible SVG summaries:** focused DOM/browser assertions required current value, direction, coverage, and passive Build annotations. Existing `<desc>` values now carry those facts without a new primitive.
+4. **Desktop navigation proof:** one 1280px Playwright flow now switches 12w and Build, proves bounded evidence and the race boundary, exercises both Workout Result pushes, and verifies Back restores Trends focus.
+
+Focused GREEN after the interrupted implementer turn:
+
+- `npx vitest run tests/trends.test.ts tests/hrv-chart.test.ts` — `2 files passed, 43 tests passed`.
+- `CI=1 npx playwright test e2e/trends-pane.spec.ts --project=chromium --workers=1 -g 'desktop Trends evidence'` — `1 passed`.
+
+Fresh complete verification after the fix wave:
+
+- `npm run format:check` — passed.
+- `npm run typecheck` — passed.
+- `npm test` — `12 files passed, 211 tests passed`.
+- `npm run build` — passed, `255 modules transformed`.
+- `CI=1 npm run test:e2e` — `54 passed`.
+- `CI=1 npm run test:static` — `2 passed`.
+- `git diff --check` — passed.
+- Dependency/config audit — no package, lockfile, Vite, TypeScript, Playwright, or workflow configuration changes; D3 imports remain `d3-scale` and `d3-shape` only.
+- Personal-only audit — no out-of-scope references were added.
+
+The refreshed mobile, desktop, and static-mobile screenshots were inspected. Build measurement marks stop at the fixture clock while the race flag remains at the terminating axis boundary. The previously documented dense desktop phase-label presentation remains optional polish and was not changed.

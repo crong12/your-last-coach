@@ -210,11 +210,60 @@ describe("issue 64 fixture evidence", () => {
     expect(resolveTrendsRange(state, "build")).toMatchObject({
       from: "2026-08-01",
       to: "2027-04-04",
-      expectedDays: 247,
+      expectedDays: 26,
+      weekStarts: [
+        "2026-07-27",
+        "2026-08-03",
+        "2026-08-10",
+        "2026-08-17",
+        "2026-08-24",
+      ],
     });
     expect(resolveTrendsRange(state, "build").from).not.toBe(
       state.observations.readinessHistory[0]?.date,
     );
+  });
+
+  it("bounds Build evidence at the fixture clock while keeping the race display boundary", async () => {
+    const state = await createDemoCoachingContextSource().loadContext();
+
+    const range = resolveTrendsRange(state, "build");
+    const readiness = projectReadinessSeries(state, "hrv", "build");
+    const volume = projectWeeklyVolumeLoad(state, "build");
+    const annotations = deriveChartAnnotations(state, "build");
+
+    expect(range.from).toBe("2026-08-01");
+    expect(range.to).toBe("2027-04-04");
+    expect(readiness.points.every(({ date }) => date <= "2026-08-26")).toBe(
+      true,
+    );
+    expect(
+      volume.weeks.every(({ weekStart }) => weekStart <= "2026-08-24"),
+    ).toBe(true);
+    expect(annotations).toContainEqual({
+      kind: "race",
+      date: "2027-04-04",
+      label: "Target race",
+    });
+  });
+
+  it("uses only the trailing seven calendar dates for HRV, RHR, and sleep averages", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    for (const record of state.observations.readinessHistory) {
+      if (record.date < "2026-08-20") {
+        record.hrvMs = 1;
+        record.restingHeartRateBpm = 1;
+        if (record.sleep) record.sleep.durationMinutes = 1;
+      }
+    }
+
+    expect(projectReadinessSeries(state, "hrv", "4w").average).toBe(55);
+    expect(
+      projectReadinessSeries(state, "restingHeartRate", "4w").average,
+    ).toBe(52);
+    expect(projectReadinessSeries(state, "sleep", "4w").average).toBe(442);
   });
 
   it("projects gap-honest readiness series and recorded-night averages", async () => {
@@ -225,7 +274,7 @@ describe("issue 64 fixture evidence", () => {
     expect(projection.points).toHaveLength(28);
     expect(projection.coverage).toEqual({ observed: 21, expected: 28 });
     expect(projection.latest).toEqual({ date: "2026-08-26", value: 55 });
-    expect(projection.average).toBe(54);
+    expect(projection.average).toBe(55);
     expect(projection.points.some((point) => point.value === null)).toBe(true);
 
     const sleep = projectReadinessSeries(state, "sleep", "4w");

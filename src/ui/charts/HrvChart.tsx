@@ -51,6 +51,9 @@ export interface HrvChartProps {
   unavailableMessage?: string;
   groupLabel?: string;
   source?: string;
+  displayFrom?: string;
+  displayTo?: string;
+  average?: number | null;
 }
 
 function finiteValue(value: number | null) {
@@ -124,6 +127,21 @@ function annotationIsVisible(
   );
 }
 
+function passiveAnnotationLabels(
+  annotations: readonly ChartAnnotation[],
+  from: string | undefined,
+  to: string | undefined,
+) {
+  return annotations
+    .filter(
+      (annotation) =>
+        annotation.kind !== "adaptation" &&
+        (!from || annotation.date >= from) &&
+        (!to || annotation.date <= to),
+    )
+    .map(({ label }) => label);
+}
+
 export function HrvChart({
   currentValue = 55,
   points: suppliedPoints,
@@ -137,6 +155,9 @@ export function HrvChart({
   unavailableMessage,
   groupLabel = "Readiness evidence",
   source = "Source: seeded synthetic COROS-shaped observations",
+  displayFrom,
+  displayTo,
+  average: suppliedAverage,
 }: HrvChartProps) {
   const points = useMemo(
     () =>
@@ -148,13 +169,15 @@ export function HrvChart({
   );
   const coverage = getCoverage(points);
   const latestObserved = currentPoint(points);
-  const average =
+  const calculatedAverage =
     coverage.observed > 0
       ? Math.round(
           points.reduce((total, point) => total + (point.value ?? 0), 0) /
             coverage.observed,
         )
       : null;
+  const average =
+    suppliedAverage === undefined ? calculatedAverage : suppliedAverage;
   const trend = trendFor(latestObserved?.value ?? null, average);
   const [selection, setSelection] = useState<Selection>(() =>
     latestObserved
@@ -202,14 +225,26 @@ export function HrvChart({
   const averageLabel =
     average === null ? "7-night avg —" : `7-night avg ${average} ${unit}`;
   const summary = latestObserved
-    ? `${metric}, current value ${latestObserved.value} ${unit}, ${trend.label.toLowerCase()}, ${coverage.observed} of ${coverage.expected} nights recorded.`
-    : `${metric}, no recorded nights in this range, ${coverage.observed} of ${coverage.expected} nights recorded.`;
+    ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
+    : `${metric}. Current: —. Direction: No trend available. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
+  const passiveLabels = passiveAnnotationLabels(
+    annotations,
+    displayFrom ?? points[0]?.date,
+    displayTo ?? points.at(-1)?.date,
+  );
+  const summaryWithAnnotations = passiveLabels.length
+    ? `${summary} Passive annotations: ${passiveLabels.join(", ")}.`
+    : summary;
   const hasObserved = coverage.observed > 0 && status !== "unavailable";
 
   const plot = hasObserved ? (
     (() => {
       const xScale = createTimeScale(
-        points.map(({ date }) => date),
+        [
+          displayFrom ?? points[0]?.date,
+          ...points.map(({ date }) => date),
+          displayTo ?? points.at(-1)?.date,
+        ].filter((date): date is string => date !== undefined),
         [CHART_PLOT.left, CHART_PLOT.right],
       );
       const yScale = createLinearScale(
@@ -222,7 +257,7 @@ export function HrvChart({
         <ChartPlot
           id={chartId}
           title={`${metric} trend`}
-          description={summary}
+          description={summaryWithAnnotations}
           points={points}
           xScale={xScale}
           yScale={yScale}

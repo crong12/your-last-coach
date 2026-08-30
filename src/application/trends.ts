@@ -21,6 +21,7 @@ export interface TrendsDateRange {
   range: TrendsRange;
   from: string;
   to: string;
+  evidenceTo: string;
   expectedDays: number;
   dates: readonly string[];
   weekStarts: readonly string[];
@@ -190,21 +191,23 @@ export function resolveTrendsRange(
   state: WorkspaceState,
   range: TrendsRange,
 ): TrendsDateRange {
-  const end = clockDate(state);
-  let from = addDays(end, range === "4w" ? -27 : -83);
-  let to = end;
+  const clock = clockDate(state);
+  let from = addDays(clock, range === "4w" ? -27 : -83);
+  let to = clock;
   if (range === "build") {
     from = state.trainingPlan.buildStartDate;
     to = state.targetRace.date;
   }
-  const dates = inclusiveDates(from, to);
+  const evidenceTo = range === "build" && clock < to ? clock : to;
+  const dates = inclusiveDates(from, evidenceTo);
   return {
     range,
     from,
     to,
+    evidenceTo,
     expectedDays: dates.length,
     dates,
-    weekStarts: weeklyStartsForRange(range, from, to),
+    weekStarts: weeklyStartsForRange(range, from, evidenceTo),
   };
 }
 
@@ -323,14 +326,17 @@ export function projectReadinessSeries(
   }));
   const records = window.dates.map((date) => byDate.get(date));
   const observed = points.filter(({ value }) => finite(value));
+  const trailingObserved = points
+    .slice(-7)
+    .filter(({ value }) => finite(value));
   const average =
-    observed.length === 0
+    trailingObserved.length === 0
       ? null
       : Math.round(
-          observed.reduce(
+          trailingObserved.reduce(
             (total, point) => total + (point.value as number),
             0,
-          ) / observed.length,
+          ) / trailingObserved.length,
         );
   return {
     status:
@@ -434,7 +440,7 @@ function resultInWindow(
   timeZone: string,
 ): boolean {
   const date = resultDate(result, timeZone);
-  return date >= window.from && date <= window.to;
+  return date >= window.from && date <= window.evidenceTo;
 }
 
 function validWorkoutBlock(block: unknown): block is WorkoutBlock {

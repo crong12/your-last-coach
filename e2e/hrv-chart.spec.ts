@@ -20,10 +20,10 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
     "55 ms",
   );
   await expect(
-    card.getByText("7-night avg 54 ms", { exact: true }),
+    card.getByText("7-night avg 55 ms", { exact: true }),
   ).toBeVisible();
   await expect(
-    card.getByText("Up versus recorded nights", { exact: true }),
+    card.getByText("Flat versus recorded nights", { exact: true }),
   ).toBeVisible();
   await expect(
     card.getByText("21 of 28 nights recorded", { exact: true }),

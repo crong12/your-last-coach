@@ -2054,6 +2054,7 @@ export function WorkspaceApp({
   const pendingOriginRef = useRef<PaneOriginReceipt | null>(null);
   const workoutScreenRef = useRef<HTMLElement | null>(null);
   const pendingWorkoutOriginRef = useRef<WorkoutOriginReceipt | null>(null);
+  const restoredOriginRef = useRef<PaneOriginReceipt | null>(null);
   const appMenuRef = useRef<HTMLDivElement>(null);
   const appMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const appMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -2217,6 +2218,8 @@ export function WorkspaceApp({
       });
       window.scrollTo({ top: origin.windowScrollY, behavior: "auto" });
       document.getElementById(origin.invokerId)?.focus();
+      pendingOriginRef.current = null;
+      restoredOriginRef.current = origin;
     });
     return () => {
       if (restorationFrameRef.current !== null) {
@@ -2250,6 +2253,15 @@ export function WorkspaceApp({
     const updateFromGeometry = () => {
       scrollFrameRef.current = null;
       if (paneNavigation.getRoute().kind === "workout") return;
+      if (pendingOriginRef.current) return;
+      if (restoredOriginRef.current) {
+        if (window.scrollY === restoredOriginRef.current.windowScrollY) {
+          paneNavigation.restorePane(restoredOriginRef.current.pane);
+          replacePaneHash(restoredOriginRef.current.pane);
+          return;
+        }
+        restoredOriginRef.current = null;
+      }
       let pane: PaneId;
       if (window.matchMedia("(max-width: 760px)").matches) {
         const container = panesRef.current;

@@ -89,13 +89,16 @@ test("links every Trends chart and card to the selected range on mobile", async 
   await expect(pane).toHaveAttribute("data-trends-range", "build");
   await expect(
     page.locator('[data-chart-card="hrv"] [data-chart-point]'),
-  ).toHaveCount(247);
+  ).toHaveCount(26);
   await expect(
     page.locator('[data-chart-card="resting-heart-rate"] [data-chart-point]'),
-  ).toHaveCount(247);
+  ).toHaveCount(26);
   await expect(
     page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
-  ).toHaveCount(247);
+  ).toHaveCount(26);
+  await expect(
+    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
+  ).toHaveCount(5);
   await expect(
     page.locator('[data-chart-card="hrv"] [data-chart-annotation-kind="race"]'),
   ).toHaveCount(1);
@@ -386,4 +389,107 @@ test("keeps passive phase and race markers non-focusable while adaptations are i
     path: "/tmp/issue-64-trends-desktop.png",
     fullPage: true,
   });
+});
+
+test("keeps the desktop Trends evidence bounded and restores Workout Result focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#trends");
+  const navigation = page.getByRole("navigation", {
+    name: "Workspace sections",
+  });
+  await navigation.getByRole("button", { name: "Show Trends pane" }).click();
+  await expect
+    .poll(() =>
+      page
+        .getByRole("region", { name: "Trends" })
+        .evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeLessThanOrEqual(150);
+
+  await page.getByRole("button", { name: "12w" }).click();
+  await expect(page.locator(".trends-pane")).toHaveAttribute(
+    "data-trends-range",
+    "12w",
+  );
+  await page.getByRole("button", { name: "Build" }).click();
+  await expect(page.locator(".trends-pane")).toHaveAttribute(
+    "data-trends-range",
+    "build",
+  );
+
+  const evidenceDates = await page
+    .locator(
+      '[data-chart-card="hrv"] [data-chart-point], [data-chart-card="resting-heart-rate"] [data-chart-point], [data-chart-card="sleep"] [data-sleep-night], [data-chart-card="volume-load"] [data-volume-week], [data-chart-card="volume-load"] [data-missing-load]',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .map(
+          (element) =>
+            element.getAttribute("data-chart-date") ??
+            element.getAttribute("data-chart-week"),
+        )
+        .filter((date): date is string => date !== null),
+    );
+  expect(evidenceDates.every((date) => date <= "2026-08-26")).toBe(true);
+
+  const hrv = page.locator('[data-chart-card="hrv"]');
+  for (const chartId of [
+    "hrv",
+    "resting-heart-rate",
+    "sleep",
+    "volume-load",
+    "pace-heart-rate",
+  ]) {
+    const description = page.locator(`[data-chart-card="${chartId}"] desc`);
+    await expect(description).toContainText("Current:");
+    await expect(description).toContainText("Direction:");
+    await expect(description).toContainText("Coverage:");
+  }
+  await expect(hrv.locator("desc")).toContainText("Base building");
+  await expect(hrv.locator("desc")).toContainText("Target race");
+  await expect(
+    page.locator('[data-chart-card="volume-load"] desc'),
+  ).toContainText("Target race");
+  await expect(
+    page.locator('[data-chart-card="volume-load"] desc'),
+  ).toContainText("Base building");
+
+  const raceLine = hrv.locator('[data-chart-race-line="true"]');
+  await expect(raceLine).toHaveCount(1);
+  expect(Number(await raceLine.getAttribute("x1"))).toBeCloseTo(660, 0);
+  const volumeRaceLine = page.locator(
+    '[data-chart-card="volume-load"] [data-chart-race-line="true"]',
+  );
+  await expect(volumeRaceLine).toHaveCount(1);
+  expect(Number(await volumeRaceLine.getAttribute("x1"))).toBeCloseTo(660, 0);
+  await expect(
+    navigation.getByRole("button", { name: "Show Trends pane" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  const paceAction = page.locator(
+    '[data-chart-card="pace-heart-rate"] [data-pace-view-workout]',
+  );
+  const paceActionId = await paceAction.getAttribute("id");
+  await paceAction.click();
+  await expect(
+    page.getByRole("main", { name: "Planned Workout" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to Trends" }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
+  await expect(page.locator(`#${paceActionId}`)).toBeFocused();
+
+  const repeatedAction = page.locator(
+    "[data-repeated-sessions] [data-repeated-view-workout]",
+  );
+  const repeatedActionId = await repeatedAction.getAttribute("id");
+  await repeatedAction.click();
+  await expect(
+    page.getByRole("main", { name: "Planned Workout" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to Trends" }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
+  await expect(page.locator(`#${repeatedActionId}`)).toBeFocused();
 });
