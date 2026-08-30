@@ -3158,10 +3158,14 @@ export function WorkspaceApp({
       return;
     }
 
+    const pane =
+      invoker.closest<HTMLElement>("#trends") !== null
+        ? "trends"
+        : paneNavigation.getSelectedPane();
     const origin: PaneOriginReceipt = {
       version: 1,
       kind: "pane-origin",
-      pane: paneNavigation.getSelectedPane(),
+      pane,
       windowScrollY: window.scrollY,
       paneScrollLeft: panesRef.current?.scrollLeft ?? 0,
       invokerId: invoker.id,
