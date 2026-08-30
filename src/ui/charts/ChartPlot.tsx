@@ -97,9 +97,10 @@ function AnnotationMark({
         />
         <text
           data-chart-annotation-label
+          data-chart-phase-label
           x={x + 5}
           y={CHART_PLOT.top + 12}
-          className="chart-annotation__label"
+          className="chart-annotation__label chart-annotation__label--phase"
         >
           {annotation.label}
         </text>
@@ -273,6 +274,9 @@ export function ChartPlot({
             );
           })}
         </g>
+        <g data-chart-series clipPath={`url(#${clipId})`}>
+          {children}
+        </g>
         <g data-chart-annotations aria-label="Chart annotations">
           {renderableAnnotations.map((annotation) => {
             const parsedDate = parseChartDate(annotation.date);
@@ -286,9 +290,6 @@ export function ChartPlot({
               />
             );
           })}
-        </g>
-        <g data-chart-series clipPath={`url(#${clipId})`}>
-          {children}
         </g>
         <g data-chart-x-labels aria-hidden="true">
           {xLabels.map((date, index) => {

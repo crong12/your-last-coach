@@ -122,3 +122,47 @@ test("contains the static chart on desktop and under reduced motion", async ({
     fullPage: true,
   });
 });
+
+test("activates a visible adaptation diamond through browser hit testing", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/e2e/hrv-chart-harness.html");
+
+  const phaseLabel = page.locator("[data-chart-phase-label]");
+  await expect(phaseLabel).toHaveText("Base phase");
+  await expect(phaseLabel).toHaveClass(/chart-annotation__label--phase/);
+  await expect
+    .poll(() =>
+      phaseLabel.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          fontVariantCaps: style.fontVariantCaps,
+          textTransform: style.textTransform,
+        };
+      }),
+    )
+    .toEqual({
+      fontVariantCaps: "all-small-caps",
+      textTransform: "uppercase",
+    });
+
+  const marker = page.locator('[data-chart-annotation-kind="adaptation"]');
+  const diamond = marker.locator("[data-chart-adaptation-diamond]");
+  await expect(diamond).toBeVisible();
+  await diamond.click();
+
+  const readout = page.locator('[data-chart-readout="hrv"]');
+  await expect(readout).toContainText(
+    "25 Aug · Approved adaptation: Reduce load",
+  );
+  const viewAdaptation = page.getByRole("button", {
+    name: "View adaptation",
+  });
+  await expect(viewAdaptation).toBeVisible();
+  await viewAdaptation.click();
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-adaptation-callback",
+    "adaptation:one",
+  );
+});

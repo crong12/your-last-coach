@@ -52,7 +52,7 @@ export function InspectablePoint({
           data-chart-point-selection
           r={missing ? 8 : 7}
           fill="none"
-          stroke="var(--track)"
+          stroke="var(--series-1)"
           strokeWidth="2"
         />
       )}

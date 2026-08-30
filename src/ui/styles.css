@@ -1329,6 +1329,12 @@ h1 {
   font-size: 9px;
 }
 
+.chart-annotation__label--phase {
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 [data-chart-point],
 [data-chart-annotation-kind="adaptation"] {
   cursor: pointer;

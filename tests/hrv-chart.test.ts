@@ -132,4 +132,30 @@ describe("HRV chart render states", () => {
     expect(container.querySelector('[data-series="hrv"]')).toBeNull();
     expect(container.textContent).toContain("1 of 1 nights recorded");
   });
+
+  it("marks phase labels with the chart's small-caps treatment", () => {
+    renderChart(points, [
+      { kind: "phase", date: "2026-08-25", label: "Base phase" },
+    ]);
+
+    const phase = container.querySelector(
+      '[data-chart-annotation-kind="phase"]',
+    );
+    const phaseLabel = container.querySelector("[data-chart-phase-label]");
+    expect(phase).not.toBeNull();
+    expect(phase?.contains(phaseLabel)).toBe(true);
+    expect(
+      phaseLabel?.classList.contains("chart-annotation__label--phase"),
+    ).toBe(true);
+  });
+
+  it("uses the neutral series token for an ordinary selected point", () => {
+    renderChart([{ date: "2026-08-26", value: 55 }]);
+
+    expect(
+      container
+        .querySelector("[data-chart-point-selection]")
+        ?.getAttribute("stroke"),
+    ).toBe("var(--series-1)");
+  });
 });
