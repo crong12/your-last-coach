@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type KeyboardEvent,
 } from "react";
 
 import type { CoachAgentConnection } from "../adapters/webmcp/types";
@@ -24,7 +25,12 @@ import {
   workspaceRouteFromHash,
   workspaceRouteHash,
 } from "../application/createPaneNavigation";
-import type { PlannedWorkout } from "../domain/types";
+import type {
+  AppliedPlanAdaptation,
+  AthleteFeedback,
+  PlannedWorkout,
+  WorkoutResult,
+} from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 
 interface WorkspaceAppProps {
@@ -164,10 +170,7 @@ function workoutTone(workout: PlannedWorkout) {
   return workout.type;
 }
 
-type WorkoutSelect = (
-  workout: PlannedWorkout,
-  invoker: HTMLButtonElement,
-) => void;
+type WorkoutSelect = (workout: PlannedWorkout, invoker: HTMLElement) => void;
 
 function WorkoutButton({
   workout,
@@ -620,23 +623,557 @@ function DemoGuide({
   );
 }
 
+type CoachingTimelineEntry =
+  | {
+      kind: "feedback";
+      id: string;
+      timestamp: string;
+      feedback: AthleteFeedback;
+      relatedEntryIds: string[];
+    }
+  | {
+      kind: "workout-result";
+      id: string;
+      timestamp: string;
+      result: WorkoutResult;
+      workout: PlannedWorkout | null;
+      relatedEntryIds: string[];
+    }
+  | {
+      kind: "approved-adaptation";
+      id: string;
+      timestamp: string;
+      receipt: AppliedPlanAdaptation;
+      relatedEntryIds: string[];
+    };
+
+const coachingEntryId = (
+  kind: CoachingTimelineEntry["kind"],
+  sourceId: string,
+) => {
+  const prefix =
+    kind === "feedback"
+      ? "athlete-feedback"
+      : kind === "workout-result"
+        ? "workout-result"
+        : "approved-adaptation";
+  const normalizedSourceId = sourceId
+    .replace(/^(athlete-feedback:|result-|review:)/, "")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "");
+  return `coaching-entry-${prefix}-${normalizedSourceId}`;
+};
+
+function timelineTimestamp(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function workoutResultForFeedback(
+  feedback: AthleteFeedback,
+  results: WorkoutResult[],
+) {
+  if (feedback.relatedWorkoutResultId) {
+    const direct = results.find(
+      ({ id }) => id === feedback.relatedWorkoutResultId,
+    );
+    if (direct) return direct;
+  }
+  return results.find(
+    ({ plannedWorkoutId }) => plannedWorkoutId === feedback.relatedWorkoutId,
+  );
+}
+
+function workoutResultForEvidenceRef(ref: string, context: AthleteContextData) {
+  if (ref.startsWith("workout-result:")) {
+    const resultId = ref.slice("workout-result:".length);
+    return context.recentTraining.find(({ id }) => id === resultId) ?? null;
+  }
+  if (ref.startsWith("planned-workout:")) {
+    const plannedWorkoutId = ref.slice("planned-workout:".length);
+    const result = context.recentTraining.find(
+      ({ plannedWorkoutId: resultPlannedWorkoutId }) =>
+        resultPlannedWorkoutId === plannedWorkoutId,
+    );
+    return result ?? null;
+  }
+  return null;
+}
+
+function sourceLabelForEvidenceRef(
+  ref: string,
+  context: AthleteContextData,
+  plannedWorkouts: PlannedWorkout[],
+) {
+  const result = workoutResultForEvidenceRef(ref, context);
+  if (result) {
+    const workout = plannedWorkouts.find(
+      ({ id }) => id === result.plannedWorkoutId,
+    );
+    return `${formatDate(result.startedAt.slice(0, 10))} · ${workout?.title ?? "Recorded workout"}`;
+  }
+  if (ref.startsWith("planned-workout:")) {
+    const plannedWorkoutId = ref.slice("planned-workout:".length);
+    const workout = plannedWorkouts.find(({ id }) => id === plannedWorkoutId);
+    return workout
+      ? `${formatDate(workout.date)} · ${workout.title}`
+      : `Evidence reference ${ref}`;
+  }
+  if (ref.startsWith("athlete-feedback:")) {
+    const feedbackId = ref.slice("athlete-feedback:".length);
+    const feedback = context.recentAthleteFeedback.find(
+      ({ id }) => id === feedbackId,
+    );
+    return feedback
+      ? `${formatDate(feedback.recordedAt.slice(0, 10))} · Athlete Feedback`
+      : `Evidence reference ${ref}`;
+  }
+  const observationLabels: Record<string, string> = {
+    "observation:training-load": "Training Load",
+    "observation:recovery": "Recovery",
+    "observation:sleep": "Sleep",
+    "observation:sleep-hrv": "Sleep HRV",
+    "observation:resting-heart-rate": "Resting heart rate",
+    "observation:daily-stress": "Daily stress",
+  };
+  return observationLabels[ref] ?? `Evidence reference ${ref}`;
+}
+
+function projectCoachingTimeline(
+  context: AthleteContextData,
+  plannedWorkouts: PlannedWorkout[],
+): CoachingTimelineEntry[] {
+  const feedbackEntries = context.recentAthleteFeedback.map((feedback) => ({
+    kind: "feedback" as const,
+    id: coachingEntryId("feedback", feedback.id),
+    timestamp: feedback.recordedAt,
+    feedback,
+    relatedEntryIds: [] as string[],
+  }));
+  const resultsById = new Map(
+    context.recentTraining.map((result) => [result.id, result]),
+  );
+  const referencedResultIds = new Set<string>();
+  for (const feedback of context.recentAthleteFeedback) {
+    const result = workoutResultForFeedback(feedback, context.recentTraining);
+    if (result) referencedResultIds.add(result.id);
+  }
+  for (const receipt of context.recentAdaptationHistory) {
+    for (const ref of receipt.evidenceRefs) {
+      const result = workoutResultForEvidenceRef(ref, context);
+      if (result) referencedResultIds.add(result.id);
+    }
+  }
+
+  const resultEntries = [...referencedResultIds]
+    .map((resultId) => resultsById.get(resultId))
+    .filter((result): result is WorkoutResult => result !== undefined)
+    .map((result) => ({
+      kind: "workout-result" as const,
+      id: coachingEntryId("workout-result", result.id),
+      timestamp: result.startedAt,
+      result,
+      workout:
+        plannedWorkouts.find(({ id }) => id === result.plannedWorkoutId) ??
+        null,
+      relatedEntryIds: [] as string[],
+    }));
+  const adaptationEntries = context.recentAdaptationHistory.map((receipt) => ({
+    kind: "approved-adaptation" as const,
+    id: coachingEntryId("approved-adaptation", receipt.reviewId),
+    timestamp: receipt.appliedAt,
+    receipt,
+    relatedEntryIds: [] as string[],
+  }));
+  const entries: CoachingTimelineEntry[] = [
+    ...feedbackEntries,
+    ...resultEntries,
+    ...adaptationEntries,
+  ];
+  const resultEntryById = new Map(
+    resultEntries.map((entry) => [entry.result.id, entry]),
+  );
+  const feedbackEntryById = new Map(
+    feedbackEntries.map((entry) => [entry.feedback.id, entry]),
+  );
+
+  for (const feedbackEntry of feedbackEntries) {
+    const result = workoutResultForFeedback(
+      feedbackEntry.feedback,
+      context.recentTraining,
+    );
+    const resultEntry = result ? resultEntryById.get(result.id) : undefined;
+    if (resultEntry) {
+      feedbackEntry.relatedEntryIds.push(resultEntry.id);
+      resultEntry.relatedEntryIds.push(feedbackEntry.id);
+    }
+  }
+  for (const adaptationEntry of adaptationEntries) {
+    const { receipt } = adaptationEntry;
+    for (const ref of receipt.evidenceRefs) {
+      const result = workoutResultForEvidenceRef(ref, context);
+      const resultEntry = result ? resultEntryById.get(result.id) : undefined;
+      if (
+        resultEntry &&
+        !adaptationEntry.relatedEntryIds.includes(resultEntry.id)
+      ) {
+        adaptationEntry.relatedEntryIds.push(resultEntry.id);
+        resultEntry.relatedEntryIds.push(adaptationEntry.id);
+      }
+      if (ref.startsWith("athlete-feedback:")) {
+        const feedbackId = ref.slice("athlete-feedback:".length);
+        const feedbackEntry = feedbackEntryById.get(feedbackId);
+        if (
+          feedbackEntry &&
+          !adaptationEntry.relatedEntryIds.includes(feedbackEntry.id)
+        ) {
+          adaptationEntry.relatedEntryIds.push(feedbackEntry.id);
+          feedbackEntry.relatedEntryIds.push(adaptationEntry.id);
+        }
+      }
+    }
+  }
+  return entries.sort(
+    (a, b) =>
+      timelineTimestamp(b.timestamp) - timelineTimestamp(a.timestamp) ||
+      (a.kind === "approved-adaptation"
+        ? -1
+        : a.kind === "workout-result"
+          ? 0
+          : 1) -
+        (b.kind === "approved-adaptation"
+          ? -1
+          : b.kind === "workout-result"
+            ? 0
+            : 1) ||
+      a.id.localeCompare(b.id),
+  );
+}
+
+function timelineEntryLabel(kind: CoachingTimelineEntry["kind"]) {
+  if (kind === "feedback") return "Athlete Feedback";
+  if (kind === "workout-result") return "Workout Result";
+  return "Approved Adaptation";
+}
+
+function TimelineThreadLinks({
+  entry,
+  entries,
+}: {
+  entry: CoachingTimelineEntry;
+  entries: CoachingTimelineEntry[];
+}) {
+  if (entry.relatedEntryIds.length === 0) return null;
+  const relatedEntries = entry.relatedEntryIds
+    .map((id) => entries.find((candidate) => candidate.id === id))
+    .filter(
+      (candidate): candidate is CoachingTimelineEntry =>
+        candidate !== undefined,
+    );
+  if (relatedEntries.length === 0) return null;
+  return (
+    <nav
+      className="coaching-entry__threads"
+      aria-label="Related coaching entries"
+    >
+      {relatedEntries.map((related) => (
+        <a
+          key={related.id}
+          href={`#${related.id}`}
+          onClick={(event) => {
+            event.preventDefault();
+            const target = document.getElementById(related.id);
+            target?.scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "auto"
+                : "smooth",
+              block: "center",
+            });
+            target?.focus({ preventScroll: true });
+          }}
+        >
+          ↳ in response to {timelineEntryLabel(related.kind)}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function CoachingTimelineEntryView({
+  entry,
+  entries,
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  entry: CoachingTimelineEntry;
+  entries: CoachingTimelineEntry[];
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  const typeLabel = timelineEntryLabel(entry.kind);
+  return (
+    <li
+      id={entry.id}
+      className={`coaching-entry coaching-entry--${entry.kind}`}
+      tabIndex={-1}
+    >
+      <article className="coaching-entry__card">
+        <header className="coaching-entry__header">
+          <span className="coaching-entry__icon" aria-hidden="true">
+            {entry.kind === "feedback"
+              ? "“"
+              : entry.kind === "workout-result"
+                ? "⌁"
+                : "↗"}
+          </span>
+          <span className="eyebrow">{typeLabel}</span>
+          <time dateTime={entry.timestamp}>
+            {formatDate(entry.timestamp.slice(0, 10))}
+          </time>
+        </header>
+        {entry.kind === "feedback" && (
+          <>
+            <blockquote>{entry.feedback.rawText}</blockquote>
+            {entry.feedback.reported && (
+              <dl className="feedback-reported">
+                {entry.feedback.reported.sessionRpe !== undefined && (
+                  <div>
+                    <dt>Effort</dt>
+                    <dd>{entry.feedback.reported.sessionRpe}/10 effort</dd>
+                  </div>
+                )}
+                {entry.feedback.reported.legFeel !== undefined && (
+                  <div>
+                    <dt>Legs</dt>
+                    <dd>{entry.feedback.reported.legFeel}</dd>
+                  </div>
+                )}
+                {entry.feedback.reported.painReported !== undefined && (
+                  <div>
+                    <dt>Pain</dt>
+                    <dd>
+                      {entry.feedback.reported.painReported
+                        ? "Pain reported"
+                        : "No pain reported"}
+                    </dd>
+                  </div>
+                )}
+                {entry.feedback.reported.stoppedReason !== undefined && (
+                  <div>
+                    <dt>Why you stopped</dt>
+                    <dd>{entry.feedback.reported.stoppedReason}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+          </>
+        )}
+        {entry.kind === "workout-result" && (
+          <>
+            <h3>{entry.workout?.title ?? "Recorded workout"}</h3>
+            <p className="coaching-entry__summary">
+              {formatClassification(entry.result.status)} ·{" "}
+              {entry.result.summary.completedWorkRepetitions !== undefined &&
+              entry.result.summary.plannedWorkRepetitions !== undefined
+                ? `${entry.result.summary.completedWorkRepetitions} of ${entry.result.summary.plannedWorkRepetitions} work repetitions · `
+                : ""}
+              {entry.result.summary.distanceKm} km
+            </p>
+            <p className="coaching-entry__provenance">
+              Based on:{" "}
+              {entry.workout
+                ? `${formatDate(entry.result.startedAt.slice(0, 10))} · ${entry.workout.title}`
+                : `Workout Result ${formatDate(entry.result.startedAt.slice(0, 10))}`}
+            </p>
+            {entry.workout && onSelectWorkout && (
+              <a
+                id={`coaching-view-workout-${entry.workout.id}`}
+                className="coaching-entry__workout-link"
+                href={workspaceRouteHash({
+                  kind: "workout",
+                  workoutId: entry.workout.id,
+                })}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onSelectWorkout(entry.workout!, event.currentTarget);
+                }}
+              >
+                View workout
+              </a>
+            )}
+          </>
+        )}
+        {entry.kind === "approved-adaptation" && (
+          <>
+            <h3>{entry.receipt.selectedOption.label}</h3>
+            <p className="coaching-entry__summary">approved by you</p>
+            <dl className="coaching-entry__facts">
+              <div>
+                <dt>Plan version</dt>
+                <dd>
+                  {entry.receipt.planVersionBefore} →{" "}
+                  {entry.receipt.planVersionAfter}
+                </dd>
+              </div>
+              <div>
+                <dt>Applied</dt>
+                <dd>{formatDate(entry.receipt.appliedAt.slice(0, 10))}</dd>
+              </div>
+              <div>
+                <dt>Workouts affected</dt>
+                <dd>{entry.receipt.affectedWorkouts.length}</dd>
+              </div>
+            </dl>
+            <p className="coaching-entry__provenance">
+              Based on:{" "}
+              {[
+                ...new Set(
+                  entry.receipt.evidenceRefs.map((ref) =>
+                    sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
+                  ),
+                ),
+              ].join(" · ") || "No linked Coaching Evidence available."}
+            </p>
+          </>
+        )}
+        <TimelineThreadLinks entry={entry} entries={entries} />
+      </article>
+    </li>
+  );
+}
+
+function AthleteProfileSummary({ context }: { context: AthleteContextData }) {
+  const { profile } = context.athlete;
+  return (
+    <section className="profile-card" aria-labelledby="profile-title">
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Shared profile</span>
+          <h2 id="profile-title">Athlete Profile</h2>
+        </div>
+        <strong className="profile-name">{context.athlete.displayName}</strong>
+      </div>
+      <dl className="profile-list">
+        <div>
+          <dt>Target Race</dt>
+          <dd>
+            {context.targetRace.name} · {formatDate(context.targetRace.date)}
+          </dd>
+        </div>
+        <div>
+          <dt>Objective</dt>
+          <dd>{formatObjective(context.targetRace.objectiveSeconds)}</dd>
+        </div>
+        <div>
+          <dt>Availability</dt>
+          <dd>
+            {profile.preferredLongRunDay.value} long run · up to{" "}
+            {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
+            weekdays
+          </dd>
+        </div>
+        <div>
+          <dt>Constraints</dt>
+          <dd>
+            Weekday sessions capped at{" "}
+            {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
+          </dd>
+        </div>
+        <div>
+          <dt>Performance context</dt>
+          <dd>
+            {profile.normalWeeklyVolumeKm.value.min}–
+            {profile.normalWeeklyVolumeKm.value.max} km weekly ·{" "}
+            {formatObjective(profile.recentHalfMarathonSeconds.value)}{" "}
+            half-marathon ·{" "}
+            {formatPace(profile.thresholdPaceSecondsPerKm.value)}/km threshold
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+function CoachingPane({
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  const entries = projectCoachingTimeline(context, plannedWorkouts);
+  return (
+    <div className="coaching-pane">
+      <section
+        className="coaching-timeline"
+        aria-labelledby="coaching-timeline-title"
+      >
+        <div className="section-heading section-heading--small">
+          <div>
+            <span className="eyebrow">Shared coaching story</span>
+            <h2 id="coaching-timeline-title">Coaching timeline</h2>
+          </div>
+        </div>
+        {entries.length === 0 ? (
+          <div className="coaching-timeline__empty">
+            <h3>No coaching activity yet</h3>
+            <p>
+              Athlete Feedback, Coach Recommendations, and Workout Results will
+              appear here.
+            </p>
+          </div>
+        ) : (
+          <ol className="coaching-timeline-list">
+            {entries.map((entry) => (
+              <CoachingTimelineEntryView
+                key={entry.id}
+                entry={entry}
+                entries={entries}
+                context={context}
+                plannedWorkouts={plannedWorkouts}
+                onSelectWorkout={onSelectWorkout}
+              />
+            ))}
+          </ol>
+        )}
+      </section>
+      <AthleteProfileSummary context={context} />
+    </div>
+  );
+}
+
 function ContextRail({
   context,
   plannedWorkouts,
   surface,
+  onSelectWorkout,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
   surface: PaneId;
+  onSelectWorkout?: WorkoutSelect;
 }) {
   const { observations } = context;
-  const profile = context.athlete.profile;
   const priorWeekDistanceKm = context.recentTraining
     .filter(({ startedAt }) => {
       const date = startedAt.slice(0, 10);
       return date >= "2026-08-18" && date <= "2026-08-23";
     })
     .reduce((total, result) => total + result.summary.distanceKm, 0);
+  if (surface === "coaching") {
+    return (
+      <CoachingPane
+        context={context}
+        plannedWorkouts={plannedWorkouts}
+        onSelectWorkout={onSelectWorkout}
+      />
+    );
+  }
   return (
     <div className="context-rail">
       {surface === "today" && (
@@ -650,45 +1187,6 @@ function ContextRail({
               {formatObjective(context.targetRace.objectiveSeconds)}
             </strong>
           </div>
-        </section>
-      )}
-      {surface === "coaching" && (
-        <section className="profile-card" aria-labelledby="profile-title">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">Shared profile</span>
-              <h2 id="profile-title">Athlete Profile</h2>
-            </div>
-          </div>
-          <dl className="profile-list">
-            <div>
-              <dt>Normal weekly volume</dt>
-              <dd>
-                {profile.normalWeeklyVolumeKm.value.min}–
-                {profile.normalWeeklyVolumeKm.value.max} km
-              </dd>
-            </div>
-            <div>
-              <dt>Recent half-marathon</dt>
-              <dd>
-                {formatObjective(profile.recentHalfMarathonSeconds.value)}
-              </dd>
-            </div>
-            <div>
-              <dt>Threshold pace</dt>
-              <dd>{formatPace(profile.thresholdPaceSecondsPerKm.value)}/km</dd>
-            </div>
-            <div>
-              <dt>Preferred long run</dt>
-              <dd>{profile.preferredLongRunDay.value}</dd>
-            </div>
-            <div>
-              <dt>Maximum weekday session</dt>
-              <dd>
-                {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
-              </dd>
-            </div>
-          </dl>
         </section>
       )}
       {surface === "trends" && context.activeCoachingTopics.length > 0 && (
@@ -781,87 +1279,6 @@ function ContextRail({
           <small className="provenance-label">
             Seeded synthetic observations
           </small>
-        </section>
-      )}
-      {surface === "coaching" && context.recentAthleteFeedback.length > 0 && (
-        <section className="feedback-card" aria-labelledby="feedback-title">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">What you told me</span>
-              <h2 id="feedback-title">Athlete Feedback</h2>
-            </div>
-          </div>
-          <ol className="feedback-list">
-            {context.recentAthleteFeedback.map((feedback) => (
-              <li key={feedback.id}>
-                <blockquote>{feedback.rawText}</blockquote>
-                {feedback.reported && (
-                  <dl className="feedback-reported">
-                    {feedback.reported.sessionRpe !== undefined && (
-                      <div>
-                        <dt>Effort</dt>
-                        <dd>{feedback.reported.sessionRpe}/10 effort</dd>
-                      </div>
-                    )}
-                    {feedback.reported.legFeel !== undefined && (
-                      <div>
-                        <dt>Legs</dt>
-                        <dd>{feedback.reported.legFeel}</dd>
-                      </div>
-                    )}
-                    {feedback.reported.painReported !== undefined && (
-                      <div>
-                        <dt>Pain</dt>
-                        <dd>
-                          {feedback.reported.painReported
-                            ? "Pain reported"
-                            : "No pain reported"}
-                        </dd>
-                      </div>
-                    )}
-                    {feedback.reported.stoppedReason !== undefined && (
-                      <div>
-                        <dt>Why you stopped</dt>
-                        <dd>{feedback.reported.stoppedReason}</dd>
-                      </div>
-                    )}
-                  </dl>
-                )}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-      {surface === "coaching" && context.recentAdaptationHistory.length > 0 && (
-        <section
-          className="adaptation-history-card"
-          aria-labelledby="adaptation-history-title"
-        >
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">App-owned changes</span>
-              <h2 id="adaptation-history-title">Recent plan adaptations</h2>
-            </div>
-          </div>
-          <ol className="adaptation-history-list">
-            {context.recentAdaptationHistory.map((receipt) => (
-              <li key={receipt.reviewId}>
-                <strong>{receipt.selectedOption.label}</strong>
-                <div className="adaptation-history-meta">
-                  <span>
-                    Plan {receipt.planVersionBefore} →{" "}
-                    {receipt.planVersionAfter}
-                  </span>
-                  <time dateTime={receipt.appliedAt}>
-                    {formatDate(receipt.appliedAt.slice(0, 10))}
-                  </time>
-                  <span>
-                    {receipt.affectedWorkouts.length} workouts affected
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ol>
         </section>
       )}
       {surface === "trends" && (
@@ -1065,6 +1482,7 @@ export function WorkspaceApp({
   const [guideOpen, setGuideOpen] = useState(() =>
     demoGuidePreference.shouldOpen(),
   );
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [notice, setNotice] = useState(initialNotice);
   const [durability, setDurability] = useState(initialDurability);
   const latestToolActivity = useSyncExternalStore(
@@ -1091,6 +1509,9 @@ export function WorkspaceApp({
   const scrollFrameRef = useRef<number | null>(null);
   const restorationFrameRef = useRef<number | null>(null);
   const pendingOriginRef = useRef<PaneOriginReceipt | null>(null);
+  const appMenuRef = useRef<HTMLDivElement>(null);
+  const appMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const appMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const replacePaneHash = useCallback((pane: PaneId) => {
     const nextHash = workspaceRouteHash({ kind: "pane", pane });
@@ -1294,6 +1715,63 @@ export function WorkspaceApp({
     if (reviewState.status !== "reviewing") return;
     setGuideOpen(false);
   }, [reviewState.status]);
+  useEffect(() => {
+    if (!appMenuOpen) return;
+    appMenuItemRefs.current[0]?.focus();
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !appMenuRef.current?.contains(target)) {
+        setAppMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [appMenuOpen]);
+  const focusAppMenuTrigger = () => {
+    appMenuTriggerRef.current?.focus();
+  };
+  const openGuideFromMenu = () => {
+    setAppMenuOpen(false);
+    focusAppMenuTrigger();
+    setGuideOpen(true);
+  };
+  const openResetFromMenu = () => {
+    setAppMenuOpen(false);
+    focusAppMenuTrigger();
+    setResetOpen(true);
+  };
+  const handleAppMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = appMenuItemRefs.current.filter(
+      (item): item is HTMLButtonElement => item !== null,
+    );
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setAppMenuOpen(false);
+      focusAppMenuTrigger();
+      return;
+    }
+    if (event.key === "Tab") {
+      setAppMenuOpen(false);
+      return;
+    }
+    if (items.length === 0) return;
+    const currentIndex = Math.max(
+      0,
+      items.indexOf(document.activeElement as HTMLButtonElement),
+    );
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      items[(currentIndex + delta + items.length) % items.length]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items.at(-1)?.focus();
+    }
+  };
   const latestAdaptation = state.adaptationReceipts.at(-1);
   const adaptedWorkoutIds = new Set(
     latestAdaptation?.affectedWorkouts
@@ -1413,24 +1891,65 @@ export function WorkspaceApp({
           </a>
           <div className="topbar-actions">
             <div className="status-wrap">
-              <button
-                className="status-button"
+              <span
+                className="status-indicator"
+                role="status"
                 aria-label={`Coach Agent connection: ${connectionLabel}`}
-                aria-haspopup="dialog"
-                onClick={() => setGuideOpen(true)}
               >
                 <span
                   className={`status-dot status-dot--${coachAgentConnection.status}`}
                 />
                 Coach Agent {connectionLabel}
-              </button>
+              </span>
             </div>
-            <button
-              className="button button--quiet"
-              onClick={() => setResetOpen(true)}
-            >
-              Reset demo
-            </button>
+            <div className="app-menu" ref={appMenuRef}>
+              <button
+                ref={appMenuTriggerRef}
+                className="app-menu__trigger"
+                type="button"
+                aria-label="Open app menu"
+                aria-haspopup="menu"
+                aria-expanded={appMenuOpen}
+                aria-controls="app-menu"
+                onClick={() => setAppMenuOpen((open) => !open)}
+              >
+                <span aria-hidden="true">⋯</span>
+              </button>
+              {appMenuOpen && (
+                <div
+                  id="app-menu"
+                  className="app-menu__list"
+                  role="menu"
+                  aria-label="App menu"
+                  onKeyDown={handleAppMenuKeyDown}
+                >
+                  <button
+                    ref={(element) => {
+                      appMenuItemRefs.current[0] = element;
+                    }}
+                    className="app-menu__item"
+                    type="button"
+                    role="menuitem"
+                    tabIndex={0}
+                    onClick={openGuideFromMenu}
+                  >
+                    Demo Guide
+                  </button>
+                  <button
+                    ref={(element) => {
+                      appMenuItemRefs.current[1] = element;
+                    }}
+                    className="app-menu__item"
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    onClick={openResetFromMenu}
+                  >
+                    Reset demo
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -1569,13 +2088,17 @@ export function WorkspaceApp({
               <div className="pane-heading">
                 <span className="eyebrow">Shared Coaching Workspace</span>
                 <h2>Coaching</h2>
-                <p>Athlete Profile and the latest shared coaching context.</p>
+                <p>
+                  A readable account of Athlete Feedback, Workout Results, and
+                  approved Plan Adaptations.
+                </p>
               </div>
               <div className="workspace workspace--single">
                 <ContextRail
                   context={athleteContext.data}
                   plannedWorkouts={month.plannedWorkouts}
                   surface="coaching"
+                  onSelectWorkout={openWorkout}
                 />
               </div>
             </section>
