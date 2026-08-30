@@ -26,7 +26,7 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
     card.getByText("Flat versus recorded nights", { exact: true }),
   ).toBeVisible();
   await expect(
-    card.getByText("1 of 7 nights recorded", { exact: true }),
+    card.getByText("21 of 28 nights recorded", { exact: true }),
   ).toBeVisible();
   await expect(
     card.getByText("Source: seeded synthetic COROS-shaped observations", {
@@ -38,20 +38,20 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   await expect(svg).toHaveAttribute("viewBox", "0 0 720 280");
   await expect(svg).toHaveAttribute("width", "100%");
   await expect(svg.locator("title")).toHaveText("HRV trend");
-  await expect(svg.locator("desc")).toContainText("55 milliseconds");
+  await expect(svg.locator("desc")).toContainText("55 ms");
   const gridlineCount = await svg.locator("[data-chart-gridline]").count();
   expect(gridlineCount).toBeGreaterThanOrEqual(2);
   expect(gridlineCount).toBeLessThanOrEqual(4);
   await expect(svg.locator("[data-chart-y-label]")).toHaveCount(gridlineCount);
-  await expect(svg.locator('[data-series="hrv"]')).toHaveCount(0);
-  await expect(svg.locator("[data-missing-date]")).toHaveCount(6);
+  await expect(svg.locator('[data-series="hrv"]')).toHaveCount(1);
+  await expect(svg.locator("[data-missing-date]")).toHaveCount(7);
 
   const readout = card.locator('[data-chart-readout="hrv"]');
   await expect(readout).toHaveAttribute("aria-live", "polite");
   await expect(readout).toHaveText("26 Aug · 55 ms");
   await expect(
     card.getByRole("button", {
-      name: "Inspect HRV for 26 August, 55 milliseconds",
+      name: "Inspect HRV for 26 August, 55 ms",
     }),
   ).toBeVisible();
 
@@ -73,17 +73,30 @@ test("keeps the readout fixed while click and keyboard inspection change its con
 
   const card = page.locator('[data-chart-card="hrv"]');
   const readout = card.locator('[data-chart-readout="hrv"]');
+  await readout.scrollIntoViewIfNeeded();
   const before = await readout.boundingBox();
+  const cardBefore = await card.boundingBox();
 
   const missing = card.getByRole("button", {
-    name: "Inspect HRV for 24 August, no recording",
+    name: "Inspect HRV for 25 August, no recording",
   });
   await missing.click();
-  await expect(readout).toHaveText("24 Aug · No recording");
-  expect(await readout.boundingBox()).toEqual(before);
+  await expect(readout).toHaveText("25 Aug · No recording");
+  const afterMissing = await readout.boundingBox();
+  const cardAfterMissing = await card.boundingBox();
+  expect(afterMissing).toEqual(
+    expect.objectContaining({
+      width: before!.width,
+      height: before!.height,
+      x: before!.x,
+    }),
+  );
+  expect(afterMissing!.y - cardAfterMissing!.y).toBeCloseTo(
+    before!.y - cardBefore!.y,
+  );
 
   const observed = card.getByRole("button", {
-    name: "Inspect HRV for 26 August, 55 milliseconds",
+    name: "Inspect HRV for 26 August, 55 ms",
   });
   await observed.focus();
   await observed.press("Space");
@@ -184,7 +197,7 @@ test("preserves passive annotation hit testing and activates adaptation", async 
   await expect(diamond).toBeVisible();
 
   const ordinaryPoint = page.getByRole("button", {
-    name: "Inspect HRV for 24 August, 51 milliseconds",
+    name: "Inspect HRV for 24 August, 51 ms",
   });
   await ordinaryPoint.click();
   const readout = page.locator('[data-chart-readout="hrv"]');

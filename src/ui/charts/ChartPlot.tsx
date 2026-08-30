@@ -25,12 +25,13 @@ function formatTick(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function formatShortDate(value: string) {
+function formatAxisDate(value: string) {
   const parsed = parseChartDate(value);
   if (!parsed) return value;
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
+    year: "numeric",
     timeZone: "UTC",
   }).format(parsed);
 }
@@ -323,7 +324,7 @@ export function ChartPlot({
                 textAnchor={index === 0 && xLabels.length > 1 ? "start" : "end"}
                 className="chart-axis-label"
               >
-                {formatShortDate(date)}
+                {formatAxisDate(date)}
               </text>
             );
           })}

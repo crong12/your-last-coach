@@ -1,4 +1,12 @@
-import type { PlannedWorkout, WorkspaceState } from "./types";
+import type {
+  CoachingEvidenceSource,
+  PlannedWorkout,
+  WorkspaceState,
+} from "./types";
+import {
+  collectWorkspaceEvidenceRefs,
+  validatePendingAdaptationProposal,
+} from "./review";
 
 const WORKOUT_TYPES = new Set([
   "easy",
@@ -11,6 +19,12 @@ const SIMPLE_BLOCK_KINDS = new Set(["warmup", "cooldown", "easy"]);
 const LAP_KINDS = new Set(["warmup", "work", "recovery", "cooldown"]);
 const RESULT_STATUSES = new Set(["completed", "partial", "stopped"]);
 const MUTATION_KINDS = new Set(["reset", "plan_adaptation"]);
+const ACTIVITY_KINDS = new Set([
+  "outdoor_run",
+  "indoor_run",
+  "trail_run",
+  "other",
+]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -34,7 +48,8 @@ const isIsoTimestamp = (value: unknown): value is string =>
   isTimestamp(value) &&
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
     value,
-  );
+  ) &&
+  isIsoDate(value.slice(0, 10));
 
 const isIsoDate = (value: unknown): value is string => {
   if (!isNonEmptyString(value) || !/^\d{4}-\d{2}-\d{2}$/.test(value))
@@ -44,6 +59,135 @@ const isIsoDate = (value: unknown): value is string => {
     !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
   );
 };
+
+function isValidEvidenceSource(
+  value: unknown,
+): value is CoachingEvidenceSource {
+  return (
+    isRecord(value) &&
+    value.adapter === "synthetic-coros-shaped" &&
+    isIsoTimestamp(value.readAt) &&
+    value.label === "seeded synthetic COROS-shaped observations"
+  );
+}
+
+function isRatio(value: unknown): value is number {
+  return isNonNegativeNumber(value) && value <= 1;
+}
+
+function isValidSleepStages(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    hasOnlyFields(value, [
+      "deepRatio",
+      "lightRatio",
+      "remRatio",
+      "awakeRatio",
+    ]) &&
+    [value.deepRatio, value.lightRatio, value.remRatio, value.awakeRatio].every(
+      (ratio) => ratio === undefined || ratio === null || isRatio(ratio),
+    )
+  );
+}
+
+function isValidReadinessRecord(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasOnlyFields(value, [
+      "date",
+      "hrvMs",
+      "restingHeartRateBpm",
+      "sleep",
+      "source",
+    ])
+  ) {
+    return false;
+  }
+  if (
+    !isIsoDate(value.date) ||
+    !isValidEvidenceSource(value.source) ||
+    (value.hrvMs !== undefined &&
+      value.hrvMs !== null &&
+      !isPositiveNumber(value.hrvMs)) ||
+    (value.restingHeartRateBpm !== undefined &&
+      value.restingHeartRateBpm !== null &&
+      !isPositiveNumber(value.restingHeartRateBpm))
+  ) {
+    return false;
+  }
+  if (value.sleep === undefined) return true;
+  if (
+    !isRecord(value.sleep) ||
+    !hasOnlyFields(value.sleep, ["durationMinutes", "stages"])
+  ) {
+    return false;
+  }
+  return (
+    (value.sleep.durationMinutes === undefined ||
+      value.sleep.durationMinutes === null ||
+      isPositiveNumber(value.sleep.durationMinutes)) &&
+    (value.sleep.stages === undefined || isValidSleepStages(value.sleep.stages))
+  );
+}
+
+function validateReadinessHistory(value: unknown, errors: string[]) {
+  if (!Array.isArray(value)) {
+    errors.push("Readiness history must be an array");
+    return;
+  }
+  const dates = new Set<string>();
+  let previousDate: string | null = null;
+  for (const record of value) {
+    if (!isValidReadinessRecord(record)) {
+      errors.push("Readiness history record is invalid");
+      continue;
+    }
+    if (dates.has(record.date)) {
+      errors.push(`Duplicate readiness history date: ${record.date}`);
+    }
+    if (previousDate !== null && record.date <= previousDate) {
+      errors.push("Readiness history must be ordered by date");
+    }
+    dates.add(record.date);
+    previousDate = record.date;
+  }
+}
+
+function validateTrainingPhaseHistory(
+  value: unknown,
+  targetRaceDate: unknown,
+  buildStartDate: unknown,
+  errors: string[],
+) {
+  if (!Array.isArray(value)) {
+    errors.push("Training Phase history must be an array");
+    return;
+  }
+  const ids = new Set<string>();
+  const dates = new Set<string>();
+  let previousDate: string | null = null;
+  for (const record of value) {
+    if (
+      !isRecord(record) ||
+      !hasOnlyFields(record, ["id", "date", "phaseId", "name"]) ||
+      !isNonEmptyString(record.id) ||
+      ids.has(record.id) ||
+      !isIsoDate(record.date) ||
+      dates.has(record.date) ||
+      !isNonEmptyString(record.phaseId) ||
+      !isNonEmptyString(record.name) ||
+      (previousDate !== null && record.date <= previousDate) ||
+      (isIsoDate(targetRaceDate) && record.date > targetRaceDate) ||
+      (isIsoDate(buildStartDate) && record.date < buildStartDate)
+    ) {
+      errors.push("Training Phase history is invalid");
+      continue;
+    }
+    ids.add(record.id);
+    dates.add(record.date);
+    previousDate = record.date;
+  }
+}
 
 function validateUniqueStrings(
   value: unknown,
@@ -198,6 +342,8 @@ function validateObservations(value: unknown, errors: string[]) {
     value.adapter === "synthetic-coros-shaped" &&
     isTimestamp(value.asOf) &&
     isNonEmptyString(value.provenance) &&
+    isValidEvidenceSource(value.source) &&
+    Array.isArray(value.readinessHistory) &&
     isRecord(trainingLoad) &&
     isPositiveNumber(trainingLoad.shortTerm) &&
     isPositiveNumber(trainingLoad.longTerm) &&
@@ -221,6 +367,31 @@ function validateObservations(value: unknown, errors: string[]) {
     value.dailyStress === "unremarkable";
 
   if (!valid) errors.push("Synthetic observation context is invalid");
+  validateReadinessHistory(value.readinessHistory, errors);
+
+  if (
+    Array.isArray(value.readinessHistory) &&
+    value.readinessHistory.length > 0
+  ) {
+    const latest = value.readinessHistory.at(-1);
+    if (isValidReadinessRecord(latest)) {
+      const snapshotHrv = isRecord(value.sleepHrvMs)
+        ? value.sleepHrvMs.value
+        : undefined;
+      const snapshotSleep = isRecord(value.sleep) ? value.sleep : undefined;
+      if (latest.hrvMs !== snapshotHrv) {
+        errors.push("Latest HRV snapshot disagrees with readiness history");
+      }
+      if (latest.restingHeartRateBpm !== value.restingHeartRateBpm) {
+        errors.push(
+          "Latest resting heart rate snapshot disagrees with readiness history",
+        );
+      }
+      if (latest.sleep?.durationMinutes !== snapshotSleep?.durationMinutes) {
+        errors.push("Latest sleep snapshot disagrees with readiness history");
+      }
+    }
+  }
 }
 
 function validateTrainingPlan(value: unknown, errors: string[]): Set<string> {
@@ -228,6 +399,7 @@ function validateTrainingPlan(value: unknown, errors: string[]): Set<string> {
   if (
     !isRecord(value) ||
     !isPositiveInteger(value.planVersion) ||
+    !isIsoDate(value.buildStartDate) ||
     !Array.isArray(value.plannedWorkouts) ||
     value.plannedWorkouts.length === 0
   ) {
@@ -290,9 +462,28 @@ function validateWorkoutResults(
         isNonNegativeNumber(summary.completedWorkRepetitions)) &&
       (summary.plannedWorkRepetitions === undefined ||
         isPositiveInteger(summary.plannedWorkRepetitions)) &&
+      (summary.trainingLoad === undefined ||
+        isNonNegativeNumber(summary.trainingLoad)) &&
+      (summary.averagePaceSecondsPerKm === undefined ||
+        isPositiveNumber(summary.averagePaceSecondsPerKm)) &&
+      (summary.averageHeartRateBpm === undefined ||
+        isPositiveNumber(summary.averageHeartRateBpm)) &&
+      (summary.activityKind === undefined ||
+        (isNonEmptyString(summary.activityKind) &&
+          ACTIVITY_KINDS.has(summary.activityKind))) &&
       (summary.completedWorkRepetitions === undefined ||
         summary.plannedWorkRepetitions === undefined ||
         summary.completedWorkRepetitions <= summary.plannedWorkRepetitions);
+
+    const hasExtendedSummary =
+      isRecord(summary) &&
+      [
+        summary.durationSeconds,
+        summary.trainingLoad,
+        summary.averagePaceSecondsPerKm,
+        summary.averageHeartRateBpm,
+        summary.activityKind,
+      ].some((field) => field !== undefined);
 
     if (
       (result.plannedWorkoutId !== undefined &&
@@ -301,7 +492,10 @@ function validateWorkoutResults(
       !isTimestamp(result.startedAt) ||
       !isNonEmptyString(result.status) ||
       !RESULT_STATUSES.has(result.status) ||
+      (result.provenance !== undefined &&
+        !isNonEmptyString(result.provenance)) ||
       !validSummary ||
+      (hasExtendedSummary && !isValidEvidenceSource(result.source)) ||
       !Array.isArray(result.laps)
     ) {
       errors.push(`Invalid Workout Result: ${result.id}`);
@@ -555,6 +749,69 @@ function validateAdaptationReceipts(
   return reviewIds;
 }
 
+function validateDeclinedAdaptations(
+  value: unknown,
+  currentPlanVersion: unknown,
+  evidenceRefs: Set<string>,
+  errors: string[],
+): Set<string> {
+  const reviewIds = new Set<string>();
+  if (!Array.isArray(value)) {
+    errors.push("Declined adaptations must be an array");
+    return reviewIds;
+  }
+  for (const decision of value) {
+    if (!isRecord(decision)) {
+      errors.push("Declined Plan Adaptation is invalid");
+      continue;
+    }
+    const selectedOption = decision.selectedOption;
+    const recommendation = decision.recommendation;
+    const validSelected =
+      selectedOption === null ||
+      (isRecord(selectedOption) &&
+        hasOnlyFields(selectedOption, ["optionId", "label"]) &&
+        isNonEmptyString(selectedOption.optionId) &&
+        isNonEmptyString(selectedOption.label));
+    const validRecommendation =
+      isRecord(recommendation) &&
+      hasOnlyFields(recommendation, ["label", "summary"]) &&
+      isNonEmptyString(recommendation.label) &&
+      isNonEmptyString(recommendation.summary);
+    if (
+      !hasOnlyFields(decision, [
+        "status",
+        "reviewId",
+        "selectedOption",
+        "recommendation",
+        "declinedAt",
+        "planVersion",
+        "evidenceRefs",
+      ]) ||
+      decision.status !== "declined" ||
+      !isNonEmptyString(decision.reviewId) ||
+      reviewIds.has(decision.reviewId) ||
+      !validSelected ||
+      !validRecommendation ||
+      !isIsoTimestamp(decision.declinedAt) ||
+      !isPositiveInteger(decision.planVersion) ||
+      !isPositiveInteger(currentPlanVersion) ||
+      decision.planVersion > currentPlanVersion ||
+      !Array.isArray(decision.evidenceRefs) ||
+      decision.evidenceRefs.length === 0 ||
+      decision.evidenceRefs.some(
+        (ref) => !isNonEmptyString(ref) || !evidenceRefs.has(ref),
+      ) ||
+      new Set(decision.evidenceRefs).size !== decision.evidenceRefs.length
+    ) {
+      errors.push("Declined Plan Adaptation is invalid");
+      continue;
+    }
+    reviewIds.add(decision.reviewId);
+  }
+  return reviewIds;
+}
+
 export function validateWorkspaceState(value: unknown): {
   valid: boolean;
   errors: string[];
@@ -586,6 +843,27 @@ export function validateWorkspaceState(value: unknown): {
   }
   validateObservations(value.observations, errors);
   const workoutIds = validateTrainingPlan(value.trainingPlan, errors);
+  const targetRaceDate = isRecord(value.targetRace)
+    ? value.targetRace.date
+    : undefined;
+  const buildStartDate = isRecord(value.trainingPlan)
+    ? value.trainingPlan.buildStartDate
+    : undefined;
+  if (
+    isIsoDate(buildStartDate) &&
+    isIsoDate(targetRaceDate) &&
+    buildStartDate > targetRaceDate
+  ) {
+    errors.push(
+      "Training Plan build start must be on or before the Target Race",
+    );
+  }
+  validateTrainingPhaseHistory(
+    value.trainingPhaseHistory,
+    targetRaceDate,
+    buildStartDate,
+    errors,
+  );
   const resultToPlannedWorkoutId = validateWorkoutResults(
     value.workoutResults,
     workoutIds,
@@ -610,6 +888,27 @@ export function validateWorkspaceState(value: unknown): {
     }
   }
   validateCoachingTopics(value.coachingTopics, topicEvidenceRefs, errors);
+  const evidenceRefs = collectWorkspaceEvidenceRefs(value);
+  const pending = value.pendingAdaptationProposal;
+  if (pending !== undefined) {
+    const trainingPlan = isRecord(value.trainingPlan)
+      ? value.trainingPlan
+      : undefined;
+    const validated = validatePendingAdaptationProposal(pending, {
+      planVersion: trainingPlan ? Number(trainingPlan.planVersion) : 0,
+      plannedWorkouts: Array.isArray(trainingPlan?.plannedWorkouts)
+        ? (trainingPlan.plannedWorkouts as PlannedWorkout[])
+        : [],
+      evidenceRefs,
+    });
+    if (!validated.valid) errors.push("Pending adaptation proposal is invalid");
+  }
+  const declinedReviewIds = validateDeclinedAdaptations(
+    value.declinedAdaptations,
+    isRecord(value.trainingPlan) ? value.trainingPlan.planVersion : undefined,
+    evidenceRefs,
+    errors,
+  );
   validateUniqueStrings(
     value.processedRequestIds,
     "Processed request identifiers",
@@ -633,6 +932,24 @@ export function validateWorkspaceState(value: unknown): {
     [...appliedReviewIds].some((reviewId) => !receiptReviewIds.has(reviewId))
   ) {
     errors.push("Applied review identifiers must match adaptation receipts");
+  }
+  if (
+    [...receiptReviewIds].some((reviewId) => declinedReviewIds.has(reviewId))
+  ) {
+    errors.push("terminal adaptation review IDs must be unique");
+  }
+  const pendingReviewId =
+    isRecord(pending) &&
+    isRecord(pending.proposal) &&
+    isNonEmptyString(pending.proposal.reviewId)
+      ? pending.proposal.reviewId
+      : null;
+  if (
+    pendingReviewId !== null &&
+    (receiptReviewIds.has(pendingReviewId) ||
+      declinedReviewIds.has(pendingReviewId))
+  ) {
+    errors.push("Pending adaptation review cannot already be terminal");
   }
   validateMutationHistory(value.mutationHistory, errors);
 

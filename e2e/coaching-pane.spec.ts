@@ -374,13 +374,15 @@ test("shows the approved adaptation receipt with its source evidence after settl
     reviewId: "review:coaching-pane",
   });
 
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
   });
   await review
-    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
     .click();
-  await review.getByRole("button", { name: "Adapt my plan" }).click();
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
   await expect(review).toBeHidden();
 
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
@@ -419,6 +421,514 @@ test("shows the approved adaptation receipt with its source evidence after settl
   ).toBeVisible();
 });
 
+test("opens a full-push adaptation review with a durable back route", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  const opened = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(opened).toMatchObject({
+    status: "review_opened",
+    reviewId: "review:coaching-pane",
+  });
+
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
+  );
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(review).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    review.getByRole("heading", { name: "Workout Adaptation" }),
+  ).toBeFocused();
+  await expect(
+    review.getByRole("heading", { name: "What would change" }).first(),
+  ).toBeVisible();
+  await review.locator("details > summary").click();
+  await review
+    .getByRole("radio", { name: /Alternative — Keep the rhythm/ })
+    .click();
+  await expect(
+    review.getByRole("button", { name: "Adapt my plan: Keep the rhythm" }),
+  ).toBeEnabled();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = window.localStorage.getItem(
+          "your-last-coach.workspace.v1",
+        );
+        return saved ? JSON.parse(saved).state.trainingPlan.planVersion : null;
+      }),
+    )
+    .toBe(1);
+  await page.screenshot({
+    path: "test-results/issue-66-mobile-review.png",
+    fullPage: false,
+  });
+
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByRole("region", { name: "Coaching", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
+
+  const reopenedFromAgent = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(reopenedFromAgent).toMatchObject({
+    status: "review_opened",
+    reviewId: "review:coaching-pane",
+  });
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
+  );
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
+
+  await page.screenshot({
+    path: "test-results/issue-66-mobile-coaching-before-decision.png",
+    fullPage: false,
+  });
+
+  await page.getByRole("button", { name: "Review proposal" }).click();
+  const reopened = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(reopened).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL(
+    new RegExp("#adaptation(?:%2F|/)review%3Acoaching-pane"),
+  );
+  await expect(reopened).toBeVisible();
+  await expect(
+    reopened.getByRole("button", { name: "Adapt my plan: Keep the rhythm" }),
+  ).toBeEnabled();
+  await reopened
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await reopened
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("Recovery first", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
+  const returnedPaneNav = page.locator(".pane-nav");
+  const returnedCoachingHeading = page.getByRole("heading", {
+    name: "Coaching",
+    exact: true,
+  });
+  const [returnedPaneNavBox, returnedCoachingHeadingBox] = await Promise.all([
+    returnedPaneNav.boundingBox(),
+    returnedCoachingHeading.boundingBox(),
+  ]);
+  expect(returnedPaneNavBox).not.toBeNull();
+  expect(returnedCoachingHeadingBox).not.toBeNull();
+  expect(
+    returnedPaneNavBox!.y + returnedPaneNavBox!.height,
+  ).toBeLessThanOrEqual(returnedCoachingHeadingBox!.y);
+  await page.screenshot({
+    path: "test-results/issue-66-mobile-coaching-after-decision.png",
+    fullPage: false,
+  });
+});
+
+test("opens the same review from WebMCP on desktop and keeps the action bar readable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(review).toBeVisible();
+  await expect(
+    review.getByRole("heading", { name: "Workout Adaptation" }),
+  ).toBeFocused();
+  const actionBar = review.locator(".adaptation-actions");
+  await expect(actionBar).toBeVisible();
+  const actionBarBox = await actionBar.boundingBox();
+  expect(actionBarBox).not.toBeNull();
+  expect(actionBarBox!.x + actionBarBox!.width).toBeLessThanOrEqual(1280);
+  expect(actionBarBox!.y + actionBarBox!.height).toBeLessThanOrEqual(800);
+  await review.locator("details > summary").click();
+  await review
+    .getByRole("radio", { name: /Alternative — Keep the rhythm/ })
+    .click();
+  await expect(
+    review.getByRole("button", { name: "Adapt my plan: Keep the rhythm" }),
+  ).toBeEnabled();
+  await page.screenshot({
+    path: "test-results/issue-66-desktop-review.png",
+    fullPage: false,
+  });
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review proposal" }).click();
+  const cardReview = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(cardReview).toBeVisible();
+  await expect(
+    cardReview.getByRole("heading", { name: "Workout Adaptation" }),
+  ).toBeFocused();
+  await cardReview.locator("details > summary").click();
+  await cardReview
+    .getByRole("radio", { name: /Alternative — Keep the rhythm/ })
+    .click();
+  await expect(
+    cardReview.getByRole("button", { name: "Adapt my plan: Keep the rhythm" }),
+  ).toBeEnabled();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const saved = window.localStorage.getItem(
+          "your-last-coach.workspace.v1",
+        );
+        return saved ? JSON.parse(saved).state.trainingPlan.planVersion : null;
+      }),
+    )
+    .toBe(1);
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByRole("button", { name: "Review proposal" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review proposal" }).click();
+  const reopened = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(reopened).toBeVisible();
+  await reopened
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await reopened
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("Recovery first", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
+  const desktopReturnedPaneNav = page.locator(".pane-nav");
+  const desktopReturnedCoachingHeading = page.getByRole("heading", {
+    name: "Coaching",
+    exact: true,
+  });
+  const [desktopReturnedPaneNavBox, desktopReturnedCoachingHeadingBox] =
+    await Promise.all([
+      desktopReturnedPaneNav.boundingBox(),
+      desktopReturnedCoachingHeading.boundingBox(),
+    ]);
+  expect(desktopReturnedPaneNavBox).not.toBeNull();
+  expect(desktopReturnedCoachingHeadingBox).not.toBeNull();
+  expect(
+    desktopReturnedPaneNavBox!.y + desktopReturnedPaneNavBox!.height,
+  ).toBeLessThanOrEqual(desktopReturnedCoachingHeadingBox!.y);
+  await page.screenshot({
+    path: "test-results/issue-66-desktop-coaching-after-decision.png",
+    fullPage: false,
+  });
+  await expect(
+    page.evaluate(async () => {
+      const registrations = (
+        window as unknown as {
+          __webMcpHarness: {
+            registrations: Array<{
+              tool: {
+                name: string;
+                execute: (
+                  input: Record<string, unknown>,
+                  options: { signal: AbortSignal },
+                ) => Promise<unknown>;
+              };
+            }>;
+          };
+        }
+      ).__webMcpHarness.registrations;
+      const tool = registrations.find(
+        ({ tool }) => tool.name === "read_workout_adaptation_decision",
+      )?.tool;
+      if (!tool) throw new Error("Fallback decision tool was not registered");
+      return tool.execute(
+        { reviewId: "review:coaching-pane" },
+        { signal: new AbortController().signal },
+      );
+    }),
+  ).resolves.toMatchObject({
+    status: "approved",
+    reviewId: "review:coaching-pane",
+  });
+});
+
+test("cuts adaptation motion when reduced motion is requested", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await expect(review).toBeVisible();
+  const reducedMotion = await review.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      transitionSeconds: parseFloat(style.transitionDuration),
+      scrollBehavior: style.scrollBehavior,
+    };
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const normalTransitionSeconds = await review.evaluate((element) =>
+    parseFloat(getComputedStyle(element).transitionDuration),
+  );
+  expect(reducedMotion.scrollBehavior).toBe("auto");
+  expect(normalTransitionSeconds).toBeGreaterThan(
+    reducedMotion.transitionSeconds,
+  );
+});
+
+test("surfaces memory-only durability when fallback review cannot persist", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    };
+  });
+
+  const opened = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(opened).toMatchObject({
+    status: "review_opened",
+    durability: "memory_only",
+  });
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
+  );
+  await page.goBack();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByText(
+      "Browser storage is unavailable. Changes will last only until this page is reloaded.",
+    ),
+  ).toBeVisible();
+});
+
+test("surfaces memory-only durability when pushed-screen approval cannot persist", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+
+  const opened = await page.evaluate(async (proposal) => {
+    const registrations = (
+      window as unknown as {
+        __webMcpHarness: {
+          registrations: Array<{
+            tool: {
+              name: string;
+              execute: (
+                input: Record<string, unknown>,
+                options: { signal: AbortSignal },
+              ) => Promise<unknown>;
+            };
+          }>;
+        };
+      }
+    ).__webMcpHarness.registrations;
+    const tool = registrations.find(
+      ({ tool }) => tool.name === "open_workout_adaptation_review",
+    )?.tool;
+    if (!tool) throw new Error("Fallback review tool was not registered");
+    return tool.execute(proposal, { signal: new AbortController().signal });
+  }, approvedReceiptProposal());
+  expect(opened).toMatchObject({ status: "review_opened" });
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
+  });
+  await review
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
+    .click();
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    };
+  });
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(
+    page.getByText(
+      "Browser storage is unavailable. Changes will last only until this page is reloaded.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Coaching timeline" })
+      .getByText("1 → 2", { exact: true }),
+  ).toBeVisible();
+});
+
+test("shows a bounded unavailable state for an unknown adaptation deep link", async ({
+  page,
+}) => {
+  await page.goto("/#adaptation/unknown-review");
+
+  const unavailable = page.getByRole("main", {
+    name: "Workout Adaptation unavailable",
+  });
+  await expect(unavailable).toBeVisible();
+  await expect(
+    unavailable.getByRole("heading", { name: "Adaptation unavailable" }),
+  ).toBeFocused();
+  await expect(
+    unavailable.getByRole("button", { name: "Back to Coaching" }),
+  ).toHaveCount(1);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await unavailable.getByRole("button", { name: "Back to Coaching" }).click();
+  await expect(page).toHaveURL(/#coaching$/);
+});
+
 test("keeps Planned Workout and unknown receipt evidence literal without an inferred Result", async ({
   page,
 }) => {
@@ -451,13 +961,15 @@ test("keeps Planned Workout and unknown receipt evidence literal without an infe
   }, proposal);
   expect(opened).toMatchObject({ status: "review_opened" });
 
-  const review = page.getByRole("dialog", {
-    name: "Review Workout Adaptations",
+  const review = page.getByRole("main", {
+    name: "Workout Adaptation review",
   });
   await review
-    .getByRole("button", { name: /Coach's recommendation — Recovery first/ })
+    .getByRole("radio", { name: /Coach's recommendation — Recovery first/ })
     .click();
-  await review.getByRole("button", { name: "Adapt my plan" }).click();
+  await review
+    .getByRole("button", { name: "Adapt my plan: Recovery first" })
+    .click();
   await expect(review).toBeHidden();
 
   await page.evaluate(() => {

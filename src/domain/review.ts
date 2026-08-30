@@ -1,6 +1,7 @@
 import type {
   IsoDate,
   PlannedWorkout,
+  PendingAdaptationProposal,
   WorkoutBlock,
   WorkoutType,
 } from "./types";
@@ -56,6 +57,91 @@ export interface ReviewPreviewRow {
   date: IsoDate;
   before: PlannedWorkout | null;
   after: PlannedWorkout | null;
+}
+
+export interface PendingReviewValidationContext {
+  planVersion: number;
+  plannedWorkouts: PlannedWorkout[];
+  evidenceRefs: Set<string>;
+}
+
+export function collectWorkspaceEvidenceRefs(value: unknown): Set<string> {
+  const refs = new Set<string>();
+  if (!isRecord(value)) return refs;
+
+  const add = (prefix: string, identifier: unknown) => {
+    if (typeof identifier === "string" && identifier.trim() !== "") {
+      refs.add(`${prefix}:${identifier}`);
+    }
+  };
+  const addEntries = (
+    field: string,
+    prefix: string,
+    identifierField = "id",
+  ) => {
+    const entries = value[field];
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      if (isRecord(entry)) add(prefix, entry[identifierField]);
+    }
+  };
+  const addEntriesFrom = (entries: unknown, prefix: string) => {
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      if (isRecord(entry)) add(prefix, entry.id);
+    }
+  };
+
+  const athlete = value.athlete;
+  if (isRecord(athlete)) add("athlete", athlete.id);
+  const targetRace = value.targetRace;
+  if (isRecord(targetRace)) add("target-race", targetRace.id);
+  const trainingPhase = value.trainingPhase;
+  if (isRecord(trainingPhase)) add("training-phase", trainingPhase.id);
+  const trainingPlan = value.trainingPlan;
+  if (isRecord(trainingPlan)) {
+    if (typeof trainingPlan.planVersion === "number") {
+      add("training-plan", `version:${trainingPlan.planVersion}`);
+    }
+    addEntriesFrom(trainingPlan.plannedWorkouts, "planned-workout");
+  }
+
+  for (const ref of [
+    "observation:training-load",
+    "observation:recovery",
+    "observation:sleep",
+    "observation:sleep-hrv",
+    "observation:resting-heart-rate",
+    "observation:daily-stress",
+  ]) {
+    refs.add(ref);
+  }
+  addEntries("workoutResults", "workout-result");
+  addEntries("athleteFeedback", "athlete-feedback");
+  addEntries("coachingTopics", "coaching-topic");
+
+  const topics = value.coachingTopics;
+  if (Array.isArray(topics)) {
+    for (const topic of topics) {
+      if (!isRecord(topic) || !Array.isArray(topic.evidenceRefs)) continue;
+      for (const ref of topic.evidenceRefs) {
+        if (typeof ref === "string" && ref.trim() !== "") refs.add(ref);
+      }
+    }
+  }
+
+  const receipts = value.adaptationReceipts;
+  if (Array.isArray(receipts)) {
+    for (const receipt of receipts) {
+      if (!isRecord(receipt)) continue;
+      add("plan-adaptation", receipt.reviewId);
+      if (!Array.isArray(receipt.evidenceRefs)) continue;
+      for (const ref of receipt.evidenceRefs) {
+        if (typeof ref === "string" && ref.trim() !== "") refs.add(ref);
+      }
+    }
+  }
+  return refs;
 }
 
 const WORKOUT_TYPES = new Set<WorkoutType>([
@@ -633,6 +719,121 @@ export function validateReviewProposal(
         ),
       }
     : { valid: false, issues, stale };
+}
+
+export function validatePendingAdaptationProposal(
+  value: unknown,
+  context: PendingReviewValidationContext,
+):
+  | { valid: true; pending: PendingAdaptationProposal }
+  | { valid: false; issues: ReviewValidationIssue[] } {
+  const issues: ReviewValidationIssue[] = [];
+  if (!isRecord(value)) {
+    return {
+      valid: false,
+      issues: [
+        {
+          path: "pendingAdaptationProposal",
+          message: "Pending adaptation proposal must be an object.",
+          expected: "one complete pending adaptation proposal",
+        },
+      ],
+    };
+  }
+  if (
+    !hasOnly(value, [
+      "proposal",
+      "openedAt",
+      "expiresAt",
+      "delivery",
+      "selectedOptionId",
+    ])
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal",
+      "Pending adaptation proposal contains an unsupported field.",
+      "proposal, openedAt, expiresAt, delivery, and selectedOptionId",
+    );
+  }
+  const proposal = validateReviewProposal(value.proposal, context);
+  if (!proposal.valid) issues.push(...proposal.issues);
+
+  const openedAt = value.openedAt;
+  const expiresAt = value.expiresAt;
+  if (!isTimestamp(openedAt)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.openedAt",
+      "openedAt must be a valid timestamp.",
+      "an ISO timestamp",
+    );
+  }
+  if (!isTimestamp(expiresAt)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.expiresAt",
+      "expiresAt must be a valid timestamp.",
+      "an ISO timestamp after openedAt",
+    );
+  }
+  if (
+    isTimestamp(openedAt) &&
+    isTimestamp(expiresAt) &&
+    Date.parse(expiresAt) <= Date.parse(openedAt)
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.expiresAt",
+      "expiresAt must be after openedAt.",
+      "an expiry timestamp later than openedAt",
+    );
+  }
+  if (value.delivery !== "primary" && value.delivery !== "fallback") {
+    issue(
+      issues,
+      "pendingAdaptationProposal.delivery",
+      "delivery is invalid.",
+      "primary or fallback",
+    );
+  }
+  if (value.selectedOptionId !== null && !isText(value.selectedOptionId)) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.selectedOptionId",
+      "selectedOptionId must be null or a known option ID.",
+      "null, recommended.optionId, or alternative.optionId",
+    );
+  } else if (
+    proposal.valid &&
+    value.selectedOptionId !== null &&
+    value.selectedOptionId !== proposal.proposal.recommended.optionId &&
+    value.selectedOptionId !== proposal.proposal.alternative.optionId
+  ) {
+    issue(
+      issues,
+      "pendingAdaptationProposal.selectedOptionId",
+      "selectedOptionId does not identify an option in the proposal.",
+      "recommended.optionId or alternative.optionId",
+    );
+  }
+  if (issues.length > 0) return { valid: false, issues };
+  return {
+    valid: true,
+    pending: deepFreeze(
+      structuredClone(value as unknown as PendingAdaptationProposal),
+    ),
+  };
+}
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    isText(value) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      value,
+    ) &&
+    Number.isFinite(Date.parse(value))
+  );
 }
 
 export function buildReviewPreview(

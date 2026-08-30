@@ -11,6 +11,7 @@ import { isWorkspaceState } from "../domain/validation";
 interface InitializeWorkspaceOptions {
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
+  now?: () => number;
 }
 
 export interface InitializedWorkspace {
@@ -25,6 +26,18 @@ const REFRESH_NOTICE =
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function migratePersistedWorkspace(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.state)) return value;
+  if ("declinedAdaptations" in value.state) return value;
+  return {
+    ...value,
+    state: {
+      ...value.state,
+      declinedAdaptations: [],
+    },
+  };
 }
 
 function isPersistedWorkspace(value: unknown): value is {
@@ -70,6 +83,15 @@ function isPersistedWorkspace(value: unknown): value is {
       )
     );
   }
+  if (result.status === "declined") {
+    const decision = value.state.declinedAdaptations.find(
+      (candidate) => candidate.reviewId === result.reviewId,
+    );
+    return (
+      decision !== undefined &&
+      Object.keys(result).every((key) => ["status", "reviewId"].includes(key))
+    );
+  }
   if (result.status !== "approved") return false;
   return (
     receipt !== undefined &&
@@ -97,14 +119,57 @@ export async function initializeWorkspace(
   options: InitializeWorkspaceOptions,
 ): Promise<InitializedWorkspace> {
   const saved = await options.repository.load();
-  if (isPersistedWorkspace(saved)) {
+  const migratedSaved = migratePersistedWorkspace(saved);
+  if (isPersistedWorkspace(migratedSaved)) {
+    const pending = migratedSaved.state.pendingAdaptationProposal;
+    const expired =
+      pending !== undefined &&
+      Number.isFinite(Date.parse(pending.expiresAt)) &&
+      Date.parse(pending.expiresAt) <= (options.now?.() ?? Date.now());
+    if (expired) {
+      const { pendingAdaptationProposal: _pending, ...stateWithoutPending } =
+        migratedSaved.state;
+      const state = deepFreeze(structuredClone(stateWithoutPending));
+      const timeoutResult: PersistedFallbackResult = {
+        status: "cancelled",
+        reviewId: pending.proposal.reviewId,
+        reason: "timeout",
+      };
+      const persistedFallbackResult =
+        pending.delivery === "fallback" ? timeoutResult : undefined;
+      let durability: Durability =
+        options.repository.durability ?? "persistent";
+      try {
+        durability = await options.repository.save({
+          schemaVersion: 1,
+          seedVersion: "demo-athlete-v1",
+          savedAt: state.clock.now,
+          state,
+          ...(persistedFallbackResult === undefined
+            ? {}
+            : { undeliveredFallbackResult: persistedFallbackResult }),
+        });
+      } catch {
+        durability = "memory_only";
+      }
+      return {
+        state,
+        notice: null,
+        durability,
+        ...(persistedFallbackResult === undefined
+          ? {}
+          : { undeliveredFallbackResult: persistedFallbackResult }),
+      };
+    }
     return {
-      state: deepFreeze(structuredClone(saved.state)),
+      state: deepFreeze(structuredClone(migratedSaved.state)),
       notice: null,
       durability: options.repository.durability ?? "persistent",
-      ...(saved.undeliveredFallbackResult === undefined
+      ...(migratedSaved.undeliveredFallbackResult === undefined
         ? {}
-        : { undeliveredFallbackResult: saved.undeliveredFallbackResult }),
+        : {
+            undeliveredFallbackResult: migratedSaved.undeliveredFallbackResult,
+          }),
     };
   }
 

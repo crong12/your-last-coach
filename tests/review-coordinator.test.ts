@@ -311,6 +311,40 @@ describe("Workout Adaptation review coordinator", () => {
       reason: "host_aborted",
     });
   });
+
+  it("keeps fallback pending when the host aborts after durable publication", async () => {
+    const { application } = await setup();
+    const coordinator = createReviewCoordinator({ application });
+    const controller = new AbortController();
+    const cancelPlanReview = vi.spyOn(application, "cancelPlanReview");
+
+    await expect(
+      coordinator.openAndPersist(
+        acceptedProposal(),
+        "fallback",
+        controller.signal,
+      ),
+    ).resolves.toMatchObject({ status: "review_opened" });
+    controller.abort();
+    await Promise.resolve();
+
+    expect(cancelPlanReview).not.toHaveBeenCalled();
+    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+    expect(application.getPendingAdaptationProposal()).toMatchObject({
+      proposal: { reviewId: acceptedProposal().reviewId },
+      delivery: "fallback",
+    });
+  });
+
+  it("idempotently reopens the same active review", async () => {
+    const { coordinator } = await setup();
+    const first = coordinator.open(acceptedProposal(), "fallback");
+
+    expect(first).toMatchObject({ status: "review_opened" });
+    expect(coordinator.open(acceptedProposal(), "fallback")).toEqual(first);
+    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+  });
+
   it("requires a selection, then approves and settles with the structured application result", async () => {
     const { application, coordinator, saved } = await setup();
     coordinator.open(acceptedProposal());
@@ -540,6 +574,12 @@ describe("Workout Adaptation review coordinator", () => {
     coordinator.open(acceptedProposal());
 
     expect(coordinator.open(acceptedProposal())).toEqual({
+      status: "review_opened",
+      reviewId: "review:rest-of-week:2026-08-26",
+    });
+    const different = acceptedProposal();
+    different.reviewId = "review:another-active-review";
+    expect(coordinator.open(different)).toEqual({
       status: "error",
       code: "busy",
       message: "Another Workout Adaptation review is already active.",
