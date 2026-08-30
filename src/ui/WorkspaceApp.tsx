@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
   type KeyboardEvent,
+  type RefObject,
 } from "react";
 
 import type { CoachAgentConnection } from "../adapters/webmcp/types";
@@ -18,9 +19,16 @@ import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
 import {
+  NAVIGATION_FOCUS_STATE_KEY,
+  NAVIGATION_STATE_KEY,
   PANE_IDS,
+  paneOriginFromHistoryState,
   type PaneNavigation,
   type PaneId,
+  type PaneOriginReceipt,
+  workoutFocusFromHistoryState,
+  workoutOriginFromHistoryState,
+  type WorkoutOriginReceipt,
   type WorkspaceRoute,
   workspaceRouteFromHash,
   workspaceRouteHash,
@@ -33,6 +41,11 @@ import type {
 } from "../domain/types";
 import { useModalFocus } from "./useModalFocus";
 import { HrvChart } from "./charts/HrvChart";
+import { ResultDetailChart } from "./charts/ResultDetailChart";
+import {
+  formatPaceSeconds,
+  normalizeResultLaps,
+} from "./charts/resultDetailMath";
 
 interface WorkspaceAppProps {
   application: WorkspaceApplication;
@@ -53,42 +66,16 @@ const PANE_LABELS: Record<PaneId, string> = {
   coaching: "Coaching",
 };
 
-const NAVIGATION_STATE_KEY = "yourLastCoachNavigation";
-
-interface PaneOriginReceipt {
-  version: 1;
-  kind: "pane-origin";
-  pane: PaneId;
-  windowScrollY: number;
-  paneScrollLeft: number;
-  invokerId: string;
-}
-
-function paneOriginFromHistoryState(value: unknown): PaneOriginReceipt | null {
-  if (typeof value !== "object" || value === null) return null;
-  const receipt = (value as Record<string, unknown>)[NAVIGATION_STATE_KEY];
-  if (typeof receipt !== "object" || receipt === null) return null;
-  const candidate = receipt as Record<string, unknown>;
-  if (
-    candidate.version !== 1 ||
-    candidate.kind !== "pane-origin" ||
-    !PANE_IDS.includes(candidate.pane as PaneId) ||
-    typeof candidate.windowScrollY !== "number" ||
-    !Number.isFinite(candidate.windowScrollY) ||
-    typeof candidate.paneScrollLeft !== "number" ||
-    !Number.isFinite(candidate.paneScrollLeft) ||
-    typeof candidate.invokerId !== "string"
-  )
-    return null;
-  return candidate as unknown as PaneOriginReceipt;
-}
-
-function historyStateWithOrigin(origin: PaneOriginReceipt) {
+function historyStateWithOrigin(
+  origin: PaneOriginReceipt | WorkoutOriginReceipt,
+) {
   const current = window.history.state;
-  return {
+  const next = {
     ...(typeof current === "object" && current !== null ? current : {}),
     [NAVIGATION_STATE_KEY]: origin,
   };
+  delete next[NAVIGATION_FOCUS_STATE_KEY];
+  return next;
 }
 
 function historyStateWithoutOrigin() {
@@ -96,7 +83,16 @@ function historyStateWithoutOrigin() {
   if (typeof current !== "object" || current === null) return null;
   const next = { ...(current as Record<string, unknown>) };
   delete next[NAVIGATION_STATE_KEY];
+  delete next[NAVIGATION_FOCUS_STATE_KEY];
   return next;
+}
+
+function historyStateWithFocus(focus: WorkoutOriginReceipt) {
+  const current = window.history.state;
+  return {
+    ...(typeof current === "object" && current !== null ? current : {}),
+    [NAVIGATION_FOCUS_STATE_KEY]: focus,
+  };
 }
 
 const WEEK_DATES = [
@@ -321,20 +317,581 @@ function MonthPlan({
   );
 }
 
-function PlannedWorkoutScreen({
+function formatDuration(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = Math.round(seconds % 60);
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
+    : `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatDistance(distanceKm: number) {
+  return `${Number.isInteger(distanceKm) ? distanceKm : distanceKm.toFixed(1)} km`;
+}
+
+function formatDelta(value: number, unit: string) {
+  const rounded = Math.round(value * 10) / 10;
+  const prefix = rounded > 0 ? "+" : "";
+  return `${prefix}${rounded} ${unit}`;
+}
+
+function WorkoutStat({
+  label,
+  value,
+  basis,
+}: {
+  label: string;
+  value: string;
+  basis?: string;
+}) {
+  return (
+    <div className="workout-stat">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+      {basis && <small className="workout-stat__basis">{basis}</small>}
+    </div>
+  );
+}
+
+function WorkoutStats({ result }: { result: WorkoutResult }) {
+  const duration = result.summary.durationSeconds;
+  const averagePace =
+    duration !== undefined && result.summary.distanceKm > 0
+      ? duration / result.summary.distanceKm
+      : null;
+  return (
+    <section className="workout-result-section" aria-labelledby="stats-title">
+      <span className="eyebrow">Recorded outcome</span>
+      <h2 id="stats-title">Workout Result</h2>
+      <dl className="workout-stats">
+        <WorkoutStat
+          label="Distance"
+          value={formatDistance(result.summary.distanceKm)}
+        />
+        <WorkoutStat
+          label="Time"
+          value={
+            duration === undefined
+              ? "No duration recorded"
+              : formatDuration(duration)
+          }
+        />
+        <WorkoutStat
+          label="Average pace"
+          value={
+            averagePace === null
+              ? "No average pace recorded"
+              : `${formatPaceSeconds(averagePace)}/km`
+          }
+          basis={averagePace === null ? undefined : "Derived"}
+        />
+        <WorkoutStat label="Average HR" value="No average HR recorded" />
+        <WorkoutStat label="Training Load" value="No Training Load recorded" />
+      </dl>
+    </section>
+  );
+}
+
+function PlanVersusActual({
+  workout,
+  result,
+}: {
+  workout: PlannedWorkout;
+  result: WorkoutResult;
+}) {
+  const repeatBlock = workout.prescription.blocks.find(
+    (block) => block.kind === "repeat",
+  );
+  return (
+    <section
+      className="workout-result-section"
+      aria-labelledby="plan-actual-title"
+    >
+      <span className="eyebrow">Like-for-like evidence</span>
+      <h2 id="plan-actual-title">Plan versus actual</h2>
+      <dl className="plan-actual-list">
+        <div>
+          <dt>Distance</dt>
+          <dd>
+            <span>Planned {formatDistance(workout.distanceKm)}</span>
+            <span>Actual {formatDistance(result.summary.distanceKm)}</span>
+            <strong>
+              Delta{" "}
+              {formatDelta(
+                result.summary.distanceKm - workout.distanceKm,
+                "km",
+              )}
+            </strong>
+          </dd>
+        </div>
+        {repeatBlock?.kind === "repeat" && (
+          <div>
+            <dt>Work repetitions</dt>
+            <dd>
+              <span>
+                Planned {repeatBlock.repetitions} repetitions from the repeat
+                block
+              </span>
+              <strong>
+                {result.summary.completedWorkRepetitions === undefined
+                  ? "No completed repetitions recorded"
+                  : `${result.summary.completedWorkRepetitions} of ${repeatBlock.repetitions} completed`}
+              </strong>
+              {result.summary.completedWorkRepetitions !== undefined && (
+                <small>
+                  Difference{" "}
+                  {formatDelta(
+                    result.summary.completedWorkRepetitions -
+                      repeatBlock.repetitions,
+                    "repetitions",
+                  )}
+                </small>
+              )}
+            </dd>
+          </div>
+        )}
+      </dl>
+    </section>
+  );
+}
+
+function SplitsTable({
+  laps,
+}: {
+  laps: ReturnType<typeof normalizeResultLaps>;
+}) {
+  return (
+    <details className="workout-splits">
+      <summary>Splits</summary>
+      <div className="workout-splits__scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Lap</th>
+              <th scope="col">Distance</th>
+              <th scope="col">Pace</th>
+              <th scope="col">Avg HR</th>
+              <th scope="col">Max HR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {laps.map((lap) => (
+              <tr key={lap.id}>
+                <th scope="row">{lap.label}</th>
+                <td>{formatDistance(lap.distanceKm)}</td>
+                <td>
+                  {lap.paceSecondsPerKm === null
+                    ? "Not recorded"
+                    : `${formatPaceSeconds(lap.paceSecondsPerKm)}/km`}
+                </td>
+                <td>
+                  {lap.averageHeartRateBpm === null
+                    ? "Not recorded"
+                    : `${lap.averageHeartRateBpm} bpm`}
+                </td>
+                <td>
+                  {lap.maximumHeartRateBpm === null
+                    ? "Not recorded"
+                    : `${lap.maximumHeartRateBpm} bpm`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+function WorkoutPreviousAttempts({
+  context,
+  onSelectWorkout,
+}: {
+  context: WorkoutContextData;
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  if (context.previousAttempts.length === 0) return null;
+  return (
+    <section
+      className="workout-result-section"
+      aria-labelledby="previous-attempts-title"
+    >
+      <span className="eyebrow">Same session type</span>
+      <h2 id="previous-attempts-title">Previous attempts</h2>
+      <ol className="previous-attempts-list">
+        {context.previousAttempts.map(({ plannedWorkout, workoutResult }) => {
+          const date = formatDate(workoutResult.startedAt.slice(0, 10));
+          const label = `View previous attempt ${date} · ${formatDistance(workoutResult.summary.distanceKm)}`;
+          const distanceDelta = context.workoutResult
+            ? formatDelta(
+                workoutResult.summary.distanceKm -
+                  context.workoutResult.summary.distanceKm,
+                "km",
+              )
+            : null;
+          return (
+            <li key={workoutResult.id}>
+              {onSelectWorkout ? (
+                <button
+                  className="previous-attempt"
+                  id={`previous-attempt-${workoutResult.id}`}
+                  aria-label={label}
+                  onClick={(event) =>
+                    onSelectWorkout(plannedWorkout, event.currentTarget)
+                  }
+                >
+                  <span>
+                    <strong>{date}</strong>
+                    <small>{plannedWorkout.title}</small>
+                  </span>
+                  <span>
+                    <strong>
+                      {formatDistance(workoutResult.summary.distanceKm)}
+                    </strong>
+                    <small>Previous attempt</small>
+                    {distanceDelta !== null && (
+                      <small>Delta vs current {distanceDelta}</small>
+                    )}
+                  </span>
+                </button>
+              ) : (
+                <div className="previous-attempt">
+                  <span>
+                    <strong>{date}</strong>
+                    <small>{plannedWorkout.title}</small>
+                  </span>
+                  <span>
+                    <strong>
+                      {formatDistance(workoutResult.summary.distanceKm)}
+                    </strong>
+                    <small>Previous attempt</small>
+                    {distanceDelta !== null && (
+                      <small>Delta vs current {distanceDelta}</small>
+                    )}
+                  </span>
+                </div>
+              )}
+              <dl className="previous-attempt__aggregates">
+                <div>
+                  <dt>Average pace</dt>
+                  <dd>Not recorded</dd>
+                </div>
+                <div>
+                  <dt>Average HR</dt>
+                  <dd>Not recorded</dd>
+                </div>
+                <div>
+                  <dt>Training Load</dt>
+                  <dd>Not recorded</dd>
+                </div>
+              </dl>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function makeFeedbackRequestId() {
+  try {
+    return `workout-feedback-${crypto.randomUUID()}`;
+  } catch {
+    return `workout-feedback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+export function WorkoutFeedback({
+  context,
+  application,
+  onDurability,
+}: {
+  context: WorkoutContextData;
+  application: WorkspaceApplication;
+  onDurability: (durability: Durability) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const requestIdRef = useRef<string | null>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const feedback = [...context.athleteFeedback].sort(
+    (a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt),
+  );
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
+  const open = () => {
+    requestIdRef.current = makeFeedbackRequestId();
+    setDraft("");
+    setError(null);
+    setEditing(true);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setDraft("");
+    setError(null);
+    requestIdRef.current = null;
+  };
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving || draft.trim() === "") {
+      if (draft.trim() === "") setError("Athlete Feedback is required.");
+      return;
+    }
+    const requestId = requestIdRef.current ?? makeFeedbackRequestId();
+    requestIdRef.current = requestId;
+    setSaving(true);
+    setError(null);
+    const outcome = await application.command({
+      type: "record_athlete_feedback",
+      requestId,
+      relatedWorkoutId: context.plannedWorkout.id,
+      rawText: draft,
+    });
+    setSaving(false);
+    if (outcome.status === "ok") {
+      onDurability(outcome.durability);
+      cancel();
+      return;
+    }
+    setError(outcome.message);
+  };
+
+  return (
+    <section
+      className="workout-result-section workout-feedback"
+      aria-labelledby="feedback-title"
+    >
+      <span className="eyebrow">Athlete-owned evidence</span>
+      <h2 id="feedback-title">Athlete Feedback</h2>
+      {feedback.length === 0 ? (
+        <p className="workout-feedback__empty">
+          No Athlete Feedback recorded for this workout yet
+        </p>
+      ) : (
+        <div className="workout-feedback__list">
+          {feedback.map((entry) => (
+            <article className="workout-feedback__card" key={entry.id}>
+              <blockquote>{entry.rawText}</blockquote>
+              <time dateTime={entry.recordedAt}>
+                {formatDate(entry.recordedAt.slice(0, 10))}
+              </time>
+            </article>
+          ))}
+        </div>
+      )}
+      {!editing ? (
+        <button
+          className="button button--quiet workout-feedback__add"
+          onClick={open}
+        >
+          Add feedback
+        </button>
+      ) : (
+        <form
+          className="workout-feedback__form"
+          aria-label="Add Athlete Feedback"
+          onSubmit={(event) => void save(event)}
+          data-feedback-request-id={requestIdRef.current ?? undefined}
+        >
+          <label htmlFor="workout-feedback-text">Athlete Feedback</label>
+          <textarea
+            id="workout-feedback-text"
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              if (error) setError(null);
+            }}
+            rows={4}
+            required
+            disabled={saving}
+          />
+          {error && (
+            <p
+              ref={errorRef}
+              className="workout-feedback__error"
+              role="alert"
+              tabIndex={-1}
+            >
+              {error}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={cancel}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              className="button button--primary"
+              type="submit"
+              disabled={saving || draft.trim() === ""}
+            >
+              {saving ? "Saving…" : "Save feedback"}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
+  const repeatBlock = workout.prescription.blocks.find(
+    (block) => block.kind === "repeat",
+  );
+  return (
+    <>
+      <section
+        className="workout-detail__intent"
+        aria-labelledby="intent-title"
+      >
+        <span className="eyebrow">Purpose in the plan</span>
+        <h2 id="intent-title">Coach’s intent</h2>
+        <p>{workout.purpose}</p>
+      </section>
+
+      <section aria-labelledby="structure-title">
+        <span className="eyebrow">Planned structure</span>
+        <h2 id="structure-title">Workout structure</h2>
+        <ol className="workout-structure">
+          {workout.prescription.blocks.map((block, index) => {
+            const label =
+              block.kind === "warmup"
+                ? "Warm-up"
+                : block.kind === "cooldown"
+                  ? "Cool-down"
+                  : "Main set";
+            const value =
+              block.kind === "repeat"
+                ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPace(block.targetPaceSecondsPerKm.min)}–${formatPace(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
+                : `${block.distanceKm} km`;
+            return (
+              <li key={`${block.kind}-${index}`}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section aria-labelledby="targets-title">
+        <span className="eyebrow">Prescription at a glance</span>
+        <h2 id="targets-title">Targets</h2>
+        <table className="workout-targets">
+          <tbody>
+            <tr>
+              <th scope="row">Target pace</th>
+              <td>
+                {repeatBlock?.kind === "repeat"
+                  ? `${formatPace(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPace(repeatBlock.targetPaceSecondsPerKm.max)}/km`
+                  : "No separate pace target recorded"}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Effort / heart-rate guidance</th>
+              <td>No separate guidance recorded</td>
+            </tr>
+            <tr>
+              <th scope="row">Planned distance</th>
+              <td>{formatDistance(workout.distanceKm)}</td>
+            </tr>
+            <tr>
+              <th scope="row">Planned duration</th>
+              <td>No duration recorded</td>
+            </tr>
+            <tr>
+              <th scope="row">Recovery protocol</th>
+              <td>
+                {repeatBlock?.kind === "repeat"
+                  ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
+                  : "No separate recovery protocol recorded"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </>
+  );
+}
+
+function ResultBackedWorkoutComposition({
+  context,
+  application,
+  onDurability,
+  onSelectWorkout,
+}: {
+  context: WorkoutContextData;
+  application: WorkspaceApplication;
+  onDurability: (durability: Durability) => void;
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  const result = context.workoutResult;
+  if (!result) return null;
+  const laps = normalizeResultLaps(result.laps);
+  return (
+    <>
+      <WorkoutStats result={result} />
+      <PlanVersusActual workout={context.plannedWorkout} result={result} />
+      <section
+        className="workout-result-section"
+        aria-labelledby="lap-chart-title"
+      >
+        <span className="eyebrow">Recorded laps</span>
+        <h2 id="lap-chart-title">Per-lap pace and heart rate</h2>
+        {laps.length === 0 ? (
+          <p className="result-detail-chart__empty">No lap data recorded</p>
+        ) : (
+          <>
+            <ResultDetailChart laps={laps} />
+            <SplitsTable laps={laps} />
+          </>
+        )}
+      </section>
+      <WorkoutPreviousAttempts
+        context={context}
+        onSelectWorkout={onSelectWorkout}
+      />
+      <WorkoutFeedback
+        context={context}
+        application={application}
+        onDurability={onDurability}
+      />
+    </>
+  );
+}
+
+function WorkoutDetailScreen({
   context,
   backLabel,
   onBack,
+  application,
+  onDurability,
+  onSelectWorkout,
+  screenRef,
 }: {
   context: WorkoutContextData;
   backLabel: string;
   onBack: () => void;
+  application: WorkspaceApplication;
+  onDurability: (durability: Durability) => void;
+  onSelectWorkout?: WorkoutSelect;
+  screenRef: RefObject<HTMLElement | null>;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const workout = context.plannedWorkout;
-  const repeatBlock = workout.prescription.blocks.find(
-    (block) => block.kind === "repeat",
-  );
+  const result = context.workoutResult;
+  const date = result?.startedAt.slice(0, 10) ?? workout.date;
+  const screenLabel = result ? "Workout Result" : "Planned Workout";
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -343,10 +900,10 @@ function PlannedWorkoutScreen({
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, []);
+  }, [workout.id, result?.id]);
 
   return (
-    <main className="workout-screen" aria-label="Planned Workout">
+    <main ref={screenRef} className="workout-screen" aria-label={screenLabel}>
       <header className="workout-screen__header">
         <button
           className="workout-screen__back"
@@ -356,89 +913,35 @@ function PlannedWorkoutScreen({
           <span aria-hidden="true">←</span>
           Back
         </button>
-        <span className="workout-screen__status">PLANNED</span>
+        <span className="workout-screen__status">
+          {result ? result.status.toUpperCase() : "PLANNED"}
+        </span>
       </header>
       <article className="workout-detail">
         <header className="workout-detail__title">
           <div className="workout-detail__meta">
-            <time dateTime={workout.date}>{formatDate(workout.date)}</time>
+            <time dateTime={date}>{formatDate(date)}</time>
             <span>{formatClassification(workout.type)}</span>
           </div>
           <h1 ref={titleRef} tabIndex={-1}>
             {workout.title}
           </h1>
+          {result?.provenance && (
+            <small className="provenance-label">
+              Source: {result.provenance}
+            </small>
+          )}
         </header>
-
-        <section
-          className="workout-detail__intent"
-          aria-labelledby="intent-title"
-        >
-          <span className="eyebrow">Purpose in the plan</span>
-          <h2 id="intent-title">Coach’s intent</h2>
-          <p>{workout.purpose}</p>
-        </section>
-
-        <section aria-labelledby="structure-title">
-          <span className="eyebrow">Planned structure</span>
-          <h2 id="structure-title">Workout structure</h2>
-          <ol className="workout-structure">
-            {workout.prescription.blocks.map((block, index) => {
-              const label =
-                block.kind === "warmup"
-                  ? "Warm-up"
-                  : block.kind === "cooldown"
-                    ? "Cool-down"
-                    : "Main set";
-              const value =
-                block.kind === "repeat"
-                  ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPace(block.targetPaceSecondsPerKm.min)}–${formatPace(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
-                  : `${block.distanceKm} km`;
-              return (
-                <li key={`${block.kind}-${index}`}>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-
-        <section aria-labelledby="targets-title">
-          <span className="eyebrow">Prescription at a glance</span>
-          <h2 id="targets-title">Targets</h2>
-          <table className="workout-targets">
-            <tbody>
-              <tr>
-                <th scope="row">Target pace</th>
-                <td>
-                  {repeatBlock?.kind === "repeat"
-                    ? `${formatPace(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPace(repeatBlock.targetPaceSecondsPerKm.max)}/km`
-                    : "No separate pace target recorded"}
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Effort / heart-rate guidance</th>
-                <td>No separate guidance recorded</td>
-              </tr>
-              <tr>
-                <th scope="row">Planned distance</th>
-                <td>{workout.distanceKm} km</td>
-              </tr>
-              <tr>
-                <th scope="row">Planned duration</th>
-                <td>No duration recorded</td>
-              </tr>
-              <tr>
-                <th scope="row">Recovery protocol</th>
-                <td>
-                  {repeatBlock?.kind === "repeat"
-                    ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
-                    : "No separate recovery protocol recorded"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
+        {result ? (
+          <ResultBackedWorkoutComposition
+            context={context}
+            application={application}
+            onDurability={onDurability}
+            onSelectWorkout={onSelectWorkout}
+          />
+        ) : (
+          <PlannedWorkoutComposition workout={workout} />
+        )}
       </article>
     </main>
   );
@@ -1539,6 +2042,8 @@ export function WorkspaceApp({
   const scrollFrameRef = useRef<number | null>(null);
   const restorationFrameRef = useRef<number | null>(null);
   const pendingOriginRef = useRef<PaneOriginReceipt | null>(null);
+  const workoutScreenRef = useRef<HTMLElement | null>(null);
+  const pendingWorkoutOriginRef = useRef<WorkoutOriginReceipt | null>(null);
   const appMenuRef = useRef<HTMLDivElement>(null);
   const appMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const appMenuItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -1602,11 +2107,24 @@ export function WorkspaceApp({
         });
         if (workout.status === "ok") {
           const origin = paneOriginFromHistoryState(window.history.state);
+          const workoutFocus = workoutFocusFromHistoryState(
+            window.history.state,
+          );
+          const previousRoute = paneNavigation.getRoute();
+          const shouldRestoreWorkoutFocus =
+            restoreCoordinates &&
+            previousRoute.kind === "workout" &&
+            previousRoute.workoutId !== parsed.workoutId &&
+            workoutFocus?.workoutId === parsed.workoutId;
           if (origin) paneNavigation.restorePane(origin.pane);
+          pendingWorkoutOriginRef.current = shouldRestoreWorkoutFocus
+            ? workoutFocus
+            : null;
           paneNavigation.restoreRoute(parsed);
           return;
         }
       } else if (parsed?.kind === "pane") {
+        pendingWorkoutOriginRef.current = null;
         if (restoreCoordinates) {
           const origin = paneOriginFromHistoryState(window.history.state);
           pendingOriginRef.current =
@@ -1624,6 +2142,7 @@ export function WorkspaceApp({
         `${window.location.pathname}${window.location.search}${workspaceRouteHash(today)}`,
       );
       pendingOriginRef.current = null;
+      pendingWorkoutOriginRef.current = null;
       paneNavigation.restoreRoute(today);
       moveToPane("today", true);
     },
@@ -1668,6 +2187,26 @@ export function WorkspaceApp({
       });
       window.scrollTo({ top: origin.windowScrollY, behavior: "auto" });
       document.getElementById(origin.invokerId)?.focus();
+    });
+    return () => {
+      if (restorationFrameRef.current !== null) {
+        window.cancelAnimationFrame(restorationFrameRef.current);
+        restorationFrameRef.current = null;
+      }
+    };
+  }, [activeRoute]);
+
+  useEffect(() => {
+    if (activeRoute.kind !== "workout") return;
+    const origin = pendingWorkoutOriginRef.current;
+    if (!origin || origin.workoutId !== activeRoute.workoutId) return;
+    pendingWorkoutOriginRef.current = null;
+    restorationFrameRef.current = window.requestAnimationFrame(() => {
+      restorationFrameRef.current = null;
+      document.getElementById(origin.invokerId)?.focus({ preventScroll: true });
+      if (workoutScreenRef.current) {
+        workoutScreenRef.current.scrollTop = origin.workoutScrollTop;
+      }
     });
     return () => {
       if (restorationFrameRef.current !== null) {
@@ -1832,6 +2371,34 @@ export function WorkspaceApp({
         : "unavailable";
 
   const openWorkout: WorkoutSelect = (workout, invoker) => {
+    if (activeRoute.kind === "workout") {
+      const origin: WorkoutOriginReceipt = {
+        version: 1,
+        kind: "workout-origin",
+        workoutId: activeRoute.workoutId,
+        workoutScrollTop: workoutScreenRef.current?.scrollTop ?? 0,
+        invokerId: invoker.id,
+      };
+      const stateWithFocus = historyStateWithFocus(origin);
+      window.history.replaceState(
+        stateWithFocus,
+        "",
+        `${window.location.pathname}${window.location.search}${workspaceRouteHash(activeRoute)}`,
+      );
+      const workoutRoute: WorkspaceRoute = {
+        kind: "workout",
+        workoutId: workout.id,
+      };
+      const stateWithOrigin = historyStateWithOrigin(origin);
+      window.history.pushState(
+        stateWithOrigin,
+        "",
+        `${window.location.pathname}${window.location.search}${workspaceRouteHash(workoutRoute)}`,
+      );
+      paneNavigation.pushWorkout(workout.id);
+      return;
+    }
+
     const origin: PaneOriginReceipt = {
       version: 1,
       kind: "pane-origin",
@@ -1859,7 +2426,9 @@ export function WorkspaceApp({
   };
 
   const closeWorkout = () => {
-    const origin = paneOriginFromHistoryState(window.history.state);
+    const origin =
+      workoutOriginFromHistoryState(window.history.state) ??
+      paneOriginFromHistoryState(window.history.state);
     if (origin) {
       window.history.back();
       return;
@@ -1896,6 +2465,18 @@ export function WorkspaceApp({
     reviewState.status !== "reviewing" &&
     activeRoute.kind === "workout" &&
     selectedContext?.status === "ok";
+  const paneOrigin = paneOriginFromHistoryState(window.history.state);
+  const workoutOrigin = workoutOriginFromHistoryState(window.history.state);
+  const workoutOriginContext = workoutOrigin
+    ? application.query({
+        type: "get_workout_context",
+        workoutId: workoutOrigin.workoutId,
+      })
+    : null;
+  const backLabel =
+    workoutOrigin && workoutOriginContext?.status === "ok"
+      ? `Back to ${workoutOriginContext.data.plannedWorkout.title}`
+      : `Back to ${PANE_LABELS[paneOrigin?.pane ?? paneNavigation.getSelectedPane()]}`;
 
   return (
     <div className="app-shell">
@@ -2137,9 +2718,16 @@ export function WorkspaceApp({
       </div>
 
       {workoutScreenActive && selectedContext?.status === "ok" && (
-        <PlannedWorkoutScreen
+        <WorkoutDetailScreen
+          key={
+            activeRoute.kind === "workout" ? activeRoute.workoutId : "workout"
+          }
           context={selectedContext.data}
-          backLabel={`Back to ${PANE_LABELS[paneOriginFromHistoryState(window.history.state)?.pane ?? paneNavigation.getSelectedPane()]}`}
+          application={application}
+          onDurability={setDurability}
+          onSelectWorkout={openWorkout}
+          screenRef={workoutScreenRef}
+          backLabel={backLabel}
           onBack={closeWorkout}
         />
       )}

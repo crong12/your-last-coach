@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PANE_IDS,
   createPaneNavigation,
+  workoutFocusFromHistoryState,
+  workoutOriginFromHistoryState,
   workspaceRouteFromHash,
   workspaceRouteHash,
 } from "../src/application/createPaneNavigation";
@@ -92,6 +94,62 @@ describe("Workout routes", () => {
     expect(navigation.getRoute()).toEqual({
       kind: "workout",
       workoutId: "planned-one",
+    });
+  });
+
+  it("parses a nested Workout origin receipt and rejects malformed coordinates", () => {
+    expect(
+      workoutOriginFromHistoryState({
+        yourLastCoachNavigation: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: 144,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toEqual({
+      version: 1,
+      kind: "workout-origin",
+      workoutId: "planned-current",
+      workoutScrollTop: 144,
+      invokerId: "previous-attempt-result-1",
+    });
+    expect(
+      workoutOriginFromHistoryState({
+        yourLastCoachNavigation: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: -1,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      workoutOriginFromHistoryState({
+        yourLastCoachNavigationFocus: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: 144,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      workoutFocusFromHistoryState({
+        yourLastCoachNavigationFocus: {
+          version: 1,
+          kind: "workout-origin",
+          workoutId: "planned-current",
+          workoutScrollTop: 144,
+          invokerId: "previous-attempt-result-1",
+        },
+      }),
+    ).toMatchObject({
+      kind: "workout-origin",
+      workoutId: "planned-current",
     });
   });
 });

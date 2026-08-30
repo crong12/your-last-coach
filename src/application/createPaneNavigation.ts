@@ -5,6 +5,101 @@ export type PaneId = (typeof PANE_IDS)[number];
 export type WorkspaceRoute =
   { kind: "pane"; pane: PaneId } | { kind: "workout"; workoutId: string };
 
+export const NAVIGATION_STATE_KEY = "yourLastCoachNavigation";
+export const NAVIGATION_FOCUS_STATE_KEY = "yourLastCoachNavigationFocus";
+
+export interface PaneOriginReceipt {
+  version: 1;
+  kind: "pane-origin";
+  pane: PaneId;
+  windowScrollY: number;
+  paneScrollLeft: number;
+  invokerId: string;
+}
+
+export interface WorkoutOriginReceipt {
+  version: 1;
+  kind: "workout-origin";
+  workoutId: string;
+  workoutScrollTop: number;
+  invokerId: string;
+}
+
+export type NavigationOriginReceipt = PaneOriginReceipt | WorkoutOriginReceipt;
+
+function navigationReceiptFromHistoryState(
+  value: unknown,
+  key = NAVIGATION_STATE_KEY,
+) {
+  if (typeof value !== "object" || value === null) return null;
+  const receipt = (value as Record<string, unknown>)[key];
+  return typeof receipt === "object" && receipt !== null
+    ? (receipt as Record<string, unknown>)
+    : null;
+}
+
+export function paneOriginFromHistoryState(
+  value: unknown,
+): PaneOriginReceipt | null {
+  const candidate = navigationReceiptFromHistoryState(value);
+  if (
+    !candidate ||
+    candidate.version !== 1 ||
+    candidate.kind !== "pane-origin" ||
+    !PANE_IDS.includes(candidate.pane as PaneId) ||
+    typeof candidate.windowScrollY !== "number" ||
+    !Number.isFinite(candidate.windowScrollY) ||
+    typeof candidate.paneScrollLeft !== "number" ||
+    !Number.isFinite(candidate.paneScrollLeft) ||
+    typeof candidate.invokerId !== "string"
+  ) {
+    return null;
+  }
+  return candidate as unknown as PaneOriginReceipt;
+}
+
+export function workoutOriginFromHistoryState(
+  value: unknown,
+): WorkoutOriginReceipt | null {
+  return workoutReceiptFromHistoryState(value, NAVIGATION_STATE_KEY);
+}
+
+export function workoutFocusFromHistoryState(
+  value: unknown,
+): WorkoutOriginReceipt | null {
+  return workoutReceiptFromHistoryState(value, NAVIGATION_FOCUS_STATE_KEY);
+}
+
+function workoutReceiptFromHistoryState(
+  value: unknown,
+  key: string,
+): WorkoutOriginReceipt | null {
+  const candidate = navigationReceiptFromHistoryState(value, key);
+  if (
+    !candidate ||
+    candidate.version !== 1 ||
+    candidate.kind !== "workout-origin" ||
+    typeof candidate.workoutId !== "string" ||
+    candidate.workoutId.trim() === "" ||
+    typeof candidate.workoutScrollTop !== "number" ||
+    !Number.isFinite(candidate.workoutScrollTop) ||
+    candidate.workoutScrollTop < 0 ||
+    typeof candidate.invokerId !== "string" ||
+    candidate.invokerId.trim() === ""
+  ) {
+    return null;
+  }
+  return candidate as unknown as WorkoutOriginReceipt;
+}
+
+export function navigationOriginFromHistoryState(
+  value: unknown,
+): NavigationOriginReceipt | null {
+  return (
+    paneOriginFromHistoryState(value) ?? workoutOriginFromHistoryState(value)
+  );
+}
+
 export function workspaceRouteFromHash(hash: string): WorkspaceRoute | null {
   if (!hash.startsWith("#")) return null;
   const fragment = hash.slice(1);

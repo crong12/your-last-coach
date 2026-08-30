@@ -78,3 +78,37 @@ test("keeps the built candidate chartable through Trends and the Workout round t
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(origin.hash);
   await expect(workout).toBeFocused();
 });
+
+test("serves the completed Workout Result proof from the static candidate", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#workout/planned-2026-08-06-threshold");
+
+  const screen = page.getByRole("main", { name: "Workout Result" });
+  await expect(screen.getByText("COMPLETED", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByText("Source: seeded synthetic COROS-shaped Workout Result"),
+  ).toBeVisible();
+  await expect(screen.locator("svg[data-result-detail-chart]")).toBeVisible();
+  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(5);
+  await expect(screen.getByText("Previous attempts")).not.toBeVisible();
+
+  const splits = screen.locator("details");
+  await splits.locator("summary").click();
+  await expect(splits.getByRole("cell", { name: "6:00/km" })).toBeVisible();
+  await expect(
+    splits.getByRole("cell", { name: "2 km" }).first(),
+  ).toBeVisible();
+  await expect(splits.getByRole("cell", { name: "130 bpm" })).toBeVisible();
+  await expect(
+    splits.getByRole("cell", { name: "Not recorded" }).last(),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
+  await expect(screen).not.toBeAttached();
+});
