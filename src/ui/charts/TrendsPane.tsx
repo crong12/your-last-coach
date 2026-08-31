@@ -30,8 +30,6 @@ import { CHART_PLOT, CHART_VIEWBOX, type ChartAnnotation } from "./chartTypes";
 
 export const TRENDS_SOURCE =
   "Source: seeded synthetic COROS-shaped observations";
-const GROUP_LABEL = "Readiness evidence";
-const PERFORMANCE_LABEL = "Performance evidence";
 
 export type TrendsWorkoutSelect = (
   workout: PlannedWorkout,
@@ -296,7 +294,6 @@ function SleepChart({
           : `${projection.coverage.observed} of ${projection.coverage.expected} nights recorded`
       }
       source={source}
-      eyebrow={GROUP_LABEL}
     />
   );
 }
@@ -748,7 +745,6 @@ function VolumeLoadChart({
           ? "Training history unavailable"
           : `${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load`
       }
-      eyebrow={PERFORMANCE_LABEL}
     >
       <div className="chart-card__secondary-metrics" data-volume-summary>
         <span>
@@ -981,7 +977,6 @@ function PaceHeartRateChart({
           : `${projection.points.length} eligible Outdoor Run pairs${projection.excludedOutdoorRuns ? ` · ${projection.excludedOutdoorRuns} missing a measure` : ""}`
       }
       source="Derived from your runs"
-      eyebrow={PERFORMANCE_LABEL}
     />
   );
 }
@@ -1026,7 +1021,6 @@ function RepeatedSessionsCard({
     >
       <header className="section-heading section-heading--small">
         <div>
-          <span className="eyebrow">{PERFORMANCE_LABEL}</span>
           <h3 id="repeated-sessions-title">Repeated sessions</h3>
         </div>
         <span className="repeated-sessions-card__basis">
@@ -1212,7 +1206,6 @@ export function TrendsPane({
           chartId="hrv"
           seriesId="hrv"
           average={hrv.average}
-          groupLabel={GROUP_LABEL}
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
@@ -1226,7 +1219,6 @@ export function TrendsPane({
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
           average={restingHeartRate.average}
-          groupLabel={GROUP_LABEL}
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}

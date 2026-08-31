@@ -142,15 +142,11 @@ PERFORMANCE
 ┌──────────────────┐┌──────────────────┐
 │ Pace vs HR       ││ Repeated sessions│
 └──────────────────┘└──────────────────┘
-LONGITUDINAL CONTEXT
-┌──────────────────┐┌──────────────────┐
-│ Monitoring       ││ Recent training  │
-└──────────────────┘└──────────────────┘
 ```
 
 ### Three columns (≥1180px)
 
-Readiness runs `HRV | Resting HR | Sleep` in one row. Weekly volume + Training Load spans two columns with Pace vs HR beside it. `Repeated sessions | Monitoring | Recent training` share the final row.
+Readiness runs `HRV | Resting HR | Sleep` in one row. Weekly volume + Training Load spans two columns with Pace vs HR beside it. Repeated sessions takes the final row across the full measure.
 
 ### Composition rules
 
@@ -159,7 +155,9 @@ Readiness runs `HRV | Resting HR | Sleep` in one row. Weekly volume + Training L
 3. **Sleep spans both columns at narrow.** Three readiness charts do not divide into two columns. The bar chart gains most from width, so it takes the full row rather than leaving an orphan cell.
 4. **Weekly volume + Training Load spans the full measure at narrow.** It is a two-panel chart (distance bars above, load line below); at ~410px the load line reads as decoration.
 5. **Plot height rises from ~120px to 180–200px** in a ~410px-wide card, so a 28-point series stops being flattened. Cards in a row are equal height by grid default.
-6. **Provenance consolidates.** The identical sentence "Source: seeded synthetic COROS-shaped observations" currently repeats on six cards, all visible at once in a grid. It becomes **one pane-level line in the Trends footer**. Cards whose provenance genuinely differs keep their own line: "Derived from your runs" (Pace vs HR) and "Aggregate-only comparison" (Repeated sessions). **Per-chart coverage captions are unchanged and stay verbatim** — "21 of 28 nights recorded", "26 of 28 nights recorded", "9 of 11 Workout Results with available load", "10 eligible Outdoor Run pairs · 1 missing a measure" — because those are per-series facts, not a shared source label. PRODUCT.md principle 3 (evidence with provenance) and DESIGN.md's coverage-caption requirement are both satisfied: nothing becomes less traceable, one duplicated sentence stops repeating.
+6. **Longitudinal context leaves Trends.** Monitoring (open coaching topics) and Recent training (the observation history) are not chart evidence — they are the coaching account. Both move to the Coaching pane, paired in a two-up row beneath the Coaching timeline and above the Athlete Profile summary. Trends keeps only the arrival strip and the charts. This supersedes pane-3's "Monitoring card → dies" clause and the IA spec's rail-dissolution line.
+7. **Chart cards carry no eyebrow.** "Readiness evidence" / "Performance evidence" repeated above every card heading while the group header directly above already said Readiness or Performance. The group-level eyebrows stay as the journal's marginalia; the per-card ones are removed.
+8. **Provenance consolidates.** The identical sentence "Source: seeded synthetic COROS-shaped observations" currently repeats on six cards, all visible at once in a grid. It becomes **one pane-level line in the Trends footer**. Cards whose provenance genuinely differs keep their own line: "Derived from your runs" (Pace vs HR) and "Aggregate-only comparison" (Repeated sessions). **Per-chart coverage captions are unchanged and stay verbatim** — "21 of 28 nights recorded", "26 of 28 nights recorded", "9 of 11 Workout Results with available load", "10 eligible Outdoor Run pairs · 1 missing a measure" — because those are per-series facts, not a shared source label. PRODUCT.md principle 3 (evidence with provenance) and DESIGN.md's coverage-caption requirement are both satisfied: nothing becomes less traceable, one duplicated sentence stops repeating.
 
 ## States and ranges
 

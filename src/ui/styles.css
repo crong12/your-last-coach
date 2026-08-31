@@ -1486,6 +1486,15 @@ h1 {
   display: grid;
   gap: 20px;
 }
+
+/* Pairs Monitoring with Recent training wherever there is room for two, and
+   collapses to one when Monitoring has nothing open. */
+.coaching-context {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  align-items: start;
+  gap: 20px;
+}
 .coaching-review-card {
   position: relative;
   overflow: hidden;
@@ -1999,7 +2008,7 @@ h1 {
 }
 
 .chart-card__metric {
-  margin: 5px 0 0;
+  margin: 0;
   font-size: 25px;
   line-height: 1;
 }
@@ -3553,19 +3562,13 @@ h1 {
     gap: 18px;
   }
 
-  /* --- Trends reading order: arrival strip, evidence, then context --- */
+  /* --- Trends reading order: the arrival strip reads before the charts --- */
   .workspace--single .context-rail > .evidence-card {
     order: 0;
     grid-column: 1 / -1;
   }
   .workspace--single .context-rail > .trends-pane {
     order: 1;
-  }
-  .workspace--single .context-rail > .monitoring-card {
-    order: 2;
-  }
-  .workspace--single .context-rail > .recent-training-card {
-    order: 3;
   }
 
   /* --- The arrival strip: hairline row, not a card --- */

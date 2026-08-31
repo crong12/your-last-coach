@@ -613,7 +613,7 @@ test("shows the shared coaching briefing", async ({ page }) => {
   ).toBeVisible();
   await expect(profile.getByText(/Sunday/)).toBeVisible();
   await expect(profile.getByText(/60 minutes/).first()).toBeVisible();
-  await showPane(page, "Trends");
+  await showPane(page, "Coaching");
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
@@ -760,11 +760,10 @@ test("persists feedback context and plan adaptations across reload and reset", a
   await expect(page.getByText("Recovery first", { exact: true })).toHaveCount(
     0,
   );
-  await showPane(page, "Trends");
+  await showPane(page, "Coaching");
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
   ).toBeVisible();
-  await showPane(page, "Coaching");
   await expect(
     page.getByRole("heading", { name: "Athlete Profile" }),
   ).toBeVisible();
@@ -963,7 +962,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
       ({ date }) => date === "2026-08-26",
     )?.id;
   expect(thresholdWorkoutId).toBeDefined();
-  await showPane(page, "Trends");
+  await showPane(page, "Coaching");
   await expect(
     page
       .getByRole("region", { name: "Monitoring" })

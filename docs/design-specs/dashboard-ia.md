@@ -24,7 +24,7 @@ One Shared Coaching Workspace, three page-level panes plus pushed screens:
 - **Pushed screens**: full-viewport on both form factors; back always pops to origin pane/scroll position. (#46)
 - **Adaptation review**: pending proposals and declined decisions stay in the Coaching surface; this slice adds no Today notification chip or section-nav count.
 - **Demo chrome** (Demo Guide, Reset): overflow menu in the app bar/header — never inside a pane. (#49)
-- The incumbent context rail dissolves: Target Race → Today hero; Athlete Profile → Coaching pane summary card; Monitoring card is superseded by Trends. (#49)
+- The incumbent context rail dissolves: Target Race → Today hero; Athlete Profile → Coaching pane summary card; Monitoring and Recent training → Coaching pane, paired beneath the timeline. (#49)
 
 ## Shared rules (binding on all surfaces)
 

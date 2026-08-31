@@ -1606,6 +1606,91 @@ function PendingAdaptationCard({
   );
 }
 
+function MonitoringCard({ context }: { context: AthleteContextData }) {
+  if (context.activeCoachingTopics.length === 0) return null;
+  return (
+    <section className="monitoring-card" aria-labelledby="monitoring-title">
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Longitudinal context</span>
+          <h2 id="monitoring-title">Monitoring</h2>
+        </div>
+      </div>
+      <div className="monitoring-topics">
+        {context.activeCoachingTopics.map((topic) => (
+          <article className="monitoring-topic" key={topic.id}>
+            <span className="monitoring-status">
+              {formatClassification(topic.status)}
+            </span>
+            <h3>{topic.title}</h3>
+            <blockquote>{topic.athleteReport}</blockquote>
+            <dl className="monitoring-meta">
+              <div>
+                <dt>Recorded</dt>
+                <dd>
+                  <time dateTime={topic.latestReportedAt}>
+                    {formatDate(topic.latestReportedAt.slice(0, 10))}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Follow-up</dt>
+                <dd>{topic.followUpCondition}</dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentTrainingCard({
+  context,
+  plannedWorkouts,
+}: {
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+}) {
+  const priorWeekDistanceKm = context.recentTraining
+    .filter(({ startedAt }) => {
+      const date = startedAt.slice(0, 10);
+      return date >= "2026-08-18" && date <= "2026-08-23";
+    })
+    .reduce((total, result) => total + result.summary.distanceKm, 0);
+  return (
+    <section className="recent-training-card">
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Synthetic observation history</span>
+          <h2>Recent training</h2>
+        </div>
+      </div>
+      <p className="recent-training-summary">
+        {priorWeekDistanceKm} km from 18–23 August
+      </p>
+      <ol className="recent-training-list">
+        {context.recentTraining.map((result) => {
+          const date = result.startedAt.slice(0, 10);
+          const workout = plannedWorkouts.find(
+            ({ id }) => id === result.plannedWorkoutId,
+          );
+          return (
+            <li key={result.id}>
+              <time dateTime={date}>{formatShortDate(date)}</time>
+              <span>{workout?.title ?? "Recorded workout"}</span>
+              <strong>
+                {result.summary.distanceKm} km
+                {result.status === "partial" ? " · partial" : ""}
+              </strong>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 export function CoachingPane({
   context,
   plannedWorkouts,
@@ -1671,6 +1756,15 @@ export function CoachingPane({
           </ol>
         )}
       </section>
+      {/* The longitudinal context behind the timeline: what is still open, and
+          what the Athlete has actually done lately. */}
+      <div className="coaching-context">
+        <MonitoringCard context={context} />
+        <RecentTrainingCard
+          context={context}
+          plannedWorkouts={plannedWorkouts}
+        />
+      </div>
       <AthleteProfileSummary context={context} />
     </div>
   );
@@ -1702,12 +1796,6 @@ function ContextRail({
   state?: WorkspaceState;
 }) {
   const { observations } = context;
-  const priorWeekDistanceKm = context.recentTraining
-    .filter(({ startedAt }) => {
-      const date = startedAt.slice(0, 10);
-      return date >= "2026-08-18" && date <= "2026-08-23";
-    })
-    .reduce((total, result) => total + result.summary.distanceKm, 0);
   if (surface === "coaching") {
     return (
       <CoachingPane
@@ -1741,41 +1829,6 @@ function ContextRail({
             <strong>
               {formatObjective(context.targetRace.objectiveSeconds)}
             </strong>
-          </div>
-        </section>
-      )}
-      {surface === "trends" && context.activeCoachingTopics.length > 0 && (
-        <section className="monitoring-card" aria-labelledby="monitoring-title">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">Longitudinal context</span>
-              <h2 id="monitoring-title">Monitoring</h2>
-            </div>
-          </div>
-          <div className="monitoring-topics">
-            {context.activeCoachingTopics.map((topic) => (
-              <article className="monitoring-topic" key={topic.id}>
-                <span className="monitoring-status">
-                  {formatClassification(topic.status)}
-                </span>
-                <h3>{topic.title}</h3>
-                <blockquote>{topic.athleteReport}</blockquote>
-                <dl className="monitoring-meta">
-                  <div>
-                    <dt>Recorded</dt>
-                    <dd>
-                      <time dateTime={topic.latestReportedAt}>
-                        {formatDate(topic.latestReportedAt.slice(0, 10))}
-                      </time>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Follow-up</dt>
-                    <dd>{topic.followUpCondition}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
           </div>
         </section>
       )}
@@ -1834,37 +1887,6 @@ function ContextRail({
           <small className="provenance-label">
             Seeded synthetic observations
           </small>
-        </section>
-      )}
-      {surface === "trends" && (
-        <section className="recent-training-card">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">Synthetic observation history</span>
-              <h2>Recent training</h2>
-            </div>
-          </div>
-          <p className="recent-training-summary">
-            {priorWeekDistanceKm} km from 18–23 August
-          </p>
-          <ol className="recent-training-list">
-            {context.recentTraining.map((result) => {
-              const date = result.startedAt.slice(0, 10);
-              const workout = plannedWorkouts.find(
-                ({ id }) => id === result.plannedWorkoutId,
-              );
-              return (
-                <li key={result.id}>
-                  <time dateTime={date}>{formatShortDate(date)}</time>
-                  <span>{workout?.title ?? "Recorded workout"}</span>
-                  <strong>
-                    {result.summary.distanceKm} km
-                    {result.status === "partial" ? " · partial" : ""}
-                  </strong>
-                </li>
-              );
-            })}
-          </ol>
         </section>
       )}
     </div>

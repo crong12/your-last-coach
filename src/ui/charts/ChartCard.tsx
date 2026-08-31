@@ -13,7 +13,6 @@ export interface ChartCardProps {
   plot: ReactNode;
   coverage: string;
   source?: string;
-  eyebrow?: string;
   children?: ReactNode;
 }
 
@@ -30,7 +29,6 @@ export function ChartCard({
   plot,
   coverage,
   source,
-  eyebrow = "Readiness evidence",
   children,
 }: ChartCardProps) {
   const titleId = `chart-card-${id}-title`;
@@ -42,7 +40,6 @@ export function ChartCard({
     >
       <header className="chart-card__header">
         <div className="chart-card__metric-block">
-          <span className="eyebrow">{eyebrow}</span>
           <h3 id={titleId} className="chart-card__metric">
             {metric}
           </h3>

@@ -86,7 +86,7 @@ Two voices, strictly cast:
 - **Manrope (sans)** — the working hand: UI, labels, navigation, and **all data**. Numbers always set with `tabular-nums` (use the `.numeric` utility). Weights 700 for headings/actions, 500 for body.
 - **Newsreader (serif)** — the editorial voice: race names, section display headings, coach's-intent prose, quoted Athlete Feedback. **Never for data values, labels, or UI controls.**
 
-Scale (from frontmatter): `display` for the countdown numeral, `hero` for pane headlines, `section` (28px) for section headings, 13px body, 11px labels, 9px micro. Small-caps eyebrow labels are uppercase Manrope 700 with `0.08–0.1em` tracking — the journal's marginalia, used for entry types, phase names, and chart metric names.
+Scale (from frontmatter): `display` for the countdown numeral, `hero` for pane headlines, `section` (28px) for section headings, 13px body, 11px labels, 9px micro. Small-caps eyebrow labels are uppercase Manrope 700 with `0.08–0.1em` tracking — the journal's marginalia, used for entry types, phase names, and pane/section headings. Chart cards carry no eyebrow: the group header immediately above already names Readiness or Performance, so a per-card "Readiness evidence" only repeated it.
 
 ## Spacing & Layout
 
