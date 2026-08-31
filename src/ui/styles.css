@@ -1975,6 +1975,7 @@ h1 {
 }
 
 .chart-card {
+  container-type: inline-size;
   overflow: hidden;
   border: 1px solid rgba(23, 51, 48, 0.12);
   border-radius: 22px;
@@ -1993,6 +1994,7 @@ h1 {
 }
 
 .chart-card__metric-block {
+  min-width: 0;
   grid-area: metric;
 }
 
@@ -3453,5 +3455,250 @@ h1 {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0s !important;
+  }
+}
+
+/* =========================================================================
+   Switched pane view (desktop and the WebMCP judging scene).
+
+   Below 761px the workspace keeps the horizontal scroll-snap panes and is
+   governed entirely by the max-width blocks above; nothing here applies.
+   At and above 761px the selected pane fills the content region, the app bar
+   carries the pane tabs, and each pane lays its cards out on a grid.
+   See docs/design-specs/desktop-frame-and-trends-grid.md
+   ========================================================================= */
+@media (min-width: 761px) {
+  .topbar {
+    position: sticky;
+    top: 0;
+    gap: clamp(14px, 2.2vw, 30px);
+  }
+
+  /* The tabs live in the app bar, so nothing is pinned over the content. */
+  .pane-nav {
+    position: static;
+    z-index: auto;
+    margin: 0 auto 0 0;
+    padding: 4px;
+    border-color: transparent;
+    background: rgba(23, 51, 48, 0.05);
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .pane-nav__button {
+    min-height: 34px;
+    padding: 7px 15px;
+  }
+
+  .workspace-pane[hidden] {
+    display: none;
+  }
+
+  /* --- Pane title row: title left, pane controls right --- */
+  .pane-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 20px;
+    width: min(1440px, 100% - 2 * clamp(20px, 3vw, 48px));
+    padding-top: 28px;
+  }
+  .pane-heading__title {
+    min-width: 0;
+  }
+  .pane-heading h2 {
+    margin: 4px 0 5px;
+    font-size: 28px;
+  }
+  .pane-heading__controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 3px;
+  }
+
+  /* The toggle has a home now, so it stops floating over the charts. */
+  .trends-range-control {
+    position: static;
+    z-index: auto;
+    width: 264px;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .trends-range-control button {
+    min-height: 38px;
+  }
+
+  .workspace--single {
+    width: min(1440px, 100%);
+    padding-top: 20px;
+  }
+  .workspace--single .context-rail {
+    align-items: start;
+    gap: 18px;
+    padding-top: 0;
+  }
+  .trends-pane {
+    width: 100%;
+    gap: 18px;
+  }
+
+  /* --- Trends reading order: arrival strip, evidence, then context --- */
+  .workspace--single .context-rail > .evidence-card {
+    order: 0;
+    grid-column: 1 / -1;
+  }
+  .workspace--single .context-rail > .trends-pane {
+    order: 1;
+  }
+  .workspace--single .context-rail > .monitoring-card {
+    order: 2;
+  }
+  .workspace--single .context-rail > .recent-training-card {
+    order: 3;
+  }
+
+  /* --- The arrival strip: hairline row, not a card --- */
+  .workspace--single .context-rail > .evidence-card {
+    padding-bottom: 14px;
+    border-inline: 0;
+    border-block: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .workspace--single .context-rail > .evidence-card .section-heading {
+    padding: 16px 2px 12px;
+    border-bottom: 0;
+  }
+  .workspace--single .context-rail > .evidence-card .metrics-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0;
+  }
+  .workspace--single .context-rail > .evidence-card .metrics-list div {
+    padding: 12px 18px 12px 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .workspace--single
+    .context-rail
+    > .evidence-card
+    .metrics-list
+    div:nth-child(3n) {
+    border-right: 0;
+  }
+  .workspace--single
+    .context-rail
+    > .evidence-card
+    .metrics-list
+    div:nth-last-child(-n + 3) {
+    border-bottom: 0;
+  }
+  .workspace--single .context-rail > .evidence-card .metrics-list dd {
+    font-size: 24px;
+  }
+  .workspace--single .context-rail > .evidence-card .evidence-balance {
+    margin-inline: 0;
+  }
+  .workspace--single .context-rail > .evidence-card .provenance-label {
+    margin-inline: 0;
+  }
+
+  .trends-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .trends-group > .section-heading,
+  .trends-group > [data-chart-card="sleep"],
+  .trends-group > [data-chart-card="volume-load"] {
+    grid-column: 1 / -1;
+  }
+
+  /* --- Group headers become hairline rules, not label-only cards --- */
+  .trends-group > .section-heading {
+    margin-top: 2px;
+    padding: 4px 2px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+  }
+  .trends-group > .section-heading h2,
+  .trends-group > .section-heading h3 {
+    font-size: 20px;
+  }
+
+  .chart-plot {
+    max-width: 820px;
+    margin-inline: auto;
+  }
+
+  .trends-provenance {
+    margin: 2px 2px 0;
+    color: var(--muted);
+    font-size: 10px;
+  }
+}
+
+/* At this width readiness fits three across and the arrival strip runs as a
+   single six-metric row. */
+@media (min-width: 1180px) {
+  .trends-group[data-trends-group="readiness"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .trends-group[data-trends-group="readiness"] > [data-chart-card="sleep"] {
+    grid-column: auto;
+  }
+  /* Volume + Load no longer needs the full measure once its plot is capped;
+     the repeated-session comparison takes the wide row instead. */
+  .trends-group > [data-chart-card="volume-load"] {
+    grid-column: auto;
+  }
+  .trends-group > [data-repeated-sessions] {
+    grid-column: 1 / -1;
+  }
+
+  .workspace--single .context-rail > .evidence-card .metrics-list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .workspace--single .context-rail > .evidence-card .metrics-list div {
+    border-bottom: 0;
+  }
+  .workspace--single
+    .context-rail
+    > .evidence-card
+    .metrics-list
+    div:nth-child(3n) {
+    border-right: 1px solid var(--line);
+  }
+  .workspace--single
+    .context-rail
+    > .evidence-card
+    .metrics-list
+    div:last-child {
+    border-right: 0;
+  }
+}
+
+/* The chart card header keys off the card's own width, not the viewport: a
+   paired card at 880px is as narrow as a full-width card on a phone, and the
+   nowrap current/average/trend columns leave the metric name no room. */
+@container (max-width: 560px) {
+  .chart-card__header {
+    grid-template-areas:
+      "metric current"
+      "average trend";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 13px 10px;
+  }
+  .chart-card__trend {
+    justify-self: end;
+  }
+  .chart-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .chart-card__source {
+    text-align: left;
   }
 }

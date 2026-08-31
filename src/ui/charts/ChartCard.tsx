@@ -12,7 +12,7 @@ export interface ChartCardProps {
   readout: ReactNode;
   plot: ReactNode;
   coverage: string;
-  source: string;
+  source?: string;
   eyebrow?: string;
   children?: ReactNode;
 }
@@ -87,7 +87,7 @@ export function ChartCard({
       {children}
       <footer className="chart-card__footer">
         <span className="chart-card__coverage">{coverage}</span>
-        <span className="chart-card__source">{source}</span>
+        {source && <span className="chart-card__source">{source}</span>}
       </footer>
     </section>
   );

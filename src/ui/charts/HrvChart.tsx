@@ -154,7 +154,7 @@ export function HrvChart({
   status,
   unavailableMessage,
   groupLabel = "Readiness evidence",
-  source = "Source: seeded synthetic COROS-shaped observations",
+  source,
   displayFrom,
   displayTo,
   average: suppliedAverage,

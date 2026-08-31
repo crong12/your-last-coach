@@ -52,7 +52,7 @@ radii:
 shadow:
   ambient: "0 24px 70px rgba(24, 58, 53, 0.1)"
   overlay: "0 32px 100px rgba(8, 30, 27, 0.35)"
-breakpoints: [620, 760, 1050]
+breakpoints: [620, 760, 1050, 1180]
 motion:
   default: "none"
   navigation: "browser smooth scroll / push transition only"
@@ -90,9 +90,9 @@ Scale (from frontmatter): `display` for the countdown numeral, `hero` for pane h
 
 ## Spacing & Layout
 
-- Content column: `min(1480px, calc(100% - 36px))` today; the pane era uses a centered max-width column on desktop (#46).
+- Content column: `min(1480px, calc(100% - 36px))` on the app shell; panes share one measure of `min(1440px, 100% - 2 * clamp(20px, 3vw, 48px))`.
 - Card padding ~20–22px; related rows gap 8–12px; sections gap 16–24px. No spacing-token scale is imposed retroactively — keep to this rhythm, multiples of 4.
-- Breakpoints: 620 / 760 / 1050 (`max-width` media queries). Mobile-first surfaces must hold at 360px.
+- Breakpoints: 620 / 760 / 1050 as `max-width` queries for component internals; the pane shell uses 760 (scroll-snap vs switched panes) and 1180 (evidence cards pair up) as `min-width` queries. Mobile-first surfaces must hold at 360px; the desktop target is ~880px beside an agent host.
 
 ## Components
 
@@ -106,7 +106,7 @@ Scale (from frontmatter): `display` for the countdown numeral, `hero` for pane h
 
 The journal barely moves. The incumbent defines **no transitions** — state changes are honest cuts — and that restraint is the budget:
 
-- Allowed: scroll-snap pane glides and smooth-scrolls (#46), pushed-screen slide-in, at most one soft fade for overlay chrome.
+- Allowed: scroll-snap pane glides and smooth-scrolls on mobile, pushed-screen slide-in, at most one soft fade for overlay chrome. A desktop pane switch is a cut, never a transition.
 - `prefers-reduced-motion: reduce`: everything becomes an instant cut (already implemented; keep it total).
 - Never: count-up numerals, chart draw-in animations, parallax, attention-seeking pulses.
 

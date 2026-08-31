@@ -28,10 +28,17 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   await expect(
     card.getByText("21 of 28 nights recorded", { exact: true }),
   ).toBeVisible();
+  // The shared source sentence is stated once for the pane rather than on
+  // every card; per-card coverage captions stay verbatim.
   await expect(
-    card.getByText("Source: seeded synthetic COROS-shaped observations", {
-      exact: true,
-    }),
+    card.getByText("Source: seeded synthetic COROS-shaped observations"),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .locator(".trends-provenance")
+      .getByText("Source: seeded synthetic COROS-shaped observations", {
+        exact: true,
+      }),
   ).toBeVisible();
 
   const svg = card.locator('svg[data-chart="hrv"]');

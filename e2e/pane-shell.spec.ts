@@ -124,9 +124,7 @@ test("mobile pane changes reveal a shorter destination from the bottom of a long
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before);
 });
 
-test("desktop stacks sections and keeps the sticky section nav in sync", async ({
-  page,
-}) => {
+test("desktop switches panes from the app bar tabs", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#coaching");
   const today = page.getByRole("region", { name: "Today" });
@@ -140,29 +138,30 @@ test("desktop stacks sections and keeps the sticky section nav in sync", async (
   });
   await expect(navigation.locator(".pane-nav__dot").first()).toBeHidden();
 
-  const boxes = await Promise.all([
-    today.boundingBox(),
-    trends.boundingBox(),
-    coaching.boundingBox(),
-  ]);
-  expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y);
-  expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y);
-  await expect
-    .poll(() =>
-      coaching.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeLessThanOrEqual(200);
+  // The tabs live in the app bar, so the nav is inside the banner rather than
+  // floating over the content.
+  await expect(page.locator("header.topbar .pane-nav")).toBeVisible();
+
+  await expect(coaching).toBeVisible();
+  await expect(today).toBeHidden();
+  await expect(trends).toBeHidden();
   await expect(
     navigation.getByRole("button", { name: "Show Coaching pane" }),
   ).toHaveAttribute("aria-current", "page");
 
   await navigation.getByRole("button", { name: "Show Trends pane" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
-  await expect
-    .poll(() =>
-      trends.evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeLessThanOrEqual(150);
+  await expect(trends).toBeVisible();
+  await expect(coaching).toBeHidden();
+  await expect(today).toBeHidden();
+
+  // Nothing is pinned over the evidence: the range toggle has a home in the
+  // pane title row, above the first chart card.
+  const [toggle, firstCard] = await Promise.all([
+    page.locator(".trends-range-control").boundingBox(),
+    page.locator('[data-chart-card="hrv"]').boundingBox(),
+  ]);
+  expect(toggle!.y + toggle!.height).toBeLessThanOrEqual(firstCard!.y);
 });
 
 test("canonicalizes malformed routes and preserves selection across reload and resize", async ({
@@ -177,13 +176,9 @@ test("canonicalizes malformed routes and preserves selection across reload and r
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#coaching");
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#coaching");
-  await expect
-    .poll(() =>
-      page
-        .getByRole("region", { name: "Coaching", exact: true })
-        .evaluate((element) => element.getBoundingClientRect().top),
-    )
-    .toBeLessThanOrEqual(200);
+  await expect(
+    page.getByRole("region", { name: "Coaching", exact: true }),
+  ).toBeVisible();
 
   await page.evaluate(() => {
     location.hash = "#trends";

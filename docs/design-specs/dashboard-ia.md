@@ -19,7 +19,7 @@ One Shared Coaching Workspace, three page-level panes plus pushed screens:
 | Adaptation review (pushed) | `#adaptation/<id>` | [pane-3-coaching.md §3](pane-3-coaching.md) |
 
 - **Mobile**: horizontal scroll-snap panes with pagination dots; pane order Today · Trends · Coaching.
-- **Desktop**: the panes stack vertically as sections in a centered max-width column with a sticky scrollspy section nav; dots are mobile-only. (#46)
+- **Desktop**: the panes are **switched** — the selected pane fills the content region and the others are `hidden` — inside a persistent app bar that carries the pane tabs; dots are mobile-only. This supersedes #46's stacked-scroll clause, because WebMCP is desktop-only: the desktop rendering is the primary surface, viewed beside an agent host at roughly 880px, not an adaptation of the mobile one. See [desktop-frame-and-trends-grid.md](desktop-frame-and-trends-grid.md).
 - **Navigation**: hash routes; pane changes `replaceState`, pushed screens `pushState`; deep links restore; bare URL → Today. One navigation state serves gestures and WebMCP tools. ([ADR 0001](../adr/0001-hash-based-navigation-without-a-router.md))
 - **Pushed screens**: full-viewport on both form factors; back always pops to origin pane/scroll position. (#46)
 - **Adaptation review**: pending proposals and declined decisions stay in the Coaching surface; this slice adds no Today notification chip or section-nav count.
