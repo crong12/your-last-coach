@@ -592,6 +592,9 @@ export const DEMO_WORKSPACE_STATE = {
       status: "partial",
       summary: {
         distanceKm: 7.5,
+        durationSeconds: 2_747,
+        averagePaceSecondsPerKm: 366,
+        averageHeartRateBpm: 169,
         activityKind: "outdoor_run",
         completedWorkRepetitions: 3,
         plannedWorkRepetitions: 5,

@@ -23,8 +23,8 @@ Desktop: the same order as the top section of the stacked page (per #46), center
 Composition, top to bottom:
 
 - **Race identity**: race name in Newsreader (editorial), date beneath in Manrope muted. From the Target Race record.
-- **Days remaining**: the pane's single dramatic moment — large numeral in **coral** with "days" beside it in muted Manrope. ⚠️ *Iteration point: coral here is a product-accent use; #47 reserves coral for attention only within charts. If the dual role reads badly in build, fall back to ink/deep-sea.*
-- **Training-build progress as a phase-segmented bar**: one segment per Training Phase, widths proportional to phase duration, hairline boundaries (`--line`), filled to today, current segment highlighted in `deep-sea`. Caption beneath in the #47 annotation style: small-caps phase name + position, e.g. `BASE 2 · WEEK 5 OF 18`. This is the Training Plan in miniature, not a generic percentage.
+- **Days remaining**: the pane's single dramatic moment — large numeral in **coral** with "days" beside it in muted Manrope. ⚠️ _Iteration point: coral here is a product-accent use; #47 reserves coral for attention only within charts. If the dual role reads badly in build, fall back to ink/deep-sea._
+- **Training-build progress as a continuous day-based bar**: one fill from the Training Plan's build start to the Target Race, advanced by elapsed days without phase or week segmentation. Caption beneath in the #47 annotation style: small-caps current Training Phase + day position, e.g. `AEROBIC DEVELOPMENT · DAY 26 OF 247`.
 
 Terminal states:
 
@@ -44,13 +44,13 @@ When a proposed Workout Adaptation awaits review, a single quiet chip renders un
 - Summary rows (label + value, tabular numerals): target pace range, recovery protocol, planned duration/distance.
 - Primary action: **View workout details** → pushes `#workout/<id>` (per #46 full push). There is **no "Start Workout" action** — the product cannot start a watch workout; concept A's button is dropped as dishonest capability.
 
-**Completed state** (today's Workout Result exists): the card flips to a result summary — distance, time, average pace, average HR, Training Load as a stat row — plus a one-line coach acknowledgement and **View workout details**.
+**Result state** (today's Workout Result exists): the card flips to a result summary — distance, time, average pace, and average HR as a stat row — plus a one-line coach acknowledgement and **View workout details**. Do not show Training Load here because the raw number is not meaningful without interpretation. Do not show a completion-status pill on this summary surface; the product cannot reliably infer partial completion from every Workout Result.
 
 **Rest day state**: calm card, "Rest day" in editorial voice, tomorrow's session named in muted text. No CTA.
 
 ## 4. 7-day week strip
 
-- Seven tiles Mon–Sun of the current plan week; horizontally scrollable only if it cannot fit (avoid nested horizontal gestures — prefer compression; the strip must not fight the pane axis, so any internal scroll requires build-time verification against #46 mechanics). ⚠️ *Iteration point: if 7 tiles cannot compress legibly at 360 px, switch to a 5+2 stacked week grid rather than inner horizontal scrolling.*
+- Seven tiles Mon–Sun of the current plan week; horizontally scrollable only if it cannot fit (avoid nested horizontal gestures — prefer compression; the strip must not fight the pane axis, so any internal scroll requires build-time verification against #46 mechanics). ⚠️ _Iteration point: if 7 tiles cannot compress legibly at 360 px, switch to a 5+2 stacked week grid rather than inner horizontal scrolling._
 - Tile anatomy: weekday + date, type icon, workout title, key quantity (distance or duration), status treatment — **today** outlined in coral, **completed** with small check, **missed** muted (no red, no shaming — calm coach), **upcoming** default.
 - Tap any tile → `#workout/<id>` push (planned or completed composition per the workout-detail spec).
 

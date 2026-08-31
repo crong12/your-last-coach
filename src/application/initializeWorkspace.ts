@@ -11,6 +11,7 @@ import { isWorkspaceState } from "../domain/validation";
 interface InitializeWorkspaceOptions {
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
+  migrateSaved?: (value: unknown) => unknown;
   now?: () => number;
 }
 
@@ -30,12 +31,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function migratePersistedWorkspace(value: unknown): unknown {
   if (!isRecord(value) || !isRecord(value.state)) return value;
-  if ("declinedAdaptations" in value.state) return value;
   return {
     ...value,
     state: {
       ...value.state,
-      declinedAdaptations: [],
+      ...(Array.isArray(value.state.declinedAdaptations)
+        ? {}
+        : { declinedAdaptations: [] }),
     },
   };
 }
@@ -119,7 +121,10 @@ export async function initializeWorkspace(
   options: InitializeWorkspaceOptions,
 ): Promise<InitializedWorkspace> {
   const saved = await options.repository.load();
-  const migratedSaved = migratePersistedWorkspace(saved);
+  const schemaMigratedSaved = migratePersistedWorkspace(saved);
+  const migratedSaved = options.migrateSaved
+    ? options.migrateSaved(schemaMigratedSaved)
+    : schemaMigratedSaved;
   if (isPersistedWorkspace(migratedSaved)) {
     const pending = migratedSaved.state.pendingAdaptationProposal;
     const expired =

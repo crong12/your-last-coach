@@ -134,6 +134,22 @@ test("renders the normal Today pane on mobile with seven honest day tiles", asyn
     today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
   await expect(today.locator(".today-countdown__number")).toHaveText("221");
+  await expect(today.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuetext",
+    "Day 26 of 247; Aerobic development",
+  );
+  await expect(
+    today.getByText("AEROBIC DEVELOPMENT · DAY 26 OF 247"),
+  ).toBeVisible();
+
+  const resultCard = today.locator(".today-workout-card");
+  await expect(resultCard.getByText("PARTIAL", { exact: true })).toHaveCount(0);
+  await expect(resultCard.getByText("45:47", { exact: true })).toBeVisible();
+  await expect(resultCard.getByText("6:06/km", { exact: true })).toBeVisible();
+  await expect(resultCard.getByText("169 bpm", { exact: true })).toBeVisible();
+  await expect(
+    resultCard.getByText("Training Load", { exact: true }),
+  ).toHaveCount(0);
 
   const tiles = today.locator(".today-week-day");
   await expect(tiles).toHaveCount(7);
@@ -243,6 +259,12 @@ test("pushes a result-bearing tile and restores its focus on Back", async ({
     screen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   await expect(screen.getByText("PARTIAL", { exact: true })).toBeVisible();
+  await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
+  await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
+    0,
+  );
   await screen.getByRole("button", { name: "Back to Today" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(details).toBeFocused();

@@ -119,17 +119,20 @@ test("renders the selector-backed partial result composition and suspends the ap
   await expect(screen.getByText("Threshold", { exact: true })).toBeVisible();
   await expect(screen.getByText("PARTIAL", { exact: true })).toBeVisible();
   await expect(screen.getByText("7.5 km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
+  await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
+    0,
+  );
+  const previousAttempts = screen.getByRole("region", {
+    name: "Previous attempts",
+  });
   await expect(
-    screen.getByText("No duration recorded", { exact: true }),
+    previousAttempts.getByText("5:27/km", { exact: true }),
   ).toBeVisible();
   await expect(
-    screen.getByText("No average pace recorded", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    screen.getByText("No average HR recorded", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    screen.getByText("No Training Load recorded", { exact: true }),
+    previousAttempts.getByText("Not recorded", { exact: true }),
   ).toBeVisible();
   await expect(
     screen.getByRole("heading", { name: "Plan versus actual" }),
@@ -185,9 +188,9 @@ test("renders the provenance-labelled completed result with recorded chart and e
   await expect(
     screen.getByText("No average HR recorded", { exact: true }),
   ).toBeVisible();
-  await expect(
-    screen.getByText("No Training Load recorded", { exact: true }),
-  ).toBeVisible();
+  await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(screen.locator("svg[data-result-detail-chart]")).toBeVisible();
   await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(5);
   await expect(screen.getByText("5 of 5 laps with pace")).toBeVisible();

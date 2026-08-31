@@ -27,6 +27,7 @@ import {
 } from "./chartMath";
 import { HrvChart } from "./HrvChart";
 import { CHART_PLOT, CHART_VIEWBOX, type ChartAnnotation } from "./chartTypes";
+import { formatPacePerKm } from "../metricFormatters";
 
 export const TRENDS_SOURCE =
   "Source: seeded synthetic COROS-shaped observations";
@@ -56,8 +57,7 @@ function formatDuration(minutes: number | null) {
 
 function formatPace(seconds: number | null) {
   if (seconds === null || !Number.isFinite(seconds)) return "—";
-  const rounded = Math.round(seconds);
-  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}/km`;
+  return formatPacePerKm(seconds);
 }
 
 function formatDate(date: string) {

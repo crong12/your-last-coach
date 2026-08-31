@@ -111,7 +111,7 @@ test("links every Trends chart and card to the selected range on mobile", async 
     page.locator(
       '[data-chart-card="pace-heart-rate"] [data-pace-heart-rate-point]',
     ),
-  ).toHaveCount(9);
+  ).toHaveCount(10);
   await expect(page.locator("[data-repeated-session-option]")).toHaveCount(1);
 
   const cardWidths = await page
@@ -168,7 +168,7 @@ test("inspects missing evidence and restores both Workout Result pushes on mobil
   ).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => location.hash))
-    .toBe("#workout/planned-2026-08-24-recovery");
+    .toBe("#workout/planned-2026-08-26-threshold");
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect(page.locator(`#${paceActionId}`)).toBeFocused();
