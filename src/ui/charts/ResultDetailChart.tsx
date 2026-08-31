@@ -5,33 +5,33 @@ import {
   createHeartRateScale,
   createLapXScale,
   createPaceScale,
-  formatPaceSeconds,
   getLapCoverage,
   paceBarHeight,
   summarizeLaps,
   type ResultDetailLap,
 } from "./resultDetailMath";
+import {
+  formatDistanceKm,
+  formatHeartRateBpm,
+  formatPacePerKm,
+} from "../metricFormatters";
 
 const VIEWBOX = { width: 300, height: 270 } as const;
 const PLOT = { left: 26, right: 274, top: 28, bottom: 214 } as const;
 
-function formatDistance(distanceKm: number) {
-  return `${Number.isInteger(distanceKm) ? distanceKm : distanceKm.toFixed(2)} km`;
-}
-
 function formatHeartRate(value: number | null) {
-  return value === null ? "No HR recorded" : `${value} bpm`;
+  return value === null ? "No HR recorded" : formatHeartRateBpm(value);
 }
 
 function formatReadout(lap: ResultDetailLap) {
   const maximumHeartRate =
     lap.maximumHeartRateBpm === null
       ? "No max HR recorded"
-      : `Max HR ${lap.maximumHeartRateBpm} bpm`;
-  return `${lap.label} · ${formatDistance(lap.distanceKm)} · ${
+      : `Max HR ${formatHeartRateBpm(lap.maximumHeartRateBpm)}`;
+  return `${lap.label} · ${formatDistanceKm(lap.distanceKm, 2)} · ${
     lap.paceSecondsPerKm === null
       ? "No pace recorded"
-      : `${formatPaceSeconds(lap.paceSecondsPerKm)}/km`
+      : formatPacePerKm(lap.paceSecondsPerKm)
   } · Avg HR ${formatHeartRate(lap.averageHeartRateBpm)} · ${maximumHeartRate}`;
 }
 

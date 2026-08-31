@@ -13,6 +13,7 @@ import type {
   PhaseAnnotation,
   RaceAnnotation,
 } from "../ui/charts/chartTypes";
+import { projectWorkoutResultMetrics } from "./workoutResultMetrics";
 
 export type TrendsRange = "4w" | "12w" | "build";
 export type ReadinessMetric = "hrv" | "restingHeartRate" | "sleep";
@@ -546,13 +547,14 @@ export function projectWeeklyVolumeLoad(
       const date = resultDate(result, state.clock.timeZone);
       return date >= weekStart && date <= weekEnd;
     });
-    const loadValues = weekResults.map((result) => result.summary.trainingLoad);
+    const weekMetrics = weekResults.map(projectWorkoutResultMetrics);
+    const loadValues = weekMetrics.map(({ trainingLoad }) => trainingLoad);
     const availableLoadValues = loadValues.filter(finite);
     return {
       weekStart,
       weekEnd,
-      distanceKm: weekResults.reduce(
-        (total, result) => total + result.summary.distanceKm,
+      distanceKm: weekMetrics.reduce(
+        (total, metrics) => total + metrics.distanceKm,
         0,
       ),
       trainingLoad:
@@ -579,9 +581,9 @@ export function projectWeeklyVolumeLoad(
           );
   }
   const resultCount = results.length;
-  const availableLoads = results.filter(({ summary }) =>
-    finite(summary.trainingLoad),
-  ).length;
+  const availableLoads = results
+    .map(projectWorkoutResultMetrics)
+    .filter(({ trainingLoad }) => trainingLoad !== null).length;
   return {
     status:
       resultCount === 0
@@ -629,9 +631,10 @@ export function projectPaceHeartRate(
   );
   const points = outdoorRuns
     .map((result) => {
-      const { averagePaceSecondsPerKm: pace, averageHeartRateBpm: heartRate } =
-        result.summary;
-      if (!finite(pace) || !finite(heartRate)) return null;
+      const metrics = projectWorkoutResultMetrics(result);
+      const pace = metrics.averagePaceSecondsPerKm;
+      const heartRate = metrics.averageHeartRateBpm;
+      if (pace === null || heartRate === null) return null;
       const point = {
         workoutResultId: result.id,
         date: resultDate(result, state.clock.timeZone),
@@ -668,22 +671,13 @@ function completeRepeatKey(workout: PlannedWorkout): string | null {
 }
 
 function summaryForResult(result: WorkoutResult): RepeatedSessionSummary {
+  const metrics = projectWorkoutResultMetrics(result);
   return {
-    distanceKm: finite(result.summary.distanceKm)
-      ? result.summary.distanceKm
-      : null,
-    durationSeconds: finite(result.summary.durationSeconds)
-      ? result.summary.durationSeconds
-      : null,
-    trainingLoad: finite(result.summary.trainingLoad)
-      ? result.summary.trainingLoad
-      : null,
-    averagePaceSecondsPerKm: finite(result.summary.averagePaceSecondsPerKm)
-      ? result.summary.averagePaceSecondsPerKm
-      : null,
-    averageHeartRateBpm: finite(result.summary.averageHeartRateBpm)
-      ? result.summary.averageHeartRateBpm
-      : null,
+    distanceKm: metrics.distanceKm,
+    durationSeconds: metrics.durationSeconds,
+    trainingLoad: metrics.trainingLoad,
+    averagePaceSecondsPerKm: metrics.averagePaceSecondsPerKm,
+    averageHeartRateBpm: metrics.averageHeartRateBpm,
   };
 }
 

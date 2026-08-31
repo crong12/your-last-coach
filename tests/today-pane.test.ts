@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 describe("TodayPane", () => {
-  it("renders the normal hero, partial result, unavailable metrics, and all seven week labels", () => {
+  it("renders the normal hero, result metrics, and all seven week labels", () => {
     const { onSelectWorkout } = renderPane();
 
     expect(container.querySelector(".today-pane")).not.toBeNull();
@@ -50,24 +50,37 @@ describe("TodayPane", () => {
     ).toBe("221");
     expect(
       container.querySelector("[role=progressbar]")?.getAttribute("aria-label"),
-    ).toBe("Training build phases: Base building, Aerobic development");
+    ).toBe("Training build progress by day");
     expect(
       container
         .querySelector("[role=progressbar]")
         ?.getAttribute("aria-valuenow"),
     ).toBe("10");
     expect(container.textContent).toContain(
-      "AEROBIC DEVELOPMENT · WEEK 4 OF 36",
+      "AEROBIC DEVELOPMENT · DAY 26 OF 247",
     );
+    expect(
+      container
+        .querySelector("[role=progressbar]")
+        ?.getAttribute("aria-valuetext"),
+    ).toBe("Day 26 of 247; Aerobic development");
+    expect(container.querySelectorAll(".today-phase-segment")).toHaveLength(0);
+    expect(
+      container.querySelector(".today-phase-progress__fill"),
+    ).not.toBeNull();
     expect(container.textContent).toContain("5 × 1 km threshold");
-    expect(container.textContent).toContain("PARTIAL");
+    expect(container.textContent).not.toContain("PARTIAL");
+    expect(container.textContent).toContain("45:47");
+    expect(container.textContent).toContain("6:06/km");
+    expect(container.textContent).toContain("169 bpm");
+    expect(container.textContent).not.toContain("TRAINING LOAD");
     expect(container.textContent).toContain("Workout recorded.");
     expect(
       container.querySelector("#today-week-title")?.textContent?.trim(),
     ).toBe("24–30 August 2026");
     expect(
-      container.querySelectorAll('[aria-label="Unavailable"]').length,
-    ).toBe(4);
+      container.querySelectorAll('[aria-label="Unavailable"]'),
+    ).toHaveLength(0);
     expect(container.textContent).not.toContain("Start Workout");
 
     const tiles = container.querySelectorAll(".today-week-day");

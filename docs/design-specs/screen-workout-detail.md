@@ -24,9 +24,9 @@ Entered from: Today's workout card, week-strip tiles, Trends (pace-vs-HR inspect
 ## Composition B — completed workout
 
 1. **Header**: as above with actual date, status `COMPLETED`.
-2. **Stat row**: distance · time · average pace · average HR · Training Load, large tabular numerals (fields verified in #45 `getActivityDetail`).
+2. **Stat row**: distance · time · average pace · average HR, large tabular numerals (fields verified in #45 `getActivityDetail`). Training Load is omitted because an unexplained raw score is not useful to the Athlete.
 3. **Plan versus actual**: when a Planned Workout backs this Workout Result — rows comparing target vs actual (pace, distance/duration, effort). Deltas rendered quietly in ink; ochre only where the miss is coaching-relevant (per metric semantics), never shame-red. Unplanned runs omit this block.
-4. **Per-lap chart**: vertical bars, one per normalized 1 km lap group (per #45; prefer the appropriate lap group — aggregate rows may lack fields), bar height = pace (faster = taller), average-HR dot overlaid per lap with a connecting hairline. Tap-to-inspect per #47 (readout: lap n, pace, avg/max HR). Static, token-themed, ADR 0002 rendering. ⚠️ *Iteration point: pace-as-height polarity (faster=taller) must be validated for legibility; the inverse may read better.*
+4. **Per-lap chart**: vertical bars, one per normalized 1 km lap group (per #45; prefer the appropriate lap group — aggregate rows may lack fields), bar height = pace (faster = taller), average-HR dot overlaid per lap with a connecting hairline. Tap-to-inspect per #47 (readout: lap n, pace, avg/max HR). Static, token-themed, ADR 0002 rendering. ⚠️ _Iteration point: pace-as-height polarity (faster=taller) must be validated for legibility; the inverse may read better._
 5. **Splits table**: collapsible "Splits" section under the chart — exact per-lap rows (lap, distance, pace, avg HR, max HR). The chart gives shape; the table gives numbers.
 6. **Previous attempts** (comparison section — see below).
 7. **Athlete Feedback** (see below).
@@ -35,7 +35,7 @@ Entered from: Today's workout card, week-strip tiles, Trends (pace-vs-HR inspect
 
 Pane 2 only lists comparable groups and links in; the comparison itself renders on this screen:
 
-- **Supported now** (per #45, per-workout aggregates): "Previous attempts" — compact rows of the same session type (date, distance, avg pace, avg HR, load) with delta vs this attempt; tapping a row pushes that workout's own detail (`pushState` again — back walks correctly).
+- **Supported now** (per #45, per-workout aggregates): "Previous attempts" — compact rows of the same session type (date, distance, avg pace, avg HR) with delta vs this attempt; tapping a row pushes that workout's own detail (`pushState` again — back walks correctly). Training Load remains a contextualized Trends aggregate only and is not shown on Workout Details.
 - **Conditional** (per #45, flagged prerequisite): split-by-split overlay across attempts requires verified FIT ingestion. Until then this renders in demo mode from synthetic laps with its data prerequisite recorded, and is omitted for real data. Never fabricate cross-workout splits from unverifiable sources.
 
 ## Athlete Feedback on this workout

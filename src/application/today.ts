@@ -5,6 +5,10 @@ import type {
   WorkoutResult,
   WorkspaceState,
 } from "../domain/types";
+import {
+  projectWorkoutResultMetrics,
+  type WorkoutResultMetrics,
+} from "./workoutResultMetrics";
 
 const MILLISECONDS_PER_DAY = 86_400_000;
 const DAY_NAMES = [
@@ -77,13 +81,7 @@ export interface TodayWorkoutPrescription {
   distanceKm: number;
 }
 
-export interface TodayResultMetrics {
-  distanceKm: number;
-  durationSeconds: number | null;
-  averagePaceSecondsPerKm: number | null;
-  averageHeartRateBpm: number | null;
-  trainingLoad: number | null;
-}
+export type TodayResultMetrics = WorkoutResultMetrics;
 
 export interface TodayRestWorkout {
   state: "rest";
@@ -237,11 +235,8 @@ function buildRaceProjection(state: WorkspaceState, today: IsoDate) {
       } satisfies TodayPhaseSegment,
     ];
   });
-  const totalWeeks = Math.max(1, Math.ceil(totalBuildDays / 7));
-  const weekNumber = Math.min(
-    totalWeeks,
-    Math.max(1, Math.floor(elapsedBuildDays / 7) + 1),
-  );
+  const totalBuildDayCount = totalBuildDays + 1;
+  const currentBuildDay = elapsedBuildDays + 1;
   return {
     state: stateName,
     daysRemaining,
@@ -251,7 +246,7 @@ function buildRaceProjection(state: WorkspaceState, today: IsoDate) {
     phaseNames: phaseSegments.map(({ name }) => name),
     activePhaseId: active.id,
     activePhaseName: active.name,
-    phaseCaption: `${active.name.toUpperCase()} · WEEK ${weekNumber} OF ${totalWeeks}`,
+    phaseCaption: `${active.name.toUpperCase()} · DAY ${currentBuildDay} OF ${totalBuildDayCount}`,
     progressPercent,
     elapsedBuildDays,
     totalBuildDays,
@@ -270,16 +265,6 @@ function prescriptionFor(workout: PlannedWorkout): TodayWorkoutPrescription {
     recoverySeconds:
       repeatBlock?.kind === "repeat" ? repeatBlock.recoverySeconds : null,
     distanceKm: workout.distanceKm,
-  };
-}
-
-function resultMetrics(result: WorkoutResult): TodayResultMetrics {
-  return {
-    distanceKm: result.summary.distanceKm,
-    durationSeconds: result.summary.durationSeconds ?? null,
-    averagePaceSecondsPerKm: result.summary.averagePaceSecondsPerKm ?? null,
-    averageHeartRateBpm: result.summary.averageHeartRateBpm ?? null,
-    trainingLoad: result.summary.trainingLoad ?? null,
   };
 }
 
@@ -354,7 +339,7 @@ function buildTodayWorkout(
     status: result.status,
     workout,
     result,
-    metrics: resultMetrics(result),
+    metrics: projectWorkoutResultMetrics(result),
   };
 }
 

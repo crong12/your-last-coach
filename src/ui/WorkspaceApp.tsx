@@ -19,6 +19,7 @@ import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
 import { selectTodayPane } from "../application/today";
+import { projectWorkoutResultMetrics } from "../application/workoutResultMetrics";
 import {
   NAVIGATION_FOCUS_STATE_KEY,
   NAVIGATION_STATE_KEY,
@@ -53,10 +54,14 @@ import { useModalFocus } from "./useModalFocus";
 import { HrvChart } from "./charts/HrvChart";
 import { BrandMark } from "./BrandMark";
 import { ResultDetailChart } from "./charts/ResultDetailChart";
+import { normalizeResultLaps } from "./charts/resultDetailMath";
 import {
+  formatDistanceKm,
+  formatDurationSeconds,
+  formatHeartRateBpm,
+  formatPacePerKm,
   formatPaceSeconds,
-  normalizeResultLaps,
-} from "./charts/resultDetailMath";
+} from "./metricFormatters";
 import { TrendsPane } from "./charts/TrendsPane";
 import { TodayPane } from "./TodayPane";
 
@@ -104,11 +109,6 @@ function historyStateWithFocus(focus: WorkoutOriginReceipt) {
     ...(typeof current === "object" && current !== null ? current : {}),
     [NAVIGATION_FOCUS_STATE_KEY]: focus,
   };
-}
-
-function formatPace(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function formatDate(date: string) {
@@ -162,19 +162,6 @@ function formatClassification(classification: string) {
 
 type WorkoutSelect = (workout: PlannedWorkout, invoker: HTMLElement) => void;
 
-function formatDuration(seconds: number) {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainder = Math.round(seconds % 60);
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
-    : `${minutes}:${String(remainder).padStart(2, "0")}`;
-}
-
-function formatDistance(distanceKm: number) {
-  return `${Number.isInteger(distanceKm) ? distanceKm : distanceKm.toFixed(1)} km`;
-}
-
 function formatDelta(value: number, unit: string) {
   const rounded = Math.round(value * 10) / 10;
   const prefix = rounded > 0 ? "+" : "";
@@ -200,11 +187,7 @@ function WorkoutStat({
 }
 
 function WorkoutStats({ result }: { result: WorkoutResult }) {
-  const duration = result.summary.durationSeconds;
-  const averagePace =
-    duration !== undefined && result.summary.distanceKm > 0
-      ? duration / result.summary.distanceKm
-      : null;
+  const metrics = projectWorkoutResultMetrics(result);
   return (
     <section className="workout-result-section" aria-labelledby="stats-title">
       <span className="eyebrow">Recorded outcome</span>
@@ -212,27 +195,33 @@ function WorkoutStats({ result }: { result: WorkoutResult }) {
       <dl className="workout-stats">
         <WorkoutStat
           label="Distance"
-          value={formatDistance(result.summary.distanceKm)}
+          value={formatDistanceKm(metrics.distanceKm)}
         />
         <WorkoutStat
           label="Time"
           value={
-            duration === undefined
+            metrics.durationSeconds === null
               ? "No duration recorded"
-              : formatDuration(duration)
+              : formatDurationSeconds(metrics.durationSeconds)
           }
         />
         <WorkoutStat
           label="Average pace"
           value={
-            averagePace === null
+            metrics.averagePaceSecondsPerKm === null
               ? "No average pace recorded"
-              : `${formatPaceSeconds(averagePace)}/km`
+              : formatPacePerKm(metrics.averagePaceSecondsPerKm)
           }
-          basis={averagePace === null ? undefined : "Derived"}
+          basis={metrics.averagePaceBasis === "derived" ? "Derived" : undefined}
         />
-        <WorkoutStat label="Average HR" value="No average HR recorded" />
-        <WorkoutStat label="Training Load" value="No Training Load recorded" />
+        <WorkoutStat
+          label="Average HR"
+          value={
+            metrics.averageHeartRateBpm === null
+              ? "No average HR recorded"
+              : formatHeartRateBpm(metrics.averageHeartRateBpm)
+          }
+        />
       </dl>
     </section>
   );
@@ -259,8 +248,8 @@ function PlanVersusActual({
         <div>
           <dt>Distance</dt>
           <dd>
-            <span>Planned {formatDistance(workout.distanceKm)}</span>
-            <span>Actual {formatDistance(result.summary.distanceKm)}</span>
+            <span>Planned {formatDistanceKm(workout.distanceKm)}</span>
+            <span>Actual {formatDistanceKm(result.summary.distanceKm)}</span>
             <strong>
               Delta{" "}
               {formatDelta(
@@ -324,21 +313,21 @@ function SplitsTable({
             {laps.map((lap) => (
               <tr key={lap.id}>
                 <th scope="row">{lap.label}</th>
-                <td>{formatDistance(lap.distanceKm)}</td>
+                <td>{formatDistanceKm(lap.distanceKm)}</td>
                 <td>
                   {lap.paceSecondsPerKm === null
                     ? "Not recorded"
-                    : `${formatPaceSeconds(lap.paceSecondsPerKm)}/km`}
+                    : formatPacePerKm(lap.paceSecondsPerKm)}
                 </td>
                 <td>
                   {lap.averageHeartRateBpm === null
                     ? "Not recorded"
-                    : `${lap.averageHeartRateBpm} bpm`}
+                    : formatHeartRateBpm(lap.averageHeartRateBpm)}
                 </td>
                 <td>
                   {lap.maximumHeartRateBpm === null
                     ? "Not recorded"
-                    : `${lap.maximumHeartRateBpm} bpm`}
+                    : formatHeartRateBpm(lap.maximumHeartRateBpm)}
                 </td>
               </tr>
             ))}
@@ -366,8 +355,9 @@ function WorkoutPreviousAttempts({
       <h2 id="previous-attempts-title">Previous attempts</h2>
       <ol className="previous-attempts-list">
         {context.previousAttempts.map(({ plannedWorkout, workoutResult }) => {
+          const metrics = projectWorkoutResultMetrics(workoutResult);
           const date = formatDate(workoutResult.startedAt.slice(0, 10));
-          const label = `View previous attempt ${date} · ${formatDistance(workoutResult.summary.distanceKm)}`;
+          const label = `View previous attempt ${date} · ${formatDistanceKm(workoutResult.summary.distanceKm)}`;
           const distanceDelta = context.workoutResult
             ? formatDelta(
                 workoutResult.summary.distanceKm -
@@ -392,7 +382,7 @@ function WorkoutPreviousAttempts({
                   </span>
                   <span>
                     <strong>
-                      {formatDistance(workoutResult.summary.distanceKm)}
+                      {formatDistanceKm(workoutResult.summary.distanceKm)}
                     </strong>
                     <small>Previous attempt</small>
                     {distanceDelta !== null && (
@@ -408,7 +398,7 @@ function WorkoutPreviousAttempts({
                   </span>
                   <span>
                     <strong>
-                      {formatDistance(workoutResult.summary.distanceKm)}
+                      {formatDistanceKm(workoutResult.summary.distanceKm)}
                     </strong>
                     <small>Previous attempt</small>
                     {distanceDelta !== null && (
@@ -420,15 +410,19 @@ function WorkoutPreviousAttempts({
               <dl className="previous-attempt__aggregates">
                 <div>
                   <dt>Average pace</dt>
-                  <dd>Not recorded</dd>
+                  <dd>
+                    {metrics.averagePaceSecondsPerKm === null
+                      ? "Not recorded"
+                      : formatPacePerKm(metrics.averagePaceSecondsPerKm)}
+                  </dd>
                 </div>
                 <div>
                   <dt>Average HR</dt>
-                  <dd>Not recorded</dd>
-                </div>
-                <div>
-                  <dt>Training Load</dt>
-                  <dd>Not recorded</dd>
+                  <dd>
+                    {metrics.averageHeartRateBpm === null
+                      ? "Not recorded"
+                      : formatHeartRateBpm(metrics.averageHeartRateBpm)}
+                  </dd>
                 </div>
               </dl>
             </li>
@@ -617,7 +611,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
                   : "Main set";
             const value =
               block.kind === "repeat"
-                ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPace(block.targetPaceSecondsPerKm.min)}–${formatPace(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
+                ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPaceSeconds(block.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
                 : `${block.distanceKm} km`;
             return (
               <li key={`${block.kind}-${index}`}>
@@ -638,7 +632,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
               <th scope="row">Target pace</th>
               <td>
                 {repeatBlock?.kind === "repeat"
-                  ? `${formatPace(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPace(repeatBlock.targetPaceSecondsPerKm.max)}/km`
+                  ? `${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.max)}/km`
                   : "No separate pace target recorded"}
               </td>
             </tr>
@@ -648,7 +642,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
             </tr>
             <tr>
               <th scope="row">Planned distance</th>
-              <td>{formatDistance(workout.distanceKm)}</td>
+              <td>{formatDistanceKm(workout.distanceKm)}</td>
             </tr>
             <tr>
               <th scope="row">Planned duration</th>
@@ -1523,7 +1517,8 @@ function AthleteProfileSummary({ context }: { context: AthleteContextData }) {
             {profile.normalWeeklyVolumeKm.value.max} km weekly ·{" "}
             {formatObjective(profile.recentHalfMarathonSeconds.value)}{" "}
             half-marathon ·{" "}
-            {formatPace(profile.thresholdPaceSecondsPerKm.value)}/km threshold
+            {formatPaceSeconds(profile.thresholdPaceSecondsPerKm.value)}/km
+            threshold
           </dd>
         </div>
       </dl>

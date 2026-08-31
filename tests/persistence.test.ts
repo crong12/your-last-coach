@@ -5,6 +5,7 @@ import { createWorkspaceApplication } from "../src/application/createWorkspaceAp
 import type { PersistedWorkspace } from "../src/application/ports";
 import type { AppliedPlanAdaptation } from "../src/domain/types";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
+import { migrateDemoWorkspace } from "../src/demo/migrateDemoWorkspace";
 import {
   BrowserWorkspaceRepository,
   WORKSPACE_STORAGE_KEY,
@@ -538,6 +539,36 @@ describe("workspace initialization", () => {
     expect(initialized.state.trainingPlan.planVersion).toBe(3);
     expect(initialized.notice).toBeNull();
     expect(initialized.durability).toBe("persistent");
+  });
+
+  it("fills newly seeded summary metrics into the existing demo result", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope();
+    const result = saved.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-26-threshold",
+    );
+    expect(result).toBeDefined();
+    delete result!.summary.durationSeconds;
+    delete result!.summary.averagePaceSecondsPerKm;
+    delete result!.summary.averageHeartRateBpm;
+    delete result!.summary.trainingLoad;
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+      migrateSaved: migrateDemoWorkspace,
+    });
+
+    expect(
+      initialized.state.workoutResults.find(
+        ({ id }) => id === "result-2026-08-26-threshold",
+      )?.summary,
+    ).toMatchObject({
+      durationSeconds: 2_747,
+      averagePaceSecondsPerKm: 366,
+      averageHeartRateBpm: 169,
+    });
   });
 
   it.each(INVALID_SAVED_CASES)(
