@@ -6,6 +6,12 @@ import type {
   TodayWorkoutPrescription,
 } from "../application/today";
 import type { PlannedWorkout } from "../domain/types";
+import {
+  formatDistanceKm,
+  formatDurationSeconds,
+  formatHeartRateBpm,
+  formatPacePerKm,
+} from "./metricFormatters";
 
 export type TodayWorkoutSelect = (
   workout: PlannedWorkout,
@@ -40,25 +46,6 @@ function formatDay(date: string) {
     day: "numeric",
     timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00Z`));
-}
-
-function formatPace(seconds: number) {
-  const rounded = Math.round(seconds);
-  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}/km`;
-}
-
-function formatDuration(seconds: number) {
-  const rounded = Math.round(seconds);
-  const hours = Math.floor(rounded / 3600);
-  const minutes = Math.floor((rounded % 3600) / 60);
-  const remainder = rounded % 60;
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
-    : `${minutes}:${String(remainder).padStart(2, "0")}`;
-}
-
-function formatDistance(distanceKm: number) {
-  return `${Number.isInteger(distanceKm) ? distanceKm : distanceKm.toFixed(1)} km`;
 }
 
 function formatWorkoutType(type: PlannedWorkout["type"]) {
@@ -111,9 +98,8 @@ function TodayMetric({
 
 function RaceHero({ projection }: { projection: TodayPaneProjection }) {
   const { race } = projection;
-  const progressLabel = race.phaseNames.length
-    ? `Training build phases: ${race.phaseNames.join(", ")}`
-    : "Training build phases: no recorded phases";
+  const currentBuildDay = race.elapsedBuildDays + 1;
+  const totalBuildDayCount = race.totalBuildDays + 1;
   return (
     <section className="today-hero" aria-labelledby="today-hero-title">
       <div className="today-hero__identity">
@@ -155,25 +141,16 @@ function RaceHero({ projection }: { projection: TodayPaneProjection }) {
           <div
             className="today-phase-progress__track"
             role="progressbar"
-            aria-label={progressLabel}
+            aria-label="Training build progress by day"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(race.progressPercent)}
-            aria-valuetext={`${race.phaseCaption}; ${Math.round(race.progressPercent)}% of the build`}
+            aria-valuetext={`Day ${currentBuildDay} of ${totalBuildDayCount}; ${race.activePhaseName}`}
           >
-            {race.phaseSegments.map((segment) => (
-              <span
-                className={`today-phase-segment${segment.active ? " today-phase-segment--active" : ""}`}
-                key={segment.id}
-                data-phase-id={segment.phaseId}
-                style={{ flexBasis: `${segment.widthPercent}%` }}
-              >
-                <span
-                  className="today-phase-segment__fill"
-                  style={{ width: `${segment.elapsedPercent}%` }}
-                />
-              </span>
-            ))}
+            <span
+              className="today-phase-progress__fill"
+              style={{ width: `${race.progressPercent}%` }}
+            />
           </div>
           <p className="today-phase-progress__caption">{race.phaseCaption}</p>
         </div>
@@ -228,7 +205,7 @@ function PlannedTodayCard({
         {prescription.targetPaceSecondsPerKm && (
           <TodayMetric
             label="Target pace"
-            value={`${formatPace(prescription.targetPaceSecondsPerKm.min)}–${formatPace(prescription.targetPaceSecondsPerKm.max)}`}
+            value={`${formatPacePerKm(prescription.targetPaceSecondsPerKm.min)}–${formatPacePerKm(prescription.targetPaceSecondsPerKm.max)}`}
           />
         )}
         {prescription.recoverySeconds !== null && (
@@ -239,7 +216,7 @@ function PlannedTodayCard({
         )}
         <TodayMetric
           label="Planned distance"
-          value={formatDistance(prescription.distanceKm)}
+          value={formatDistanceKm(prescription.distanceKm)}
         />
       </dl>
       <button
@@ -257,12 +234,10 @@ function PlannedTodayCard({
 
 function ResultTodayCard({
   workout,
-  result,
   metrics,
   onSelectWorkout,
 }: {
   workout: PlannedWorkout;
-  result: TodayResultWorkout["result"];
   metrics: TodayResultWorkout["metrics"];
   onSelectWorkout: TodayWorkoutSelect;
 }) {
@@ -273,21 +248,18 @@ function ResultTodayCard({
           <span className="eyebrow">TODAY</span>
           <h2 id="today-workout-title">{workout.title}</h2>
         </div>
-        <span className="today-result-status">
-          {result.status.toUpperCase()}
-        </span>
       </div>
       <dl className="today-workout-facts today-workout-facts--result">
         <TodayMetric
           label="Distance"
-          value={formatDistance(metrics.distanceKm)}
+          value={formatDistanceKm(metrics.distanceKm)}
         />
         <TodayMetric
           label="Time"
           value={
             metrics.durationSeconds === null
               ? null
-              : formatDuration(metrics.durationSeconds)
+              : formatDurationSeconds(metrics.durationSeconds)
           }
         />
         <TodayMetric
@@ -295,7 +267,7 @@ function ResultTodayCard({
           value={
             metrics.averagePaceSecondsPerKm === null
               ? null
-              : formatPace(metrics.averagePaceSecondsPerKm)
+              : formatPacePerKm(metrics.averagePaceSecondsPerKm)
           }
         />
         <TodayMetric
@@ -303,13 +275,7 @@ function ResultTodayCard({
           value={
             metrics.averageHeartRateBpm === null
               ? null
-              : `${metrics.averageHeartRateBpm} bpm`
-          }
-        />
-        <TodayMetric
-          label="Training Load"
-          value={
-            metrics.trainingLoad === null ? null : String(metrics.trainingLoad)
+              : formatHeartRateBpm(metrics.averageHeartRateBpm)
           }
         />
       </dl>
@@ -367,7 +333,6 @@ function TodayWorkoutCard({
       ) : workout.state === "result" ? (
         <ResultTodayCard
           workout={workout.workout}
-          result={workout.result}
           metrics={workout.metrics}
           onSelectWorkout={onSelectWorkout}
         />
@@ -386,7 +351,7 @@ function WeekDay({
   onSelectWorkout: TodayWorkoutSelect;
 }) {
   const label = day.workout
-    ? `${day.label}, ${day.workout.title}, ${formatDistance(day.workout.distanceKm)}, ${statusLabel(day.status)}`
+    ? `${day.label}, ${day.workout.title}, ${formatDistanceKm(day.workout.distanceKm)}, ${statusLabel(day.status)}`
     : `${day.label}, Rest`;
   return (
     <li
@@ -407,7 +372,7 @@ function WeekDay({
           }
         >
           <strong>{day.workout.title}</strong>
-          <span>{formatDistance(day.workout.distanceKm)}</span>
+          <span>{formatDistanceKm(day.workout.distanceKm)}</span>
           <small>{statusLabel(day.status)}</small>
         </button>
       ) : (

@@ -869,7 +869,7 @@ button.previous-attempt:hover {
   grid-column: 1 / -1;
 }
 .today-phase-progress__track {
-  display: flex;
+  position: relative;
   width: 100%;
   height: 15px;
   overflow: hidden;
@@ -877,26 +877,11 @@ button.previous-attempt:hover {
   border-radius: 999px;
   background: var(--canvas);
 }
-.today-phase-segment {
-  position: relative;
-  display: block;
-  min-width: 2px;
-  border-right: 1px solid var(--line);
-  background: rgba(111, 158, 152, 0.22);
-}
-.today-phase-segment:last-child {
-  border-right: 0;
-}
-.today-phase-segment--active {
-  background: rgba(29, 75, 81, 0.18);
-}
-.today-phase-segment__fill {
+.today-phase-progress__fill {
   position: absolute;
   inset: 0 auto 0 0;
   display: block;
-  background: var(--sea);
-}
-.today-phase-segment--active .today-phase-segment__fill {
+  min-width: 2px;
   background: var(--deep-sea);
 }
 .today-phase-progress__caption {
@@ -972,8 +957,7 @@ button.previous-attempt:hover {
   justify-content: flex-end;
   gap: 6px;
 }
-.today-workout-types span,
-.today-result-status {
+.today-workout-types span {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 9px;
@@ -985,11 +969,6 @@ button.previous-attempt:hover {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.today-result-status {
-  border-color: rgba(232, 120, 81, 0.45);
-  color: var(--ember);
-  background: var(--track-soft);
-}
 .today-workout-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -997,7 +976,7 @@ button.previous-attempt:hover {
   margin: 24px 0 0;
 }
 .today-workout-facts--result {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .today-workout-stat {
   min-width: 0;

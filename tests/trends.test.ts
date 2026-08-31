@@ -14,7 +14,9 @@ import type { WorkspaceState } from "../src/domain/types";
 
 describe("issue 64 fixture evidence", () => {
   it("provides dated readiness history and complete Workout Result summaries", async () => {
-    const state = await createDemoCoachingContextSource().loadContext();
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
     const observations = state.observations as unknown as Record<string, any>;
     const history = observations.readinessHistory as Array<Record<string, any>>;
     const result = state.workoutResults.find(
@@ -327,7 +329,7 @@ describe("issue 64 fixture evidence", () => {
     });
   });
 
-  it("aggregates weekly distance and load without turning unavailable load into zero", async () => {
+  it("aggregates weekly distance and load from the shared Workout Results", async () => {
     const state = await createDemoCoachingContextSource().loadContext();
     const projection = projectWeeklyVolumeLoad(state, "4w");
 
@@ -382,6 +384,25 @@ describe("issue 64 fixture evidence", () => {
           Number.isFinite(paceSecondsPerKm) && Number.isFinite(heartRateBpm),
       ),
     ).toBe(true);
+  });
+
+  it("uses the shared derived pace when a Workout Result has no recorded average", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    const result = state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-26-threshold",
+    );
+    expect(result).toBeDefined();
+    delete result!.summary.averagePaceSecondsPerKm;
+
+    const projection = projectPaceHeartRate(state, "build");
+
+    expect(projection.points.at(-1)).toMatchObject({
+      workoutResultId: result!.id,
+      paceSecondsPerKm: 2_747 / 7.5,
+      heartRateBpm: 169,
+    });
   });
 
   it("requires activity classification authority before pace comparison", async () => {

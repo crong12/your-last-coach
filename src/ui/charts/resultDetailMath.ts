@@ -3,6 +3,7 @@ import type { ScaleLinear } from "d3-scale";
 import { curveLinear, line } from "d3-shape";
 
 import type { WorkoutLap } from "../../domain/types";
+import { formatPaceSeconds } from "../metricFormatters";
 
 export interface ResultDetailLap {
   id: string;
@@ -114,11 +115,6 @@ export function getLapCoverage(laps: readonly ResultDetailLap[]) {
       expected: laps.length,
     },
   };
-}
-
-export function formatPaceSeconds(seconds: number): string {
-  const rounded = Math.max(0, Math.round(seconds));
-  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
 }
 
 export function summarizeLaps(laps: readonly ResultDetailLap[]): string {

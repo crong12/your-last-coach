@@ -31,7 +31,7 @@ describe("Today pane selector", () => {
       name: "Brighton Marathon",
       date: "2027-04-04",
       progressPercent: expect.any(Number),
-      phaseCaption: "AEROBIC DEVELOPMENT · WEEK 4 OF 36",
+      phaseCaption: "AEROBIC DEVELOPMENT · DAY 26 OF 247",
     });
     expect(projection.race.phaseSegments).toEqual([
       expect.objectContaining({
@@ -78,10 +78,9 @@ describe("Today pane selector", () => {
       result: { id: "result-2026-08-26-threshold", status: "partial" },
       metrics: {
         distanceKm: 7.5,
-        durationSeconds: null,
-        averagePaceSecondsPerKm: null,
-        averageHeartRateBpm: null,
-        trainingLoad: null,
+        durationSeconds: 2_747,
+        averagePaceSecondsPerKm: 366,
+        averageHeartRateBpm: 169,
       },
     });
   });
@@ -99,6 +98,25 @@ describe("Today pane selector", () => {
       expect(projection.race.daysRemaining).toBe(daysRemaining);
     },
   );
+
+  it("uses the shared derived pace when a Workout Result has no recorded average", () => {
+    const state = fixtureState();
+    const result = state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-26-threshold",
+    );
+    expect(result).toBeDefined();
+    delete result!.summary.averagePaceSecondsPerKm;
+
+    const projection = selectTodayPane(state);
+
+    expect(projection.todayWorkout).toMatchObject({
+      state: "result",
+      metrics: {
+        averagePaceSecondsPerKm: 2_747 / 7.5,
+        averagePaceBasis: "derived",
+      },
+    });
+  });
 
   it("uses the configured Europe/London date when an instant crosses UTC midnight", () => {
     const projection = selectTodayPane(
@@ -212,7 +230,7 @@ describe("Today pane selector", () => {
 
     expect(projection.race.phaseSegments).toEqual([]);
     expect(projection.race.phaseCaption).toBe(
-      "AEROBIC DEVELOPMENT · WEEK 4 OF 36",
+      "AEROBIC DEVELOPMENT · DAY 26 OF 247",
     );
   });
 
