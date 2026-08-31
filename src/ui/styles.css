@@ -803,15 +803,51 @@ button.previous-attempt:hover {
   min-width: 0;
 }
 .today-hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(170px, 0.42fr);
   gap: 22px 28px;
   min-width: 0;
+  overflow: hidden;
   padding: clamp(22px, 3vw, 32px);
   border: 1px solid rgba(23, 51, 48, 0.12);
   border-radius: 24px;
   background: rgba(248, 250, 246, 0.82);
   box-shadow: var(--shadow);
+  isolation: isolate;
+}
+.today-hero::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(248, 250, 246, 0.97) 0%,
+      rgba(248, 250, 246, 0.91) 36%,
+      rgba(248, 250, 246, 0.36) 66%,
+      rgba(248, 250, 246, 0.08) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(248, 250, 246, 0.92) 0%,
+      rgba(248, 250, 246, 0) 44%
+    );
+  content: "";
+  pointer-events: none;
+}
+.today-hero > :not(.today-hero__artwork) {
+  position: relative;
+  z-index: 2;
+}
+.today-hero__artwork {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 55%;
 }
 .today-hero__identity,
 .today-hero__countdown,
@@ -844,11 +880,15 @@ button.previous-attempt:hover {
   font-weight: 700;
   letter-spacing: -0.06em;
   line-height: 0.9;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 3px rgba(255, 243, 222, 0.96);
 }
 .today-countdown__label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 4px rgba(255, 243, 222, 0.98);
 }
 .today-race-message {
   max-width: 270px;
@@ -3389,6 +3429,24 @@ h1 {
   .today-hero {
     grid-template-columns: 1fr;
     gap: 18px;
+  }
+  .today-hero::after {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(248, 250, 246, 0.96) 0%,
+        rgba(248, 250, 246, 0.88) 45%,
+        rgba(248, 250, 246, 0.26) 76%,
+        rgba(248, 250, 246, 0.1) 100%
+      ),
+      linear-gradient(
+        0deg,
+        rgba(248, 250, 246, 0.94) 0%,
+        rgba(248, 250, 246, 0) 30%
+      );
+  }
+  .today-hero__artwork {
+    object-position: 77% center;
   }
   .today-hero__countdown {
     justify-content: flex-start;

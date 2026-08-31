@@ -45,6 +45,11 @@ describe("TodayPane", () => {
     const { onSelectWorkout } = renderPane();
 
     expect(container.querySelector(".today-pane")).not.toBeNull();
+    const heroArtwork = container.querySelector<HTMLImageElement>(
+      ".today-hero__artwork",
+    );
+    expect(heroArtwork).not.toBeNull();
+    expect(heroArtwork?.getAttribute("alt")).toBe("");
     expect(
       container.querySelector(".today-countdown__number")?.textContent,
     ).toBe("221");

@@ -12,6 +12,8 @@ import {
   formatHeartRateBpm,
   formatPacePerKm,
 } from "./metricFormatters";
+import brightonCoastArtworkDesktop from "./assets/brighton-coast-cut-paper-1920.webp";
+import brightonCoastArtworkMobile from "./assets/brighton-coast-cut-paper-960.webp";
 
 export type TodayWorkoutSelect = (
   workout: PlannedWorkout,
@@ -102,6 +104,13 @@ function RaceHero({ projection }: { projection: TodayPaneProjection }) {
   const totalBuildDayCount = race.totalBuildDays + 1;
   return (
     <section className="today-hero" aria-labelledby="today-hero-title">
+      <img
+        className="today-hero__artwork"
+        src={brightonCoastArtworkDesktop}
+        srcSet={`${brightonCoastArtworkMobile} 960w, ${brightonCoastArtworkDesktop} 1920w`}
+        sizes="(max-width: 760px) 100vw, 1200px"
+        alt=""
+      />
       <div className="today-hero__identity">
         <span className="eyebrow">Target Race</span>
         <h1 id="today-hero-title">{race.name}</h1>
