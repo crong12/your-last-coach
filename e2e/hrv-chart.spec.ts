@@ -72,7 +72,7 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   });
 });
 
-test("keeps the readout fixed while click and keyboard inspection change its content", async ({
+test("keeps the readout fixed while click and keyboard inspection change its content @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -143,7 +143,7 @@ test("contains the static chart on desktop and under reduced motion", async ({
   });
 });
 
-test("preserves passive annotation hit testing and activates adaptation", async ({
+test("preserves passive annotation hit testing and activates adaptation @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });

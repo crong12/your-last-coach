@@ -26,7 +26,7 @@ test("publishes the Final Turn mark as the browser icon", async ({ page }) => {
   expect(response.ok()).toBe(true);
 });
 
-test("exposes the three-pane navigation and restores a mobile deep link", async ({
+test("exposes the three-pane navigation and restores a mobile deep link @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -62,7 +62,7 @@ test("exposes the three-pane navigation and restores a mobile deep link", async 
     .toBe(1);
 });
 
-test("mobile dots and native arrow paging replace the current history entry", async ({
+test("mobile dots and native arrow paging replace the current history entry @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -124,7 +124,7 @@ test("mobile pane changes reveal a shorter destination from the bottom of a long
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before);
 });
 
-test("desktop switches panes from the app bar tabs", async ({ page }) => {
+test("desktop switches panes from the app bar tabs @contract", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#coaching");
   const today = page.getByRole("region", { name: "Today" });
@@ -164,7 +164,7 @@ test("desktop switches panes from the app bar tabs", async ({ page }) => {
   expect(toggle!.y + toggle!.height).toBeLessThanOrEqual(firstCard!.y);
 });
 
-test("canonicalizes malformed routes and preserves selection across reload and resize", async ({
+test("canonicalizes malformed routes and preserves selection across reload and resize @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
