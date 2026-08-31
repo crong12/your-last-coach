@@ -3468,17 +3468,27 @@ h1 {
    See docs/design-specs/desktop-frame-and-trends-grid.md
    ========================================================================= */
 @media (min-width: 761px) {
+  /* Three tracks so the tabs sit on the true centre of the bar rather than
+     centred in whatever space the brand and the status leave over. */
   .topbar {
     position: sticky;
     top: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: clamp(14px, 2.2vw, 30px);
+  }
+  .topbar .brand {
+    justify-self: start;
+  }
+  .topbar-actions {
+    justify-self: end;
   }
 
   /* The tabs live in the app bar, so nothing is pinned over the content. */
   .pane-nav {
     position: static;
     z-index: auto;
-    margin: 0 auto 0 0;
+    margin: 0;
     padding: 4px;
     border-color: transparent;
     background: rgba(23, 51, 48, 0.05);
