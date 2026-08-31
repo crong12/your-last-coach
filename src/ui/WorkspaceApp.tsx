@@ -19,6 +19,7 @@ import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
 import { selectTodayPane } from "../application/today";
+import type { TrendsRange } from "../application/trends";
 import { projectWorkoutResultMetrics } from "../application/workoutResultMetrics";
 import {
   NAVIGATION_FOCUS_STATE_KEY,
@@ -62,7 +63,7 @@ import {
   formatPacePerKm,
   formatPaceSeconds,
 } from "./metricFormatters";
-import { TrendsPane } from "./charts/TrendsPane";
+import { TrendsPane, TrendsRangeControl } from "./charts/TrendsPane";
 import { TodayPane } from "./TodayPane";
 
 interface WorkspaceAppProps {
@@ -81,6 +82,17 @@ const PANE_LABELS: Record<PaneId, string> = {
   trends: "Trends",
   coaching: "Coaching",
 };
+
+/**
+ * Below this width the workspace keeps the horizontal scroll-snap panes with
+ * pagination dots. At and above it, panes are switched: the selected pane fills
+ * the content region and the others are `hidden`.
+ */
+const COMPACT_LAYOUT_QUERY = "(max-width: 760px)";
+
+function compactLayoutMatches() {
+  return window.matchMedia(COMPACT_LAYOUT_QUERY).matches;
+}
 
 function historyStateWithOrigin(
   origin: PaneOriginReceipt | WorkoutOriginReceipt,
@@ -1589,6 +1601,91 @@ function PendingAdaptationCard({
   );
 }
 
+function MonitoringCard({ context }: { context: AthleteContextData }) {
+  if (context.activeCoachingTopics.length === 0) return null;
+  return (
+    <section className="monitoring-card" aria-labelledby="monitoring-title">
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Longitudinal context</span>
+          <h2 id="monitoring-title">Monitoring</h2>
+        </div>
+      </div>
+      <div className="monitoring-topics">
+        {context.activeCoachingTopics.map((topic) => (
+          <article className="monitoring-topic" key={topic.id}>
+            <span className="monitoring-status">
+              {formatClassification(topic.status)}
+            </span>
+            <h3>{topic.title}</h3>
+            <blockquote>{topic.athleteReport}</blockquote>
+            <dl className="monitoring-meta">
+              <div>
+                <dt>Recorded</dt>
+                <dd>
+                  <time dateTime={topic.latestReportedAt}>
+                    {formatDate(topic.latestReportedAt.slice(0, 10))}
+                  </time>
+                </dd>
+              </div>
+              <div>
+                <dt>Follow-up</dt>
+                <dd>{topic.followUpCondition}</dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecentTrainingCard({
+  context,
+  plannedWorkouts,
+}: {
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+}) {
+  const priorWeekDistanceKm = context.recentTraining
+    .filter(({ startedAt }) => {
+      const date = startedAt.slice(0, 10);
+      return date >= "2026-08-18" && date <= "2026-08-23";
+    })
+    .reduce((total, result) => total + result.summary.distanceKm, 0);
+  return (
+    <section className="recent-training-card">
+      <div className="section-heading section-heading--small">
+        <div>
+          <span className="eyebrow">Synthetic observation history</span>
+          <h2>Recent training</h2>
+        </div>
+      </div>
+      <p className="recent-training-summary">
+        {priorWeekDistanceKm} km from 18–23 August
+      </p>
+      <ol className="recent-training-list">
+        {context.recentTraining.map((result) => {
+          const date = result.startedAt.slice(0, 10);
+          const workout = plannedWorkouts.find(
+            ({ id }) => id === result.plannedWorkoutId,
+          );
+          return (
+            <li key={result.id}>
+              <time dateTime={date}>{formatShortDate(date)}</time>
+              <span>{workout?.title ?? "Recorded workout"}</span>
+              <strong>
+                {result.summary.distanceKm} km
+                {result.status === "partial" ? " · partial" : ""}
+              </strong>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 export function CoachingPane({
   context,
   plannedWorkouts,
@@ -1654,6 +1751,15 @@ export function CoachingPane({
           </ol>
         )}
       </section>
+      {/* The longitudinal context behind the timeline: what is still open, and
+          what the Athlete has actually done lately. */}
+      <div className="coaching-context">
+        <MonitoringCard context={context} />
+        <RecentTrainingCard
+          context={context}
+          plannedWorkouts={plannedWorkouts}
+        />
+      </div>
       <AthleteProfileSummary context={context} />
     </div>
   );
@@ -1669,10 +1775,14 @@ function ContextRail({
   onSelectWorkout,
   onViewAdaptation,
   state,
+  trendsRange = "4w",
+  onTrendsRangeChange,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
   surface: PaneId;
+  trendsRange?: TrendsRange;
+  onTrendsRangeChange?: (range: TrendsRange) => void;
   pending?: PendingAdaptationProposal | null;
   declinedAdaptations?: DeclinedPlanAdaptation[];
   onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
@@ -1681,12 +1791,6 @@ function ContextRail({
   state?: WorkspaceState;
 }) {
   const { observations } = context;
-  const priorWeekDistanceKm = context.recentTraining
-    .filter(({ startedAt }) => {
-      const date = startedAt.slice(0, 10);
-      return date >= "2026-08-18" && date <= "2026-08-23";
-    })
-    .reduce((total, result) => total + result.summary.distanceKm, 0);
   if (surface === "coaching") {
     return (
       <CoachingPane
@@ -1704,6 +1808,8 @@ function ContextRail({
       {surface === "trends" && state && (
         <TrendsPane
           state={state}
+          range={trendsRange}
+          onRangeChange={onTrendsRangeChange}
           onSelectWorkout={onSelectWorkout}
           onViewAdaptation={onViewAdaptation}
         />
@@ -1718,41 +1824,6 @@ function ContextRail({
             <strong>
               {formatObjective(context.targetRace.objectiveSeconds)}
             </strong>
-          </div>
-        </section>
-      )}
-      {surface === "trends" && context.activeCoachingTopics.length > 0 && (
-        <section className="monitoring-card" aria-labelledby="monitoring-title">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">Longitudinal context</span>
-              <h2 id="monitoring-title">Monitoring</h2>
-            </div>
-          </div>
-          <div className="monitoring-topics">
-            {context.activeCoachingTopics.map((topic) => (
-              <article className="monitoring-topic" key={topic.id}>
-                <span className="monitoring-status">
-                  {formatClassification(topic.status)}
-                </span>
-                <h3>{topic.title}</h3>
-                <blockquote>{topic.athleteReport}</blockquote>
-                <dl className="monitoring-meta">
-                  <div>
-                    <dt>Recorded</dt>
-                    <dd>
-                      <time dateTime={topic.latestReportedAt}>
-                        {formatDate(topic.latestReportedAt.slice(0, 10))}
-                      </time>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Follow-up</dt>
-                    <dd>{topic.followUpCondition}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
           </div>
         </section>
       )}
@@ -1811,37 +1882,6 @@ function ContextRail({
           <small className="provenance-label">
             Seeded synthetic observations
           </small>
-        </section>
-      )}
-      {surface === "trends" && (
-        <section className="recent-training-card">
-          <div className="section-heading section-heading--small">
-            <div>
-              <span className="eyebrow">Synthetic observation history</span>
-              <h2>Recent training</h2>
-            </div>
-          </div>
-          <p className="recent-training-summary">
-            {priorWeekDistanceKm} km from 18–23 August
-          </p>
-          <ol className="recent-training-list">
-            {context.recentTraining.map((result) => {
-              const date = result.startedAt.slice(0, 10);
-              const workout = plannedWorkouts.find(
-                ({ id }) => id === result.plannedWorkoutId,
-              );
-              return (
-                <li key={result.id}>
-                  <time dateTime={date}>{formatShortDate(date)}</time>
-                  <span>{workout?.title ?? "Recorded workout"}</span>
-                  <strong>
-                    {result.summary.distanceKm} km
-                    {result.status === "partial" ? " · partial" : ""}
-                  </strong>
-                </li>
-              );
-            })}
-          </ol>
         </section>
       )}
     </div>
@@ -2494,6 +2534,8 @@ export function WorkspaceApp({
     paneNavigation.getSelectedPane,
     paneNavigation.getSelectedPane,
   );
+  const [compactLayout, setCompactLayout] = useState(compactLayoutMatches);
+  const [trendsRange, setTrendsRange] = useState<TrendsRange>("4w");
   const activeRoute = useSyncExternalStore(
     paneNavigation.subscribe,
     paneNavigation.getRoute,
@@ -2526,6 +2568,14 @@ export function WorkspaceApp({
     );
   }, []);
 
+  useEffect(() => {
+    const query = window.matchMedia(COMPACT_LAYOUT_QUERY);
+    const onChange = () => setCompactLayout(query.matches);
+    onChange();
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
   const revealMobilePane = useCallback((behavior: ScrollBehavior) => {
     const container = panesRef.current;
     if (!container) return;
@@ -2541,7 +2591,7 @@ export function WorkspaceApp({
       ).matches;
       const behavior: ScrollBehavior =
         forceInstant || reduceMotion ? "auto" : "smooth";
-      if (window.matchMedia("(max-width: 760px)").matches) {
+      if (compactLayoutMatches()) {
         const container = panesRef.current;
         if (!container) return;
         container.scrollTo({
@@ -2551,7 +2601,9 @@ export function WorkspaceApp({
         revealMobilePane(behavior);
         return;
       }
-      paneRefs.current[pane]?.scrollIntoView({ behavior, block: "start" });
+      // Switched view: the pane replaces the previous one, so reading starts at
+      // its top rather than wherever the outgoing pane was scrolled to.
+      window.scrollTo({ top: 0, behavior: "auto" });
     },
     [revealMobilePane],
   );
@@ -2678,7 +2730,7 @@ export function WorkspaceApp({
       }
       restoreFromLocation(false);
     };
-    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const mobileQuery = window.matchMedia(COMPACT_LAYOUT_QUERY);
     const onBreakpointChange = () =>
       moveToPane(paneNavigation.getSelectedPane(), true);
     window.addEventListener("popstate", onPopState);
@@ -2769,42 +2821,23 @@ export function WorkspaceApp({
         }
         restoredOriginRef.current = null;
       }
-      let pane: PaneId;
-      if (window.matchMedia("(max-width: 760px)").matches) {
-        const container = panesRef.current;
-        if (!container || container.clientWidth === 0) return;
-        const index = Math.max(
-          0,
-          Math.min(
-            PANE_IDS.length - 1,
-            Math.round(container.scrollLeft / container.clientWidth),
-          ),
-        );
-        pane = PANE_IDS[index];
-      } else {
-        const readingLine = 150;
-        pane = "today";
-        let closestDistance = Number.POSITIVE_INFINITY;
-        for (const candidate of PANE_IDS) {
-          const section = paneRefs.current[candidate];
-          if (section) {
-            const distance = Math.abs(
-              section.getBoundingClientRect().top - readingLine,
-            );
-            if (distance < closestDistance) {
-              closestDistance = distance;
-              pane = candidate;
-            }
-          }
-        }
-      }
+      // Only the scroll-snap layout derives the selected pane from geometry.
+      // In the switched view the tabs are the only thing that changes panes.
+      if (!compactLayoutMatches()) return;
+      const container = panesRef.current;
+      if (!container || container.clientWidth === 0) return;
+      const index = Math.max(
+        0,
+        Math.min(
+          PANE_IDS.length - 1,
+          Math.round(container.scrollLeft / container.clientWidth),
+        ),
+      );
+      const pane = PANE_IDS[index];
       const previousPane = paneNavigation.getSelectedPane();
       paneNavigation.restorePane(pane);
       replacePaneHash(pane);
-      if (
-        pane !== previousPane &&
-        window.matchMedia("(max-width: 760px)").matches
-      ) {
+      if (pane !== previousPane) {
         const behavior = window.matchMedia("(prefers-reduced-motion: reduce)")
           .matches
           ? "auto"
@@ -3128,6 +3161,25 @@ export function WorkspaceApp({
     !resetOpen && activeRoute.kind === "adaptation";
   const pushedScreenActive = workoutScreenActive || adaptationScreenActive;
 
+  // One nav element, placed by layout: inside the app bar as labelled tabs when
+  // panes are switched, and left as the floating dot pill for scroll-snap.
+  const paneTabs = (
+    <nav className="pane-nav" aria-label="Workspace sections">
+      {PANE_IDS.map((pane) => (
+        <button
+          key={pane}
+          className="pane-nav__button"
+          aria-label={`Show ${PANE_LABELS[pane]} pane`}
+          aria-current={selectedPane === pane ? "page" : undefined}
+          onClick={() => selectPane(pane)}
+        >
+          <span className="pane-nav__dot" aria-hidden="true" />
+          <span className="pane-nav__label">{PANE_LABELS[pane]}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
   return (
     <div className="app-shell">
       <div
@@ -3148,6 +3200,7 @@ export function WorkspaceApp({
             <BrandMark className="brand-mark" />
             <span>Your Last Coach</span>
           </a>
+          {!compactLayout && paneTabs}
           <div className="topbar-actions">
             <div className="status-wrap">
               <span
@@ -3225,20 +3278,7 @@ export function WorkspaceApp({
         )}
 
         <main className="workspace-shell" id="training-plan">
-          <nav className="pane-nav" aria-label="Workspace sections">
-            {PANE_IDS.map((pane) => (
-              <button
-                key={pane}
-                className="pane-nav__button"
-                aria-label={`Show ${PANE_LABELS[pane]} pane`}
-                aria-current={selectedPane === pane ? "page" : undefined}
-                onClick={() => selectPane(pane)}
-              >
-                <span className="pane-nav__dot" aria-hidden="true" />
-                <span className="pane-nav__label">{PANE_LABELS[pane]}</span>
-              </button>
-            ))}
-          </nav>
+          {compactLayout && paneTabs}
 
           <div
             ref={panesRef}
@@ -3254,6 +3294,7 @@ export function WorkspaceApp({
               className="workspace-pane"
               id="today"
               aria-label="Today"
+              hidden={!compactLayout && selectedPane !== "today"}
             >
               <div className="workspace workspace--single workspace--today">
                 <TodayPane
@@ -3271,11 +3312,24 @@ export function WorkspaceApp({
               className="workspace-pane"
               id="trends"
               aria-label="Trends"
+              hidden={!compactLayout && selectedPane !== "trends"}
             >
               <div className="pane-heading">
-                <span className="eyebrow">Shared Coaching Workspace</span>
-                <h2>Trends</h2>
-                <p>Recent Coaching Evidence from the current training build.</p>
+                <div className="pane-heading__title">
+                  <span className="eyebrow">Shared Coaching Workspace</span>
+                  <h2>Trends</h2>
+                  <p>
+                    Recent Coaching Evidence from the current training build.
+                  </p>
+                </div>
+                {!compactLayout && (
+                  <div className="pane-heading__controls">
+                    <TrendsRangeControl
+                      range={trendsRange}
+                      onRangeChange={setTrendsRange}
+                    />
+                  </div>
+                )}
               </div>
               <div className="workspace workspace--single">
                 <ContextRail
@@ -3283,6 +3337,10 @@ export function WorkspaceApp({
                   plannedWorkouts={month.plannedWorkouts}
                   surface="trends"
                   state={state}
+                  trendsRange={trendsRange}
+                  onTrendsRangeChange={
+                    compactLayout ? setTrendsRange : undefined
+                  }
                   onSelectWorkout={openWorkout}
                   onViewAdaptation={viewAdaptation}
                 />
@@ -3296,14 +3354,17 @@ export function WorkspaceApp({
               className="workspace-pane"
               id="coaching"
               aria-label="Coaching"
+              hidden={!compactLayout && selectedPane !== "coaching"}
             >
               <div className="pane-heading">
-                <span className="eyebrow">Shared Coaching Workspace</span>
-                <h2 id="coaching-pane-title">Coaching</h2>
-                <p>
-                  A readable account of Athlete Feedback, Workout Results, and
-                  approved Plan Adaptations.
-                </p>
+                <div className="pane-heading__title">
+                  <span className="eyebrow">Shared Coaching Workspace</span>
+                  <h2 id="coaching-pane-title">Coaching</h2>
+                  <p>
+                    A readable account of Athlete Feedback, Workout Results, and
+                    approved Plan Adaptations.
+                  </p>
+                </div>
               </div>
               <div className="workspace workspace--single">
                 <ContextRail

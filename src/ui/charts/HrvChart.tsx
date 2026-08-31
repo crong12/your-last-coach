@@ -49,7 +49,6 @@ export interface HrvChartProps {
   seriesId?: string;
   status?: "ready" | "partial" | "empty" | "unavailable";
   unavailableMessage?: string;
-  groupLabel?: string;
   source?: string;
   displayFrom?: string;
   displayTo?: string;
@@ -153,8 +152,7 @@ export function HrvChart({
   seriesId = "hrv",
   status,
   unavailableMessage,
-  groupLabel = "Readiness evidence",
-  source = "Source: seeded synthetic COROS-shaped observations",
+  source,
   displayFrom,
   displayTo,
   average: suppliedAverage,
@@ -366,7 +364,6 @@ export function HrvChart({
           : `${coverage.observed} of ${coverage.expected} nights recorded`
       }
       source={source}
-      eyebrow={groupLabel}
     />
   );
 }
