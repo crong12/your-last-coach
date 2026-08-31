@@ -899,7 +899,9 @@ test("registers selector-backed WebMCP tools once and tears them down @contract"
   expect(signalsAborted).toBe(true);
 });
 
-test("completes the fallback six-tool coaching lifecycle @contract", async ({ page }) => {
+test("completes the fallback six-tool coaching lifecycle @contract", async ({
+  page,
+}) => {
   await installWebMcpHarness(page, "fallback");
   await page.goto("/");
   const runTool = (name: string, input: Record<string, unknown>) =>

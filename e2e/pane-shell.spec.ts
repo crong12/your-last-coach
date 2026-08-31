@@ -124,7 +124,9 @@ test("mobile pane changes reveal a shorter destination from the bottom of a long
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before);
 });
 
-test("desktop switches panes from the app bar tabs @contract", async ({ page }) => {
+test("desktop switches panes from the app bar tabs @contract", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#coaching");
   const today = page.getByRole("region", { name: "Today" });
