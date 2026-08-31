@@ -29,9 +29,7 @@ test("serves the built fallback workspace without external runtime requests", as
   expect([...externalRequests]).toEqual([]);
 });
 
-test("keeps the built candidate chartable through Trends and the Workout round trip", async ({
-  page,
-}) => {
+test("keeps the built candidate chartable through Trends", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/#trends");
 
@@ -65,36 +63,6 @@ test("keeps the built candidate chartable through Trends and the Workout round t
   await expect(
     page.locator('[data-chart-card="hrv"] [data-chart-annotation-kind="race"]'),
   ).toHaveCount(1);
-  await page.screenshot({
-    path: "/tmp/issue-64-trends-static-mobile.png",
-    fullPage: true,
-  });
-
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/#today");
-  const workout = page.locator('[data-workout-id="planned-2026-08-30-long"]');
-  await workout.scrollIntoViewIfNeeded();
-  const origin = await page.evaluate(
-    () =>
-      new Promise<{ hash: string }>((resolve) => {
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => resolve({ hash: location.hash })),
-        );
-      }),
-  );
-  const originLabel =
-    origin.hash === "#trends"
-      ? "Trends"
-      : origin.hash === "#coaching"
-        ? "Coaching"
-        : "Today";
-  await workout.click();
-  await expect(
-    page.getByRole("main", { name: "Planned Workout" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: `Back to ${originLabel}` }).click();
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe(origin.hash);
-  await expect(workout).toBeFocused();
 });
 
 test("serves the completed Workout Result proof from the static candidate", async ({

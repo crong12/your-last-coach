@@ -29,7 +29,7 @@ test("offers one linked Trends range control", async ({ page }) => {
   });
 });
 
-test("links every Trends chart and card to the selected range on mobile", async ({
+test("links every Trends chart and card to the selected range on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -134,7 +134,7 @@ test("links every Trends chart and card to the selected range on mobile", async 
   ).toContain("x");
 });
 
-test("inspects missing evidence and restores both Workout Result pushes on mobile", async ({
+test("inspects missing evidence and restores both Workout Result pushes on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -229,7 +229,7 @@ test("keeps a valid empty Workout Result range as an honest zero series", async 
   expect(zeroBarHeights.every((height) => height === 0)).toBe(true);
 });
 
-test("keeps distance visible while an unavailable Workout Result load is marked degraded", async ({
+test("keeps distance visible while an unavailable Workout Result load is marked degraded @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -328,7 +328,7 @@ async function seedAdaptationReceipt(page: Page) {
     .toBe(1);
 }
 
-test("keeps passive phase and race markers non-focusable while adaptations are interactive", async ({
+test("keeps passive phase and race markers non-focusable while adaptations are interactive @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });

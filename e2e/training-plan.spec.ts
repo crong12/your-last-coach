@@ -198,7 +198,7 @@ function adaptationReview(page: Page) {
   return page.getByRole("main", { name: "Workout Adaptation review" });
 }
 
-test("shows a calm loading state while Coach Agent tools register", async ({
+test("shows a calm loading state while Coach Agent tools register @contract", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -797,7 +797,7 @@ test("shows a planned Workout without pulling completed content forward", async 
   ).not.toBeAttached();
 });
 
-test("registers selector-backed WebMCP tools once and tears them down", async ({
+test("registers selector-backed WebMCP tools once and tears them down @contract", async ({
   page,
 }) => {
   await installWebMcpHarness(page);
@@ -899,7 +899,9 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   expect(signalsAborted).toBe(true);
 });
 
-test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
+test("completes the fallback six-tool coaching lifecycle @contract", async ({
+  page,
+}) => {
   await installWebMcpHarness(page, "fallback");
   await page.goto("/");
   const runTool = (name: string, input: Record<string, unknown>) =>
@@ -1154,7 +1156,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("records, persists, and resets Athlete Feedback through the injected host", async ({
+test("records, persists, and resets Athlete Feedback through the injected host @contract", async ({
   page,
 }) => {
   await installWebMcpHarness(page);
