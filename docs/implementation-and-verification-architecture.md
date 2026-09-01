@@ -420,7 +420,7 @@ Unknown programming faults are logged locally in development and converted to a 
 Week and Month remain the primary Training Plan views. A restrained persistent header badge displays WebMCP state. Activating it opens a Demo Guide utility drawer or tab containing:
 
 - the synthetic scenario and provenance label;
-- a suggested ChatGPT prompt;
+- the three staged, copyable ChatGPT prompts used by the judging flow;
 - connection state and registered tool names;
 - the latest tool outcome;
 - browser-enablement guidance;
