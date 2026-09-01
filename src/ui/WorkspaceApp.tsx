@@ -863,8 +863,26 @@ function ResetDialog({
   );
 }
 
-const SUGGESTED_PROMPT =
-  "That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.";
+const DEMO_PROMPTS = [
+  {
+    id: "analyse",
+    stage: "Analyse",
+    prompt:
+      "Compare today's incomplete threshold workout with my previous threshold session. What do the pace and heart-rate changes suggest? Don't change my plan.",
+  },
+  {
+    id: "record-and-adapt",
+    stage: "Record and adapt",
+    prompt:
+      "My legs felt heavy from the warm-up, the reps felt like 9 out of 10, and I stopped because I couldn't hold the pace. My shin didn't hurt today. Record that, then prepare your recommendation and one meaningful alternative for the rest of this week. Show both options in the workspace before changing my plan.",
+  },
+  {
+    id: "continue",
+    stage: "Continue in a fresh conversation",
+    prompt:
+      "What changed in my latest approved adaptation, and what context from this workspace should influence my next workout?",
+  },
+] as const;
 
 function DemoGuide({
   connection,
@@ -879,13 +897,19 @@ function DemoGuide({
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   useModalFocus(dialogRef, onContinue);
-  const [copyNotice, setCopyNotice] = useState<string | null>(null);
-  const copyPrompt = async () => {
+  const [copyNotice, setCopyNotice] = useState<{
+    promptId: string;
+    message: string;
+  } | null>(null);
+  const copyPrompt = async (promptId: string, prompt: string) => {
     try {
-      await navigator.clipboard.writeText(SUGGESTED_PROMPT);
-      setCopyNotice("Prompt copied.");
+      await navigator.clipboard.writeText(prompt);
+      setCopyNotice({ promptId, message: "Prompt copied." });
     } catch {
-      setCopyNotice("Select the prompt and copy it from this guide.");
+      setCopyNotice({
+        promptId,
+        message: "Select the prompt and copy it from this guide.",
+      });
     }
   };
   const connectionHeading =
@@ -932,21 +956,33 @@ function DemoGuide({
             observations and does not connect to a COROS account.
           </p>
 
-          <section className="guide-prompt" aria-labelledby="prompt-title">
-            <div>
-              <span className="eyebrow">Suggested message</span>
-              <h3 id="prompt-title">Ask the Coach Agent</h3>
-            </div>
-            <blockquote>{SUGGESTED_PROMPT}</blockquote>
-            <button className="button button--quiet" onClick={copyPrompt}>
-              Copy prompt
-            </button>
-            {copyNotice && (
-              <p className="guide-copy-notice" role="status">
-                {copyNotice}
-              </p>
-            )}
-          </section>
+          <div className="guide-prompts" aria-label="Coach Agent demo prompts">
+            {DEMO_PROMPTS.map(({ id, stage, prompt }, index) => (
+              <section
+                key={id}
+                className="guide-prompt"
+                aria-labelledby={`prompt-title-${id}`}
+              >
+                <div>
+                  <span className="eyebrow">Stage {index + 1}</span>
+                  <h3 id={`prompt-title-${id}`}>{stage}</h3>
+                </div>
+                <blockquote>{prompt}</blockquote>
+                <button
+                  className="button button--quiet"
+                  onClick={() => void copyPrompt(id, prompt)}
+                  aria-label={`Copy ${stage} prompt`}
+                >
+                  Copy prompt
+                </button>
+                {copyNotice?.promptId === id && (
+                  <p className="guide-copy-notice" role="status">
+                    {copyNotice.message}
+                  </p>
+                )}
+              </section>
+            ))}
+          </div>
 
           <div className="guide-grid">
             <section aria-labelledby="connection-title">
