@@ -1,5 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 
+/**
+ * Desktop switches panes instead of stacking them, so a cross-pane assertion
+ * has to select the pane that owns the content first.
+ */
+async function showPane(page: Page, pane: "Today" | "Trends" | "Coaching") {
+  // Reset reopens the Demo Guide, which covers the app bar.
+  const guide = page.getByRole("dialog", { name: "Demo Guide" });
+  if (await guide.isVisible()) {
+    await guide.getByRole("button", { name: "Close Demo Guide" }).click();
+  }
+  await page
+    .getByRole("navigation", { name: "Workspace sections" })
+    .getByRole("button", { name: `Show ${pane} pane` })
+    .click();
+  await expect(
+    page.getByRole("region", { name: pane, exact: true }),
+  ).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const key = "your-last-coach.demo-guide.v1";
@@ -179,7 +198,7 @@ function adaptationReview(page: Page) {
   return page.getByRole("main", { name: "Workout Adaptation review" });
 }
 
-test("shows a calm loading state while Coach Agent tools register", async ({
+test("shows a calm loading state while Coach Agent tools register @contract", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -439,6 +458,7 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(review).toBeHidden();
+  await showPane(page, "Coaching");
   await expect(
     page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
@@ -564,9 +584,11 @@ test("reviews both ranked Workout Adaptations and leaves browser Back non-mutati
   await expect(review.getByText("16 km easy long run")).toBeVisible();
   await page.goBack();
   await expect(review).toBeHidden();
+  await showPane(page, "Coaching");
   await expect(
     page.getByRole("button", { name: "Review proposal" }),
   ).toBeVisible();
+  await showPane(page, "Today");
   await expect(
     page
       .getByRole("region", { name: "Overview" })
@@ -591,6 +613,7 @@ test("shows the shared coaching briefing", async ({ page }) => {
   ).toBeVisible();
   await expect(profile.getByText(/Sunday/)).toBeVisible();
   await expect(profile.getByText(/60 minutes/).first()).toBeVisible();
+  await showPane(page, "Coaching");
   await expect(page.getByRole("heading", { name: "Monitoring" })).toBeVisible();
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
@@ -737,6 +760,7 @@ test("persists feedback context and plan adaptations across reload and reset", a
   await expect(page.getByText("Recovery first", { exact: true })).toHaveCount(
     0,
   );
+  await showPane(page, "Coaching");
   await expect(
     page.getByText("Shin discomfort", { exact: true }),
   ).toBeVisible();
@@ -773,7 +797,7 @@ test("shows a planned Workout without pulling completed content forward", async 
   ).not.toBeAttached();
 });
 
-test("registers selector-backed WebMCP tools once and tears them down", async ({
+test("registers selector-backed WebMCP tools once and tears them down @contract", async ({
   page,
 }) => {
   await installWebMcpHarness(page);
@@ -875,7 +899,9 @@ test("registers selector-backed WebMCP tools once and tears them down", async ({
   expect(signalsAborted).toBe(true);
 });
 
-test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
+test("completes the fallback six-tool coaching lifecycle @contract", async ({
+  page,
+}) => {
   await installWebMcpHarness(page, "fallback");
   await page.goto("/");
   const runTool = (name: string, input: Record<string, unknown>) =>
@@ -938,6 +964,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
       ({ date }) => date === "2026-08-26",
     )?.id;
   expect(thresholdWorkoutId).toBeDefined();
+  await showPane(page, "Coaching");
   await expect(
     page
       .getByRole("region", { name: "Monitoring" })
@@ -1129,7 +1156,7 @@ test("completes the fallback six-tool coaching lifecycle", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("records, persists, and resets Athlete Feedback through the injected host", async ({
+test("records, persists, and resets Athlete Feedback through the injected host @contract", async ({
   page,
 }) => {
   await installWebMcpHarness(page);
@@ -1177,6 +1204,7 @@ test("records, persists, and resets Athlete Feedback through the injected host",
     );
 
   await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
+  await showPane(page, "Coaching");
   await expect(
     page
       .locator("#coaching-entry-athlete-feedback-hero-feedback-request")
@@ -1197,6 +1225,7 @@ test("records, persists, and resets Athlete Feedback through the injected host",
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
+  await showPane(page, "Coaching");
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
   await expect(timeline).toBeVisible();
   await expect(

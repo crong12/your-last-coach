@@ -29,9 +29,8 @@ import { HrvChart } from "./HrvChart";
 import { CHART_PLOT, CHART_VIEWBOX, type ChartAnnotation } from "./chartTypes";
 import { formatPacePerKm } from "../metricFormatters";
 
-const SOURCE = "Source: seeded synthetic COROS-shaped observations";
-const GROUP_LABEL = "Readiness evidence";
-const PERFORMANCE_LABEL = "Performance evidence";
+export const TRENDS_SOURCE =
+  "Source: seeded synthetic COROS-shaped observations";
 
 export type TrendsWorkoutSelect = (
   workout: PlannedWorkout,
@@ -40,6 +39,13 @@ export type TrendsWorkoutSelect = (
 
 interface TrendsPaneProps {
   state: WorkspaceState;
+  range: TrendsRange;
+  /**
+   * Supplied only by the scroll-snap layout, where the toggle stays inside the
+   * pane body so it can remain pinned while the charts scroll. The switched
+   * view renders it in the pane title row instead.
+   */
+  onRangeChange?: (range: TrendsRange) => void;
   onSelectWorkout?: TrendsWorkoutSelect;
   onViewAdaptation?: (adaptationId: string) => void;
 }
@@ -88,7 +94,7 @@ function trendFor(current: number | null, average: number | null) {
 
 function SleepChart({
   projection,
-  source = SOURCE,
+  source,
   displayFrom,
   displayTo,
 }: {
@@ -288,7 +294,6 @@ function SleepChart({
           : `${projection.coverage.observed} of ${projection.coverage.expected} nights recorded`
       }
       source={source}
-      eyebrow={GROUP_LABEL}
     />
   );
 }
@@ -740,8 +745,6 @@ function VolumeLoadChart({
           ? "Training history unavailable"
           : `${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load`
       }
-      source={SOURCE}
-      eyebrow={PERFORMANCE_LABEL}
     >
       <div className="chart-card__secondary-metrics" data-volume-summary>
         <span>
@@ -973,8 +976,7 @@ function PaceHeartRateChart({
           ? "Run comparison data unavailable"
           : `${projection.points.length} eligible Outdoor Run pairs${projection.excludedOutdoorRuns ? ` · ${projection.excludedOutdoorRuns} missing a measure` : ""}`
       }
-      source={`${SOURCE} · Derived from your runs`}
-      eyebrow={PERFORMANCE_LABEL}
+      source="Derived from your runs"
     />
   );
 }
@@ -1019,7 +1021,6 @@ function RepeatedSessionsCard({
     >
       <header className="section-heading section-heading--small">
         <div>
-          <span className="eyebrow">{PERFORMANCE_LABEL}</span>
           <h3 id="repeated-sessions-title">Repeated sessions</h3>
         </div>
         <span className="repeated-sessions-card__basis">
@@ -1096,20 +1097,53 @@ function RepeatedSessionsCard({
               ? "No repeated sessions in this range"
               : `${projection.groups.length} comparable group${projection.groups.length === 1 ? "" : "s"}`}
         </span>
-        <span className="chart-card__source">
-          {SOURCE} · Aggregate-only comparison
-        </span>
+        <span className="chart-card__source">Aggregate-only comparison</span>
       </footer>
     </section>
   );
 }
 
+const TRENDS_RANGE_OPTIONS = ["4w", "12w", "build"] as const;
+
+/**
+ * The range toggle is rendered by the pane title row, not by the pane body, so
+ * that it has a home in the frame instead of being pinned over the content.
+ */
+export function TrendsRangeControl({
+  range,
+  onRangeChange,
+}: {
+  range: TrendsRange;
+  onRangeChange: (range: TrendsRange) => void;
+}) {
+  return (
+    <div
+      className="trends-range-control"
+      role="group"
+      aria-label="Trends range"
+    >
+      {TRENDS_RANGE_OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={range === option}
+          data-trends-range-option={option}
+          onClick={() => onRangeChange(option)}
+        >
+          {option === "build" ? "Build" : option}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function TrendsPane({
   state,
+  range,
+  onRangeChange,
   onSelectWorkout,
   onViewAdaptation = () => undefined,
 }: TrendsPaneProps) {
-  const [range, setRange] = useState<TrendsRange>("4w");
   const rangeWindow = useMemo(
     () => resolveTrendsRange(state, range),
     [range, state],
@@ -1144,23 +1178,9 @@ export function TrendsPane({
   );
   return (
     <div className="trends-pane" data-trends-range={range}>
-      <div
-        className="trends-range-control"
-        role="group"
-        aria-label="Trends range"
-      >
-        {(["4w", "12w", "build"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={range === option}
-            data-trends-range-option={option}
-            onClick={() => setRange(option)}
-          >
-            {option === "build" ? "Build" : option}
-          </button>
-        ))}
-      </div>
+      {onRangeChange && (
+        <TrendsRangeControl range={range} onRangeChange={onRangeChange} />
+      )}
       <section
         className="trends-group"
         data-trends-group="readiness"
@@ -1186,7 +1206,6 @@ export function TrendsPane({
           chartId="hrv"
           seriesId="hrv"
           average={hrv.average}
-          groupLabel={GROUP_LABEL}
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
@@ -1200,7 +1219,6 @@ export function TrendsPane({
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
           average={restingHeartRate.average}
-          groupLabel={GROUP_LABEL}
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
@@ -1241,6 +1259,7 @@ export function TrendsPane({
           onSelectWorkout={onSelectWorkout}
         />
       </section>
+      <p className="trends-provenance">{TRENDS_SOURCE}</p>
     </div>
   );
 }

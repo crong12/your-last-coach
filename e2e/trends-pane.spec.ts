@@ -29,7 +29,7 @@ test("offers one linked Trends range control", async ({ page }) => {
   });
 });
 
-test("links every Trends chart and card to the selected range on mobile", async ({
+test("links every Trends chart and card to the selected range on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -134,7 +134,7 @@ test("links every Trends chart and card to the selected range on mobile", async 
   ).toContain("x");
 });
 
-test("inspects missing evidence and restores both Workout Result pushes on mobile", async ({
+test("inspects missing evidence and restores both Workout Result pushes on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -229,7 +229,7 @@ test("keeps a valid empty Workout Result range as an honest zero series", async 
   expect(zeroBarHeights.every((height) => height === 0)).toBe(true);
 });
 
-test("keeps distance visible while an unavailable Workout Result load is marked degraded", async ({
+test("keeps distance visible while an unavailable Workout Result load is marked degraded @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -328,7 +328,7 @@ async function seedAdaptationReceipt(page: Page) {
     .toBe(1);
 }
 
-test("keeps passive phase and race markers non-focusable while adaptations are interactive", async ({
+test("keeps passive phase and race markers non-focusable while adaptations are interactive @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -496,4 +496,74 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect(page.locator(`#${repeatedActionId}`)).toBeFocused();
+});
+
+test("lays Trends out on a grid at the judging width without overlapping controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 880, height: 900 });
+  await page.goto("/#trends");
+
+  // Two columns: HRV and Resting heart rate share a row, Sleep takes its own.
+  const [hrv, restingHeartRate, sleep] = await Promise.all([
+    page.locator('[data-chart-card="hrv"]').boundingBox(),
+    page.locator('[data-chart-card="resting-heart-rate"]').boundingBox(),
+    page.locator('[data-chart-card="sleep"]').boundingBox(),
+  ]);
+  expect(hrv!.y).toBeCloseTo(restingHeartRate!.y, 0);
+  expect(hrv!.x + hrv!.width).toBeLessThanOrEqual(restingHeartRate!.x + 1);
+  expect(sleep!.y).toBeGreaterThan(hrv!.y + hrv!.height - 1);
+  expect(sleep!.width).toBeGreaterThan(hrv!.width * 1.8);
+
+  // The arrival strip leads the pane, ahead of the first evidence card.
+  const arriving = await page
+    .getByRole("heading", { name: "How you’re arriving" })
+    .boundingBox();
+  expect(arriving!.y).toBeLessThan(hrv!.y);
+
+  // It is rendered once, not duplicated by the promotion.
+  await expect(
+    page.getByRole("heading", { name: "How you’re arriving" }),
+  ).toHaveCount(1);
+
+  // The chart card header stops overlapping once the card is paired: the
+  // metric name and the current value occupy separate boxes.
+  const [metric, current] = await Promise.all([
+    page.locator('[data-chart-card="hrv"] .chart-card__metric').boundingBox(),
+    page
+      .locator('[data-chart-card="hrv"] [data-chart-current-value]')
+      .boundingBox(),
+  ]);
+  expect(metric!.x + metric!.width).toBeLessThanOrEqual(current!.x + 1);
+});
+
+test("keeps the scroll-snap layout and card order on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#trends");
+
+  await expect(
+    page.getByRole("navigation", { name: "Workspace sections" }),
+  ).toBeVisible();
+  await expect(page.locator(".pane-nav .pane-nav__dot").first()).toBeVisible();
+  await expect(page.locator("header.topbar .pane-nav")).toHaveCount(0);
+
+  // All three panes stay in the scroll-snap track rather than being switched.
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Trends" })).toBeVisible();
+
+  // Single column, original order: the charts precede the arrival strip.
+  const [hrv, restingHeartRate, arriving] = await Promise.all([
+    page.locator('[data-chart-card="hrv"]').boundingBox(),
+    page.locator('[data-chart-card="resting-heart-rate"]').boundingBox(),
+    page.getByRole("heading", { name: "How you’re arriving" }).boundingBox(),
+  ]);
+  expect(restingHeartRate!.y).toBeGreaterThan(hrv!.y + hrv!.height - 1);
+  expect(arriving!.y).toBeGreaterThan(hrv!.y);
+
+  // The toggle stays inside the pane body so it can remain pinned on scroll.
+  await expect(
+    page.locator(".trends-pane .trends-range-control"),
+  ).toBeVisible();
 });

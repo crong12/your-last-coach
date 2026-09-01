@@ -92,7 +92,7 @@ function approvedReceiptProposal() {
   };
 }
 
-test("shows the seeded coaching narrative before the bounded athlete profile", async ({
+test("shows the seeded coaching narrative before the bounded athlete profile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -248,7 +248,7 @@ test("does not infer a different Workout Result for an explicit stale Feedback r
   ).toHaveCount(0);
 });
 
-test("opens and controls the app-bar menu without leaving direct demo controls", async ({
+test("opens and controls the app-bar menu without leaving direct demo controls @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -341,7 +341,7 @@ test("keeps the desktop Coaching composition stacked and the app menu in the vie
   ).toBeLessThanOrEqual(1280);
 });
 
-test("shows the approved adaptation receipt with its source evidence after settlement and reload", async ({
+test("shows the approved adaptation receipt with its source evidence after settlement and reload @contract", async ({
   page,
 }) => {
   await installFallbackHarness(page);
@@ -421,7 +421,7 @@ test("shows the approved adaptation receipt with its source evidence after settl
   ).toBeVisible();
 });
 
-test("opens a full-push adaptation review with a durable back route", async ({
+test("opens a full-push adaptation review with a durable back route @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -590,7 +590,7 @@ test("opens a full-push adaptation review with a durable back route", async ({
   });
 });
 
-test("opens the same review from WebMCP on desktop and keeps the action bar readable", async ({
+test("opens the same review from WebMCP on desktop and keeps the action bar readable @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -929,7 +929,7 @@ test("shows a bounded unavailable state for an unknown adaptation deep link", as
   await expect(page).toHaveURL(/#coaching$/);
 });
 
-test("keeps Planned Workout and unknown receipt evidence literal without an inferred Result", async ({
+test("keeps Planned Workout and unknown receipt evidence literal without an inferred Result @contract", async ({
   page,
 }) => {
   await installFallbackHarness(page);

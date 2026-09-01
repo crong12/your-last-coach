@@ -200,7 +200,7 @@ test("contains the Today 5+2 layout at 360px without nested horizontal scrolling
   ).toContain("span 2");
 });
 
-test("sends the pending signal to Coaching with pane replacement semantics", async ({
+test("sends the pending signal to Coaching with pane replacement semantics @contract", async ({
   page,
 }) => {
   await installFallbackHarness(page);

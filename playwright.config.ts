@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import type { PlaywrightTestConfig } from "@playwright/test";
 
-export default defineConfig({
+export const sharedBrowserConfig: PlaywrightTestConfig = {
   testDir: "./e2e",
   testIgnore: "release-candidate.spec.ts",
   fullyParallel: true,
@@ -20,4 +21,9 @@ export default defineConfig({
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
   },
+};
+
+export default defineConfig({
+  ...sharedBrowserConfig,
+  grep: /@contract/,
 });

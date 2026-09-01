@@ -108,7 +108,7 @@ test("restores a direct Workout link through reload and returns safely to Today"
   await expect(screen).not.toBeAttached();
 });
 
-test("renders the selector-backed partial result composition and suspends the app", async ({
+test("renders the selector-backed partial result composition and suspends the app @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -170,7 +170,7 @@ test("renders the selector-backed partial result composition and suspends the ap
     .toBe("#workout/planned-2026-08-26-threshold");
 });
 
-test("renders the provenance-labelled completed result with recorded chart and exact Splits", async ({
+test("renders the provenance-labelled completed result with recorded chart and exact Splits @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -240,7 +240,7 @@ test("captures the completed Workout Result at the desktop review size", async (
   await captureWorkoutScreen(page, "/tmp/issue-67-completed-desktop.png");
 });
 
-test("renders a completed empty-lap result without fabricating chart or table", async ({
+test("renders a completed empty-lap result without fabricating chart or table @contract", async ({
   page,
 }) => {
   await page.goto("/#workout/planned-2026-08-13-easy");
@@ -403,7 +403,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe(workoutOriginScrollTop);
 });
 
-test("records workout feedback through the shared application state and Coaching timeline", async ({
+test("records workout feedback through the shared application state and Coaching timeline @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -428,7 +428,7 @@ test("records workout feedback through the shared application state and Coaching
   ).toBeVisible();
 });
 
-test("keeps feedback visible and surfaces memory-only durability after a save fallback", async ({
+test("keeps feedback visible and surfaces memory-only durability after a save fallback @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -472,7 +472,7 @@ test("renders honest unavailable targets for a simple Planned Workout", async ({
   await expect(screen.getByText("Main set", { exact: true })).toBeVisible();
 });
 
-test("canonicalizes malformed and unknown Workout routes to Today", async ({
+test("canonicalizes malformed and unknown Workout routes to Today @contract", async ({
   page,
 }) => {
   for (const route of [

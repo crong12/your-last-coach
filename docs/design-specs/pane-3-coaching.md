@@ -59,7 +59,7 @@ The desktop context rail does not survive the pane structure:
 
 - **Target Race card** → dies here; its content is the Today hero.
 - **Athlete Profile card** → becomes a compact summary card at the bottom of this pane (name, goal framing, training availability, constraints) — it is coaching context, and the Coach Agent's briefing draws from it. Tap → expands inline (no pushed screen for v1). ⚠️ _Iteration point: may move behind a header affordance if the pane gets long._
-- **Monitoring card** → dies; superseded entirely by the Trends pane.
+- **Monitoring card** → lives here, paired with Recent training in a two-up row beneath the Coaching timeline. It was briefly assigned to Trends; both blocks are longitudinal coaching context rather than chart evidence, so Trends carries only the arrival strip and the charts. See [desktop-frame-and-trends-grid.md](desktop-frame-and-trends-grid.md).
 
 ## 5. Demo chrome placement
 

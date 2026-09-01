@@ -8,3 +8,6 @@ docs/superpowers/
 
 # Local design explorations (throwaway concept images)
 design-explorations/
+
+# Playwright MCP scratch output (screenshots, snapshots, console logs)
+.playwright-mcp/
