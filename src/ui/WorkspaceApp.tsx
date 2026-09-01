@@ -2001,9 +2001,11 @@ function ReviewArchive({
 function AdaptationHistoryCard({
   context,
   seededAdaptations,
+  onReview,
 }: {
   context: AthleteContextData;
   seededAdaptations: SeededAdaptationHistoryEntry[];
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
 }) {
   const adaptations = [
     ...context.recentAdaptationHistory.map((receipt) => ({
@@ -2038,7 +2040,7 @@ function AdaptationHistoryCard({
         <ol className="adaptation-history-list">
           {adaptations.map((adaptation) => (
             <li
-              id={`coaching-entry-approved-adaptation-${adaptation.id.replace(/^review:/, "")}`}
+              id={coachingEntryId("approved-adaptation", adaptation.id)}
               key={adaptation.id}
               tabIndex={-1}
             >
@@ -2058,6 +2060,12 @@ function AdaptationHistoryCard({
                     kind: "adaptation",
                     reviewId: adaptation.reviewId,
                   })}
+                  id={`${coachingEntryId("approved-adaptation", adaptation.id)}-receipt-link`}
+                  onClick={(event) => {
+                    if (!onReview) return;
+                    event.preventDefault();
+                    onReview(adaptation.reviewId, event.currentTarget);
+                  }}
                 >
                   Inspect receipt
                 </a>
@@ -2074,6 +2082,7 @@ export function CoachingPane({
   context,
   plannedWorkouts,
   onSelectWorkout,
+  onReview,
   reviews = DEMO_WEEKLY_PROGRESS_REVIEWS,
   seededAdaptations = DEMO_ADAPTATION_HISTORY,
 }: {
@@ -2081,7 +2090,7 @@ export function CoachingPane({
   plannedWorkouts: PlannedWorkout[];
   pending?: PendingAdaptationProposal | null;
   declinedAdaptations?: DeclinedPlanAdaptation[];
-  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
   onViewAdaptation?: (reviewId: string) => void;
   reviews?: CoachingNotebookReview[];
@@ -2115,6 +2124,7 @@ export function CoachingPane({
       <AdaptationHistoryCard
         context={context}
         seededAdaptations={seededAdaptations}
+        onReview={onReview}
       />
     </div>
   );
@@ -2140,7 +2150,7 @@ function ContextRail({
   onTrendsRangeChange?: (range: TrendsRange) => void;
   pending?: PendingAdaptationProposal | null;
   declinedAdaptations?: DeclinedPlanAdaptation[];
-  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
   onViewAdaptation?: (adaptationId: string) => void;
   state?: WorkspaceState;
@@ -2979,7 +2989,7 @@ export function WorkspaceApp({
       selectPane("coaching");
       window.requestAnimationFrame(() => {
         const target = document.getElementById(
-          `coaching-entry-approved-adaptation-${adaptationId.replace(/^review:/, "")}`,
+          coachingEntryId("approved-adaptation", adaptationId),
         );
         target?.scrollIntoView({
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -3661,7 +3671,11 @@ export function WorkspaceApp({
               <div className="workspace workspace--single workspace--today">
                 <TodayPane
                   projection={selectTodayPane(state)}
-                  onViewPendingProposal={() => selectPane("coaching", true)}
+                  onViewPendingProposal={(invoker) => {
+                    const pending = state.pendingAdaptationProposal;
+                    if (!pending) return;
+                    openAdaptationRoute(pending.proposal.reviewId, invoker);
+                  }}
                   onSelectWorkout={openWorkout}
                 />
               </div>

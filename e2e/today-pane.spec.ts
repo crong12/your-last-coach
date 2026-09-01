@@ -200,7 +200,7 @@ test("contains the Today 5+2 layout at 360px without nested horizontal scrolling
   ).toContain("span 2");
 });
 
-test("sends the pending signal to Coaching with pane replacement semantics @contract", async ({
+test("reopens the pending proposal from the Overview signal @contract", async ({
   page,
 }) => {
   await installFallbackHarness(page);
@@ -212,14 +212,17 @@ test("sends the pending signal to Coaching with pane replacement semantics @cont
     .getByRole("main", { name: "Workout Adaptation review" })
     .getByRole("button", { name: "Back to Overview" })
     .click();
-  const historyLength = await page.evaluate(() => history.length);
   const signal = page.locator("#today-pending-proposal");
   await expect(signal).toBeVisible();
   await expect(signal).toContainText("1 proposal awaiting your review");
 
   await signal.click();
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#coaching");
-  expect(await page.evaluate(() => history.length)).toBe(historyLength);
+  await expect(page).toHaveURL(
+    /#adaptation%2Freview%3Atoday-pane|#adaptation\/review%3Atoday-pane/,
+  );
+  await expect(
+    page.getByRole("main", { name: "Workout Adaptation review" }),
+  ).toBeVisible();
 });
 
 test("pushes a planned Workout tile and restores its focus on Back", async ({

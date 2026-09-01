@@ -301,6 +301,7 @@ test("keeps the full-page Plan Approval route while omitting its pending Coachin
 test("opens an approved receipt from Adaptation History and survives reload @contract", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await installFallbackHarness(page);
   await page.goto("/#coaching");
   await openReviewFromAgent(page);
@@ -312,7 +313,11 @@ test("opens an approved receipt from Adaptation History and survives reload @con
   );
   await expect(entry).toContainText("Recovery first");
   await expect(entry).toContainText("Plan v1 → v2");
-  await entry.getByRole("link", { name: "Inspect receipt" }).click();
+  const receiptLink = entry.getByRole("link", { name: "Inspect receipt" });
+  await receiptLink.scrollIntoViewIfNeeded();
+  const coachingScrollY = await page.evaluate(() => window.scrollY);
+  expect(coachingScrollY).toBeGreaterThan(0);
+  await receiptLink.click();
   await expect(page).toHaveURL(
     /#adaptation%2Freview%3Acoaching-pane|#adaptation\/review%3Acoaching-pane/,
   );
@@ -324,12 +329,34 @@ test("opens an approved receipt from Adaptation History and survives reload @con
   await expect(receipt).toContainText("1 → 2");
   await expect(receipt).toContainText(/Based on: .*Training Load .*Recovery/);
   await receipt.getByRole("button", { name: "Back to Coaching" }).click();
+  await expect(page).toHaveURL(/#coaching$/);
+  await expect(receiptLink).toBeFocused();
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBe(coachingScrollY);
   await page.reload();
   await expect(
     page
       .getByRole("region", { name: "Adaptation History" })
       .getByText("Recovery first", { exact: true }),
   ).toBeVisible();
+});
+
+test("focuses an approved adaptation whose review ID contains punctuation @contract", async ({
+  page,
+}) => {
+  await installFallbackHarness(page);
+  await page.goto("/#coaching");
+  const proposal = approvedReceiptProposal();
+  proposal.reviewId = "review:rest-of-week:2026-08-26";
+  await openReviewFromAgent(page, proposal);
+  await approveRecommendation(page);
+
+  const entry = page.locator(
+    "#coaching-entry-approved-adaptation-rest-of-week-2026-08-26",
+  );
+  await expect(entry).toBeVisible();
+  await expect(entry).toBeFocused();
 });
 
 test("keeps the desktop adaptation action bar readable @contract", async ({
