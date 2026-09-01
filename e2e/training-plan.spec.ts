@@ -219,9 +219,11 @@ test("shows a calm loading state while Coach Agent tools register @contract", as
   await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
 });
 
-test("opens the Demo Guide once, keeps it reachable, and reopens it after reset", async ({
+test("offers three copyable Demo Guide prompts, stays reachable, and reopens after reset", async ({
   page,
+  context,
 }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await installWebMcpHarness(page, "fallback");
   await page.goto("/?fresh-guide");
 
@@ -240,6 +242,32 @@ test("opens the Demo Guide once, keeps it reachable, and reopens it after reset"
   await expect(
     guide.getByText("No Coach Agent tool has run yet."),
   ).toBeVisible();
+
+  const prompts = [
+    {
+      stage: "Analyse",
+      text: "Compare today's incomplete threshold workout with my previous threshold session. What do the pace and heart-rate changes suggest? Don't change my plan.",
+    },
+    {
+      stage: "Record and adapt",
+      text: "My legs felt heavy from the warm-up, the reps felt like 9 out of 10, and I stopped because I couldn't hold the pace. My shin didn't hurt today. Record that, then prepare your recommendation and one meaningful alternative for the rest of this week. Show both options in the workspace before changing my plan.",
+    },
+    {
+      stage: "Continue in a fresh conversation",
+      text: "What changed in my latest approved adaptation, and what context from this workspace should influence my next workout?",
+    },
+  ];
+
+  for (const prompt of prompts) {
+    const stage = guide.getByRole("region", { name: prompt.stage });
+    await expect(stage.getByText(prompt.text, { exact: true })).toBeVisible();
+    await stage
+      .getByRole("button", { name: `Copy ${prompt.stage} prompt` })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(prompt.text);
+  }
 
   await guide.getByRole("button", { name: "Continue to workspace" }).click();
   await expect(guide).toBeHidden();

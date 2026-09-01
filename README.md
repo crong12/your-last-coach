@@ -52,16 +52,23 @@ The detailed boundaries are recorded in [Implementation and verification archite
 
 1. Open the workspace and use **Reset demo** to restore the fixed state.
 2. Keep the Week view visible. The original plan shows Thursday's 6 km recovery run, Saturday's 8 km easy run with strides, and Sunday's 18 km long run.
-3. In ChatGPT with the site attached, send:
+3. In ChatGPT with the site attached, paste **Analyse**:
 
-   > That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn't hold the pace. No pain. Can you review what happened and make the rest of this week easier? Show me the options before changing my plan.
+   > Compare today's incomplete threshold workout with my previous threshold session. What do the pace and heart-rate changes suggest? Don't change my plan.
 
-4. The Coach Agent reads the Coaching Briefing and relevant context. If the host requires consent to record the supplied report, approve that recording; this does not authorize a Training Plan change.
-5. The Agent records the exact Athlete Feedback, prepares two evidence-grounded options without presenting them in chat, and calls `open_workout_adaptation_review` so the native review is their first user-facing presentation.
-6. In the workspace, preview the options before deciding.
-7. Press **Adapt my plan**. Selection alone does not mutate the Training Plan.
-8. The Agent calls `read_workout_adaptation_decision` to receive the structured result.
-9. Confirm that the selected proposal changes the visible plan and that the resulting Adaptation History receipt is available.
+4. Confirm that the Agent compares the current and previous threshold Workout Results through structured WebMCP context without changing the plan.
+5. Paste **Record and adapt**:
+
+   > My legs felt heavy from the warm-up, the reps felt like 9 out of 10, and I stopped because I couldn't hold the pace. My shin didn't hurt today. Record that, then prepare your recommendation and one meaningful alternative for the rest of this week. Show both options in the workspace before changing my plan.
+
+6. If the host requires consent to record the supplied report, approve that recording; this does not authorize a Training Plan change. The Agent records the exact Athlete Feedback and calls `open_workout_adaptation_review` so the native review presents both options.
+7. Preview the Alternative, return to the recommendation, and press **Adapt my plan**. Selection alone does not mutate the Training Plan.
+8. The Agent calls `read_workout_adaptation_decision`; confirm that the visible plan changes and an authoritative Adaptation History receipt is available.
+9. Start a fresh ChatGPT conversation, attach the same workspace, and paste **Continue in a fresh conversation**:
+
+   > What changed in my latest approved adaptation, and what context from this workspace should influence my next workout?
+
+10. Confirm that the new Agent reads the approved receipt and current Coaching Briefing through WebMCP. It should not rely on the previous conversation or scrape the page DOM, and it should not claim to recover the previous Agent's full prose rationale.
 
 The approved three-minute presentation contract is in [Three-minute judging story](docs/three-minute-judging-story.md).
 

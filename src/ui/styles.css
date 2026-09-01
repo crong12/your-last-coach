@@ -3016,9 +3016,13 @@ h1 {
   color: var(--muted);
   line-height: 1.6;
 }
+.guide-prompts {
+  margin: 24px 0;
+}
+
 .guide-prompt {
   position: relative;
-  margin: 24px 0;
+  margin-top: 12px;
   padding: 20px;
   border: 1px solid #dfcda4;
   border-radius: 4px 18px 18px 4px;
