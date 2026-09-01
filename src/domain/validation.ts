@@ -514,7 +514,12 @@ function validateWorkoutResults(
         (lap.paceSecondsPerKm !== undefined &&
           !isPositiveNumber(lap.paceSecondsPerKm)) ||
         (lap.averageHeartRateBpm !== undefined &&
-          !isPositiveNumber(lap.averageHeartRateBpm))
+          !isPositiveNumber(lap.averageHeartRateBpm)) ||
+        (lap.maximumHeartRateBpm !== undefined &&
+          !isPositiveNumber(lap.maximumHeartRateBpm)) ||
+        (isPositiveNumber(lap.averageHeartRateBpm) &&
+          isPositiveNumber(lap.maximumHeartRateBpm) &&
+          lap.maximumHeartRateBpm < lap.averageHeartRateBpm)
       ) {
         errors.push(`Invalid lap in Workout Result: ${result.id}`);
         break;

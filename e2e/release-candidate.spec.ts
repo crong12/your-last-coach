@@ -19,7 +19,7 @@ test("serves the built fallback workspace without external runtime requests", as
 
   await page.goto("/");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(
     today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -94,7 +94,7 @@ test("serves the completed Workout Result proof from the static candidate", asyn
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
 
-  await page.getByRole("button", { name: "Back to Today" }).click();
+  await page.getByRole("button", { name: "Back to Overview" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(screen).not.toBeAttached();
 });

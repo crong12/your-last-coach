@@ -17,6 +17,41 @@ export function migrateDemoWorkspace(value: unknown): unknown {
           result.summary;
         return {
           ...result,
+          laps: Array.isArray(result.laps)
+            ? result.laps.map((lap) => {
+                if (!isRecord(lap) || typeof lap.id !== "string") return lap;
+                const metrics = {
+                  "lap-threshold-warmup": {
+                    paceSecondsPerKm: 375,
+                    averageHeartRateBpm: 130,
+                    maximumHeartRateBpm: 134,
+                  },
+                  "lap-threshold-rep-1": { maximumHeartRateBpm: 172 },
+                  "lap-threshold-rep-2": { maximumHeartRateBpm: 178 },
+                  "lap-threshold-rep-3": { maximumHeartRateBpm: 183 },
+                  "lap-threshold-cooldown": {
+                    paceSecondsPerKm: 390,
+                    averageHeartRateBpm: 142,
+                    maximumHeartRateBpm: 150,
+                  },
+                }[lap.id];
+                if (!metrics) return lap;
+                return {
+                  ...lap,
+                  ...(lap.paceSecondsPerKm === undefined &&
+                  "paceSecondsPerKm" in metrics
+                    ? { paceSecondsPerKm: metrics.paceSecondsPerKm }
+                    : {}),
+                  ...(lap.averageHeartRateBpm === undefined &&
+                  "averageHeartRateBpm" in metrics
+                    ? { averageHeartRateBpm: metrics.averageHeartRateBpm }
+                    : {}),
+                  ...(lap.maximumHeartRateBpm === undefined
+                    ? { maximumHeartRateBpm: metrics.maximumHeartRateBpm }
+                    : {}),
+                };
+              })
+            : result.laps,
           summary: {
             ...summaryWithoutTrainingLoad,
             durationSeconds:

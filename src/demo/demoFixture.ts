@@ -601,13 +601,21 @@ export const DEMO_WORKSPACE_STATE = {
       },
       source: DEMO_SOURCE,
       laps: [
-        { id: "lap-threshold-warmup", kind: "warmup", distanceKm: 2 },
+        {
+          id: "lap-threshold-warmup",
+          kind: "warmup",
+          distanceKm: 2,
+          paceSecondsPerKm: 375,
+          averageHeartRateBpm: 130,
+          maximumHeartRateBpm: 134,
+        },
         {
           id: "lap-threshold-rep-1",
           kind: "work",
           distanceKm: 1,
           paceSecondsPerKm: 276,
           averageHeartRateBpm: 165,
+          maximumHeartRateBpm: 172,
         },
         {
           id: "lap-threshold-rep-2",
@@ -615,6 +623,7 @@ export const DEMO_WORKSPACE_STATE = {
           distanceKm: 1,
           paceSecondsPerKm: 279,
           averageHeartRateBpm: 171,
+          maximumHeartRateBpm: 178,
         },
         {
           id: "lap-threshold-rep-3",
@@ -622,8 +631,16 @@ export const DEMO_WORKSPACE_STATE = {
           distanceKm: 1,
           paceSecondsPerKm: 288,
           averageHeartRateBpm: 176,
+          maximumHeartRateBpm: 183,
         },
-        { id: "lap-threshold-cooldown", kind: "cooldown", distanceKm: 1 },
+        {
+          id: "lap-threshold-cooldown",
+          kind: "cooldown",
+          distanceKm: 1,
+          paceSecondsPerKm: 390,
+          averageHeartRateBpm: 142,
+          maximumHeartRateBpm: 150,
+        },
       ],
     },
   ],

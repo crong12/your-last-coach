@@ -152,6 +152,8 @@ export function normalizeResultLaps(
     averageHeartRateBpm: finite(lap.averageHeartRateBpm)
       ? lap.averageHeartRateBpm
       : null,
-    maximumHeartRateBpm: null,
+    maximumHeartRateBpm: finite(lap.maximumHeartRateBpm)
+      ? lap.maximumHeartRateBpm
+      : null,
   }));
 }

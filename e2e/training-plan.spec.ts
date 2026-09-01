@@ -216,7 +216,7 @@ test("shows a calm loading state while Coach Agent tools register @contract", as
   await expect(
     page.locator('.bootstrap-shell [data-brand-mark="final-turn"]'),
   ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
 });
 
 test("opens the Demo Guide once, keeps it reachable, and reopens it after reset", async ({
@@ -312,7 +312,7 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
     workoutScreen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   const workoutBack = workoutScreen.getByRole("button", {
-    name: "Back to Today",
+    name: "Back to Overview",
   });
   await workoutBack.focus();
   await expect(workoutBack).toBeFocused();
@@ -414,7 +414,7 @@ test("reset temporarily owns an active review and either restores or cancels it"
   await openReset();
   await reset.getByRole("button", { name: "Reset demo" }).click();
   await expect(review).toBeHidden();
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -517,7 +517,7 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
   const reset = page.getByRole("dialog", { name: "Reset the demo?" });
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -591,7 +591,7 @@ test("reviews both ranked Workout Adaptations and leaves browser Back non-mutati
   await showPane(page, "Today");
   await expect(
     page
-      .getByRole("region", { name: "Today" })
+      .getByRole("region", { name: "Overview" })
       .getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
 });
@@ -1246,7 +1246,7 @@ test("persists the seeded envelope across reload and resets with in-page approva
   expect(savedBeforeReload).not.toBeNull();
 
   await page.reload();
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -1267,7 +1267,7 @@ test("persists the seeded envelope across reload and resets with in-page approva
   await expect(
     page.getByText("Demo restored to its starting Training Plan."),
   ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -1287,7 +1287,7 @@ test("replaces invalid saved data and explains the refresh", async ({
       "Saved demo data could not be used, so the Training Plan was refreshed.",
     ),
   ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -1342,7 +1342,7 @@ test("renders context from a valid modified saved workspace", async ({
 
   await page.reload();
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(
     today.getByRole("heading", { name: "South Downs Marathon" }),
   ).toBeVisible();
@@ -1406,7 +1406,7 @@ test("remains usable without WebMCP and warns when storage is memory-only", asyn
     ),
   ).toBeVisible();
   await guide.getByRole("button", { name: "Continue to workspace" }).click();
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(
     today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();
@@ -1419,7 +1419,7 @@ test("keeps Today readable beside ChatGPT", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 900 });
   await page.goto("/");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(
     today.getByRole("heading", { name: "Brighton Marathon" }),
   ).toBeVisible();

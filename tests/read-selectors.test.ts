@@ -340,6 +340,7 @@ describe("shared coaching read selectors", () => {
         distanceKm: 1,
         paceSecondsPerKm: 276,
         averageHeartRateBpm: 165,
+        maximumHeartRateBpm: 172,
       },
       {
         id: "lap-threshold-rep-2",
@@ -347,6 +348,7 @@ describe("shared coaching read selectors", () => {
         distanceKm: 1,
         paceSecondsPerKm: 279,
         averageHeartRateBpm: 171,
+        maximumHeartRateBpm: 178,
       },
       {
         id: "lap-threshold-rep-3",
@@ -354,6 +356,7 @@ describe("shared coaching read selectors", () => {
         distanceKm: 1,
         paceSecondsPerKm: 288,
         averageHeartRateBpm: 176,
+        maximumHeartRateBpm: 183,
       },
     ]);
     expect(result.data.athleteFeedback).toHaveLength(1);

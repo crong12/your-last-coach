@@ -78,7 +78,7 @@ interface WorkspaceAppProps {
 }
 
 const PANE_LABELS: Record<PaneId, string> = {
-  today: "Today",
+  today: "Overview",
   trends: "Trends",
   coaching: "Coaching",
 };
@@ -157,6 +157,15 @@ function formatClock(now: string, timeZone: string) {
   return `${date} · ${time}`;
 }
 
+function formatDemoDate(now: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  }).format(new Date(now));
+}
+
 function formatObjective(seconds: number) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -202,7 +211,6 @@ function WorkoutStats({ result }: { result: WorkoutResult }) {
   const metrics = projectWorkoutResultMetrics(result);
   return (
     <section className="workout-result-section" aria-labelledby="stats-title">
-      <span className="eyebrow">Recorded outcome</span>
       <h2 id="stats-title">Workout Result</h2>
       <dl className="workout-stats">
         <WorkoutStat
@@ -254,46 +262,58 @@ function PlanVersusActual({
       className="workout-result-section"
       aria-labelledby="plan-actual-title"
     >
-      <span className="eyebrow">Like-for-like evidence</span>
       <h2 id="plan-actual-title">Plan versus actual</h2>
       <dl className="plan-actual-list">
         <div>
           <dt>Distance</dt>
-          <dd>
-            <span>Planned {formatDistanceKm(workout.distanceKm)}</span>
-            <span>Actual {formatDistanceKm(result.summary.distanceKm)}</span>
-            <strong>
-              Delta{" "}
-              {formatDelta(
-                result.summary.distanceKm - workout.distanceKm,
-                "km",
-              )}
-            </strong>
+          <dd className="plan-actual-list__values">
+            <span>
+              <small>Planned</small>
+              <strong>{formatDistanceKm(workout.distanceKm)}</strong>
+            </span>
+            <span>
+              <small>Actual</small>
+              <strong>{formatDistanceKm(result.summary.distanceKm)}</strong>
+            </span>
+            <span>
+              <small>Difference</small>
+              <strong>
+                {formatDelta(
+                  result.summary.distanceKm - workout.distanceKm,
+                  "km",
+                )}
+              </strong>
+            </span>
           </dd>
         </div>
         {repeatBlock?.kind === "repeat" && (
           <div>
             <dt>Work repetitions</dt>
-            <dd>
+            <dd className="plan-actual-list__values">
               <span>
-                Planned {repeatBlock.repetitions} repetitions from the repeat
-                block
+                <small>Planned</small>
+                <strong>{repeatBlock.repetitions} repetitions</strong>
               </span>
-              <strong>
-                {result.summary.completedWorkRepetitions === undefined
-                  ? "No completed repetitions recorded"
-                  : `${result.summary.completedWorkRepetitions} of ${repeatBlock.repetitions} completed`}
-              </strong>
-              {result.summary.completedWorkRepetitions !== undefined && (
-                <small>
-                  Difference{" "}
-                  {formatDelta(
-                    result.summary.completedWorkRepetitions -
-                      repeatBlock.repetitions,
-                    "repetitions",
-                  )}
-                </small>
-              )}
+              <span>
+                <small>Actual</small>
+                <strong>
+                  {result.summary.completedWorkRepetitions === undefined
+                    ? "Not recorded"
+                    : `${result.summary.completedWorkRepetitions} repetitions`}
+                </strong>
+              </span>
+              <span>
+                <small>Difference</small>
+                <strong>
+                  {result.summary.completedWorkRepetitions === undefined
+                    ? "Not available"
+                    : formatDelta(
+                        result.summary.completedWorkRepetitions -
+                          repeatBlock.repetitions,
+                        "repetitions",
+                      )}
+                </strong>
+              </span>
             </dd>
           </div>
         )}
@@ -363,7 +383,6 @@ function WorkoutPreviousAttempts({
       className="workout-result-section"
       aria-labelledby="previous-attempts-title"
     >
-      <span className="eyebrow">Same session type</span>
       <h2 id="previous-attempts-title">Previous attempts</h2>
       <ol className="previous-attempts-list">
         {context.previousAttempts.map(({ plannedWorkout, workoutResult }) => {
@@ -518,7 +537,6 @@ export function WorkoutFeedback({
       className="workout-result-section workout-feedback"
       aria-labelledby="feedback-title"
     >
-      <span className="eyebrow">Athlete-owned evidence</span>
       <h2 id="feedback-title">Athlete Feedback</h2>
       {feedback.length === 0 ? (
         <p className="workout-feedback__empty">
@@ -605,13 +623,11 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
         className="workout-detail__intent"
         aria-labelledby="intent-title"
       >
-        <span className="eyebrow">Purpose in the plan</span>
         <h2 id="intent-title">Coach’s intent</h2>
         <p>{workout.purpose}</p>
       </section>
 
       <section aria-labelledby="structure-title">
-        <span className="eyebrow">Planned structure</span>
         <h2 id="structure-title">Workout structure</h2>
         <ol className="workout-structure">
           {workout.prescription.blocks.map((block, index) => {
@@ -636,7 +652,6 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
       </section>
 
       <section aria-labelledby="targets-title">
-        <span className="eyebrow">Prescription at a glance</span>
         <h2 id="targets-title">Targets</h2>
         <table className="workout-targets">
           <tbody>
@@ -697,7 +712,6 @@ function ResultBackedWorkoutComposition({
         className="workout-result-section"
         aria-labelledby="lap-chart-title"
       >
-        <span className="eyebrow">Recorded laps</span>
         <h2 id="lap-chart-title">Per-lap pace and heart rate</h2>
         {laps.length === 0 ? (
           <p className="result-detail-chart__empty">No lap data recorded</p>
@@ -764,9 +778,11 @@ function WorkoutDetailScreen({
           <span aria-hidden="true">←</span>
           Back
         </button>
-        <span className="workout-screen__status">
-          {result ? result.status.toUpperCase() : "PLANNED"}
-        </span>
+        {result?.status !== "partial" && (
+          <span className="workout-screen__status">
+            {result ? result.status.toUpperCase() : "PLANNED"}
+          </span>
+        )}
       </header>
       <article className="workout-detail">
         <header className="workout-detail__title">
@@ -3200,8 +3216,16 @@ export function WorkspaceApp({
             <BrandMark className="brand-mark" />
             <span>Your Last Coach</span>
           </a>
-          {!compactLayout && paneTabs}
+          {paneTabs}
           <div className="topbar-actions">
+            <time
+              className="demo-date"
+              dateTime={state.clock.now}
+              title="The demo timeline is frozen"
+            >
+              Demo date ·{" "}
+              {formatDemoDate(state.clock.now, state.clock.timeZone)}
+            </time>
             <div className="status-wrap">
               <span
                 className="status-indicator"
@@ -3278,8 +3302,6 @@ export function WorkspaceApp({
         )}
 
         <main className="workspace-shell" id="training-plan">
-          {compactLayout && paneTabs}
-
           <div
             ref={panesRef}
             className="workspace-panes"
@@ -3293,7 +3315,7 @@ export function WorkspaceApp({
               }}
               className="workspace-pane"
               id="today"
-              aria-label="Today"
+              aria-label="Overview"
               hidden={!compactLayout && selectedPane !== "today"}
             >
               <div className="workspace workspace--single workspace--today">
