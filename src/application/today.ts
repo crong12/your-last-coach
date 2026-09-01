@@ -73,6 +73,9 @@ export interface TodayPlanProjection {
   weekStart: IsoDate;
   weekEnd: IsoDate;
   days: TodayPlanDay[];
+  calendarStart: IsoDate;
+  calendarEnd: IsoDate;
+  calendarDays: TodayPlanDay[];
 }
 
 export interface TodayWorkoutPrescription {
@@ -282,8 +285,9 @@ function buildPlanProjection(state: WorkspaceState, today: IsoDate) {
   const workouts = sortWorkouts(state.trainingPlan.plannedWorkouts);
   const weekStart = mondayOf(today);
   const weekEnd = addDays(weekStart, 6);
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(weekStart, index);
+  const calendarStart = state.trainingPlan.buildStartDate;
+  const calendarEnd = state.targetRace.date;
+  const buildDay = (date: IsoDate) => {
     const workout =
       workouts.find(({ date: workoutDate }) => workoutDate === date) ?? null;
     const result = workout
@@ -293,18 +297,28 @@ function buildPlanProjection(state: WorkspaceState, today: IsoDate) {
       : null;
     return {
       date,
-      weekday: DAY_NAMES[index],
+      weekday: DAY_NAMES[(new Date(dateValue(date)).getUTCDay() + 6) % 7],
       label: dateLabel(date),
       status: workout ? statusFor(date, today, result) : "rest",
       workout,
       result,
     } satisfies TodayPlanDay;
-  });
+  };
+  const calendarDays = Array.from(
+    { length: daysBetween(calendarStart, calendarEnd) + 1 },
+    (_, index) => buildDay(addDays(calendarStart, index)),
+  );
+  const days = Array.from({ length: 7 }, (_, index) =>
+    buildDay(addDays(weekStart, index)),
+  );
   return {
     available: workouts.length > 0,
     weekStart,
     weekEnd,
     days,
+    calendarStart,
+    calendarEnd,
+    calendarDays,
   } satisfies TodayPlanProjection;
 }
 

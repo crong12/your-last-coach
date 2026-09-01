@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type {
   TodayPaneProjection,
   TodayPlanDay,
@@ -48,6 +50,20 @@ function formatDay(date: string) {
     day: "numeric",
     timeZone: "UTC",
   }).format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatMonth(date: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}-01T12:00:00Z`));
+}
+
+function shiftMonth(month: string, offset: number) {
+  const value = new Date(`${month}-01T12:00:00Z`);
+  value.setUTCMonth(value.getUTCMonth() + offset);
+  return value.toISOString().slice(0, 7);
 }
 
 function formatWorkoutType(type: PlannedWorkout["type"]) {
@@ -395,9 +411,11 @@ function WeekDay({
 function TodayWeek({
   projection,
   onSelectWorkout,
+  onShowMonth,
 }: {
   projection: TodayPaneProjection;
   onSelectWorkout: TodayWorkoutSelect;
+  onShowMonth: () => void;
 }) {
   return (
     <section className="today-week" aria-labelledby="today-week-title">
@@ -408,6 +426,7 @@ function TodayWeek({
             {formatDate(projection.plan.weekEnd)}
           </h2>
         </div>
+        <CalendarViewControl view="week" onShowMonth={onShowMonth} />
       </header>
       <ol className="today-week-grid">
         {projection.plan.days.map((day) => (
@@ -418,11 +437,157 @@ function TodayWeek({
   );
 }
 
+function CalendarViewControl({
+  view,
+  onShowWeek,
+  onShowMonth,
+}: {
+  view: "week" | "month";
+  onShowWeek?: () => void;
+  onShowMonth?: () => void;
+}) {
+  return (
+    <div className="today-calendar-switcher" aria-label="Calendar view">
+      <button
+        type="button"
+        aria-label="Show week calendar"
+        aria-pressed={view === "week"}
+        onClick={onShowWeek}
+      >
+        Week
+      </button>
+      <button
+        type="button"
+        aria-label="Show month calendar"
+        aria-pressed={view === "month"}
+        onClick={onShowMonth}
+      >
+        Month
+      </button>
+    </div>
+  );
+}
+
+function MonthDay({
+  day,
+  today,
+  onSelectWorkout,
+}: {
+  day: TodayPlanDay;
+  today: string;
+  onSelectWorkout: TodayWorkoutSelect;
+}) {
+  const dayNumber = Number(day.date.slice(-2));
+  const label = day.workout
+    ? `${day.label}, ${day.workout.title}, ${formatDistanceKm(day.workout.distanceKm)}, ${statusLabel(day.status)}`
+    : `${day.label}, Rest day`;
+  return (
+    <li
+      className={`today-month-day today-month-day--${day.status}`}
+      aria-current={day.date === today ? "date" : undefined}
+    >
+      <time dateTime={day.date}>{dayNumber}</time>
+      {day.workout && (
+        <button
+          className="today-month-day__workout"
+          id={`month-workout-entry-${day.workout.id}`}
+          type="button"
+          aria-label={label}
+          onClick={(event) =>
+            onSelectWorkout(day.workout!, event.currentTarget)
+          }
+        >
+          <strong>{day.workout.title}</strong>
+          <span>{formatDistanceKm(day.workout.distanceKm)}</span>
+          <small>{statusLabel(day.status)}</small>
+        </button>
+      )}
+    </li>
+  );
+}
+
+function TodayMonth({
+  projection,
+  month,
+  onMonthChange,
+  onShowWeek,
+  onSelectWorkout,
+}: {
+  projection: TodayPaneProjection;
+  month: string;
+  onMonthChange: (month: string) => void;
+  onShowWeek: () => void;
+  onSelectWorkout: TodayWorkoutSelect;
+}) {
+  const monthDays = projection.plan.calendarDays.filter(({ date }) =>
+    date.startsWith(`${month}-`),
+  );
+  const firstDayOffset = monthDays[0]
+    ? (new Date(`${monthDays[0].date}T12:00:00Z`).getUTCDay() + 6) % 7
+    : 0;
+  const previousMonth = shiftMonth(month, -1);
+  const nextMonth = shiftMonth(month, 1);
+  const firstAvailableMonth = projection.plan.calendarStart.slice(0, 7);
+  const lastAvailableMonth = projection.plan.calendarEnd.slice(0, 7);
+  return (
+    <section className="today-month" aria-labelledby="today-calendar-title">
+      <header className="today-month__heading">
+        <div className="today-month__navigation">
+          <button
+            type="button"
+            aria-label="Show previous month"
+            disabled={previousMonth < firstAvailableMonth}
+            onClick={() => onMonthChange(previousMonth)}
+          >
+            <span aria-hidden="true">←</span>
+          </button>
+          <h2 id="today-calendar-title">{formatMonth(month)}</h2>
+          <button
+            type="button"
+            aria-label="Show next month"
+            disabled={nextMonth > lastAvailableMonth}
+            onClick={() => onMonthChange(nextMonth)}
+          >
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+        <CalendarViewControl view="month" onShowWeek={onShowWeek} />
+      </header>
+      <div className="today-month-scroll">
+        <div className="today-month-weekdays" aria-hidden="true">
+          {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map(
+            (weekday) => (
+              <span key={weekday}>{weekday}</span>
+            ),
+          )}
+        </div>
+        <ol className="today-month-grid">
+          {Array.from({ length: firstDayOffset }, (_, index) => (
+            <li key={`empty-${index}`} aria-hidden="true" />
+          ))}
+          {monthDays.map((day) => (
+            <MonthDay
+              key={day.date}
+              day={day}
+              today={projection.today}
+              onSelectWorkout={onSelectWorkout}
+            />
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 export function TodayPane({
   projection,
   onViewPendingProposal,
   onSelectWorkout,
 }: TodayPaneProps) {
+  const [calendarView, setCalendarView] = useState<"week" | "month">("week");
+  const [calendarMonth, setCalendarMonth] = useState(
+    projection.today.slice(0, 7),
+  );
   return (
     <div className="today-pane">
       <RaceHero projection={projection} />
@@ -437,10 +602,21 @@ export function TodayPane({
             projection={projection}
             onSelectWorkout={onSelectWorkout}
           />
-          <TodayWeek
-            projection={projection}
-            onSelectWorkout={onSelectWorkout}
-          />
+          {calendarView === "week" ? (
+            <TodayWeek
+              projection={projection}
+              onSelectWorkout={onSelectWorkout}
+              onShowMonth={() => setCalendarView("month")}
+            />
+          ) : (
+            <TodayMonth
+              projection={projection}
+              month={calendarMonth}
+              onMonthChange={setCalendarMonth}
+              onShowWeek={() => setCalendarView("week")}
+              onSelectWorkout={onSelectWorkout}
+            />
+          )}
         </>
       )}
     </div>

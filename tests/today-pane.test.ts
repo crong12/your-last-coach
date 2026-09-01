@@ -120,6 +120,74 @@ describe("TodayPane", () => {
     );
   });
 
+  it("switches between the week and month calendar while preserving workout navigation", () => {
+    const { onSelectWorkout } = renderPane();
+    const weekButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show week calendar"]',
+    );
+    const monthButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show month calendar"]',
+    );
+
+    expect(weekButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(monthButton?.getAttribute("aria-pressed")).toBe("false");
+
+    act(() => monthButton!.click());
+
+    expect(
+      container
+        .querySelector('button[aria-label="Show week calendar"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      container
+        .querySelector('button[aria-label="Show month calendar"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(container.querySelector(".today-week-grid")).toBeNull();
+    expect(container.querySelector("#today-calendar-title")?.textContent).toBe(
+      "August 2026",
+    );
+    expect(container.querySelectorAll(".today-month-day")).toHaveLength(31);
+    expect(
+      container.querySelector('.today-month-day[aria-current="date"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("5 × 1 km threshold");
+    expect(container.textContent).toContain("Completed");
+    expect(container.textContent).not.toContain("Missed");
+
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Show next month"]',
+        )!
+        .click(),
+    );
+    expect(container.querySelector("#today-calendar-title")?.textContent).toBe(
+      "September 2026",
+    );
+    expect(container.querySelectorAll(".today-month-day")).toHaveLength(30);
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="Show previous month"]',
+        )!
+        .click(),
+    );
+
+    const longRun = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        ".today-month-day__workout",
+      ),
+    ).find((button) => button.textContent?.includes("20 km long run"));
+    expect(longRun).not.toBeUndefined();
+    act(() => longRun!.click());
+    expect(onSelectWorkout).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "planned-2026-08-23-long" }),
+      longRun,
+    );
+  });
+
   it("renders and removes the single pending proposal signal without exposing proposal details", () => {
     const state = structuredClone(createDemoWorkspaceState());
     const projection = selectTodayPane(state);
@@ -227,7 +295,7 @@ describe("TodayPane", () => {
     expect(container.textContent).toContain("Today's Workout (27 August 2026)");
     expect(container.textContent).toContain("6 km recovery");
     expect(container.textContent).toContain("Planned distance");
-    expect(container.querySelectorAll("button")).toHaveLength(6);
+    expect(container.querySelectorAll("button")).toHaveLength(8);
     expect(
       container.querySelector('button[aria-label="View workout details"]'),
     ).not.toBeNull();

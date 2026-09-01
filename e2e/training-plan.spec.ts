@@ -779,7 +779,7 @@ test("shows a planned Workout without pulling completed content forward", async 
     page.getByRole("heading", { name: "18 km long run" }),
   ).toBeVisible();
   await expect(
-    page.getByText("Coach’s intent", { exact: true }).last(),
+    page.getByText("Intent", { exact: true }).last(),
   ).toBeVisible();
   await expect(
     page

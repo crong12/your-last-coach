@@ -111,7 +111,7 @@ test("links every Trends chart and card to the selected range on mobile @contrac
     page.locator(
       '[data-chart-card="pace-heart-rate"] [data-pace-heart-rate-point]',
     ),
-  ).toHaveCount(10);
+  ).toHaveCount(15);
   await expect(page.locator("[data-repeated-session-option]")).toHaveCount(1);
 
   const cardWidths = await page
@@ -259,7 +259,7 @@ test("keeps distance visible while an unavailable Workout Result load is marked 
   await expect(volume.locator("[data-volume-current]")).toHaveText("13.5 km");
   await expect(volume.locator("[data-load-current]")).toHaveText("—");
   await expect(volume).toContainText(
-    "8 of 11 Workout Results with available load",
+    "13 of 16 Workout Results with available load",
   );
 });
 

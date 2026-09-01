@@ -630,7 +630,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
         className="workout-detail__intent"
         aria-labelledby="intent-title"
       >
-        <h2 id="intent-title">Coach’s intent</h2>
+        <h2 id="intent-title">Intent</h2>
         <p>{workout.purpose}</p>
       </section>
 
@@ -667,12 +667,12 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
               <td>
                 {repeatBlock?.kind === "repeat"
                   ? `${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.max)}/km`
-                  : "No separate pace target recorded"}
+                  : "No pace target recorded"}
               </td>
             </tr>
             <tr>
               <th scope="row">Effort / heart-rate guidance</th>
-              <td>No separate guidance recorded</td>
+              <td>No guidance recorded</td>
             </tr>
             <tr>
               <th scope="row">Planned distance</th>
@@ -687,7 +687,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
               <td>
                 {repeatBlock?.kind === "repeat"
                   ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
-                  : "No separate recovery protocol recorded"}
+                  : "No recovery protocol recorded"}
               </td>
             </tr>
           </tbody>
