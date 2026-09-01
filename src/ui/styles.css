@@ -316,9 +316,10 @@ summary:focus-visible {
 .workout-detail__intent p {
   max-width: 760px;
   margin: 0;
-  font-family: "Newsreader", Georgia, serif;
-  font-size: clamp(20px, 3vw, 28px);
-  line-height: 1.45;
+  color: var(--ink-soft);
+  font-family: "Manrope", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
 }
 .workout-structure {
   display: grid;
@@ -999,7 +1000,8 @@ button.previous-attempt:hover {
   box-shadow: 0 0 0 4px rgba(232, 120, 81, 0.14);
 }
 .today-workout-card,
-.today-week {
+.today-week,
+.today-month {
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(23, 51, 48, 0.12);
@@ -1109,6 +1111,30 @@ button.previous-attempt:hover {
   padding: 20px 22px 17px;
   border-bottom: 1px solid var(--line);
 }
+.today-calendar-switcher {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(23, 51, 48, 0.05);
+}
+.today-calendar-switcher button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+.today-calendar-switcher button[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--deep-sea);
+}
 .today-week__heading h2 {
   margin: 3px 0 0;
   font-size: 28px;
@@ -1213,6 +1239,138 @@ button.previous-attempt:hover {
   border-style: dashed;
   color: var(--muted);
   background: transparent;
+}
+.today-month__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.today-month__navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.today-month__navigation h2 {
+  min-width: 180px;
+  margin: 0;
+  text-align: center;
+  font-size: 28px;
+}
+.today-month__navigation button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--deep-sea);
+  background: var(--paper);
+  cursor: pointer;
+}
+.today-month__navigation button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.today-month-scroll {
+  overflow-x: auto;
+}
+.today-month-weekdays,
+.today-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(104px, 1fr));
+  min-width: 728px;
+}
+.today-month-weekdays span {
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.today-month-weekdays span:last-child {
+  border-right: 0;
+}
+.today-month-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.today-month-grid > li {
+  min-height: 126px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.today-month-grid > li:nth-child(7n) {
+  border-right: 0;
+}
+.today-month-day {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 9px;
+}
+.today-month-day > time {
+  width: 26px;
+  height: 26px;
+  padding-top: 5px;
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: center;
+}
+.today-month-day[aria-current="date"] > time {
+  color: var(--paper);
+  background: var(--track);
+}
+.today-month-day__workout {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--foam);
+  cursor: pointer;
+  text-align: left;
+}
+.today-month-day__workout:hover {
+  background: #edf5f0;
+  box-shadow: inset 0 0 0 1px var(--sea);
+}
+.today-month-day__workout strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.today-month-day__workout span,
+.today-month-day__workout small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+.today-month-day__workout small {
+  color: var(--deep-sea);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.today-month-day--partial .today-month-day__workout,
+.today-month-day--stopped .today-month-day__workout {
+  background: var(--track-soft);
+}
+.today-month-day--missed .today-month-day__workout {
+  opacity: 0.65;
 }
 .plan-hero {
   display: flex;
@@ -3904,7 +4062,8 @@ h1 {
     text-align: left;
   }
   .today-workout-card__heading,
-  .today-week__heading {
+  .today-week__heading,
+  .today-month__heading {
     align-items: flex-start;
     flex-direction: column;
   }

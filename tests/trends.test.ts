@@ -340,7 +340,7 @@ describe("issue 64 fixture evidence", () => {
       distanceKm: 13.5,
       trainingLoad: null,
     });
-    expect(projection.coverage).toEqual({ availableLoads: 9, results: 11 });
+    expect(projection.coverage).toEqual({ availableLoads: 14, results: 16 });
 
     const degraded = structuredClone(state) as WorkspaceState;
     const recoveryResult = degraded.workoutResults.find(
@@ -350,8 +350,8 @@ describe("issue 64 fixture evidence", () => {
     delete recoveryResult!.summary.trainingLoad;
     expect(projectWeeklyVolumeLoad(degraded, "4w").status).toBe("partial");
     expect(projectWeeklyVolumeLoad(degraded, "4w").coverage).toEqual({
-      availableLoads: 8,
-      results: 11,
+      availableLoads: 13,
+      results: 16,
     });
   });
 

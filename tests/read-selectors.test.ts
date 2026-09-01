@@ -52,7 +52,7 @@ describe("shared coaching read selectors", () => {
     expect(result.evidenceRefs).toContain(
       "coaching-topic:coaching-topic:shin-discomfort",
     );
-    expect(result.data.recentTraining).toHaveLength(11);
+    expect(result.data.recentTraining).toHaveLength(16);
     expect(result.data.recentTraining.at(-1)).toMatchObject({
       id: "result-2026-08-26-threshold",
       plannedWorkoutId: "planned-2026-08-26-threshold",

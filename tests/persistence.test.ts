@@ -541,9 +541,12 @@ describe("workspace initialization", () => {
     expect(initialized.durability).toBe("persistent");
   });
 
-  it("fills newly seeded summary metrics into the existing demo result", async () => {
+  it("fills newly seeded workout results and metrics into existing demo data", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();
+    saved.state.workoutResults = saved.state.workoutResults.filter(
+      ({ id }) => id !== "result-2026-08-02",
+    );
     const result = saved.state.workoutResults.find(
       ({ id }) => id === "result-2026-08-26-threshold",
     );
@@ -570,6 +573,15 @@ describe("workspace initialization", () => {
       migrateSaved: migrateDemoWorkspace,
     });
 
+    expect(
+      initialized.state.workoutResults.find(
+        ({ id }) => id === "result-2026-08-02",
+      ),
+    ).toMatchObject({
+      plannedWorkoutId: "planned-2026-08-02-long",
+      status: "completed",
+      summary: { distanceKm: 14 },
+    });
     expect(
       initialized.state.workoutResults.find(
         ({ id }) => id === "result-2026-08-26-threshold",

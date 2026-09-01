@@ -463,11 +463,11 @@ test("renders honest unavailable targets for a simple Planned Workout", async ({
   const screen = page.getByRole("main", { name: "Planned Workout" });
 
   await expect(
-    screen.getByRole("cell", { name: "No separate pace target recorded" }),
+    screen.getByRole("cell", { name: "No pace target recorded" }),
   ).toBeVisible();
   await expect(
     screen.getByRole("cell", {
-      name: "No separate recovery protocol recorded",
+      name: "No recovery protocol recorded",
     }),
   ).toBeVisible();
   await expect(screen.getByText("Main set", { exact: true })).toBeVisible();

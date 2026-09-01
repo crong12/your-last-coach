@@ -57,6 +57,44 @@ const completedResult = (
   laps: [],
 });
 
+export const DEMO_BACKFILLED_WORKOUT_RESULTS = [
+  completedResult("2026-08-02", "planned-2026-08-02-long", 14, {
+    durationSeconds: 5_040,
+    trainingLoad: 62,
+    averagePaceSecondsPerKm: 360,
+    averageHeartRateBpm: 144,
+    activityKind: "outdoor_run",
+  }),
+  completedResult("2026-08-04", "planned-2026-08-04-easy", 8, {
+    durationSeconds: 2_880,
+    trainingLoad: 33,
+    averagePaceSecondsPerKm: 360,
+    averageHeartRateBpm: 137,
+    activityKind: "outdoor_run",
+  }),
+  completedResult("2026-08-08", "planned-2026-08-08-recovery", 6, {
+    durationSeconds: 2_220,
+    trainingLoad: 24,
+    averagePaceSecondsPerKm: 370,
+    averageHeartRateBpm: 130,
+    activityKind: "outdoor_run",
+  }),
+  completedResult("2026-08-09", "planned-2026-08-09-long", 16, {
+    durationSeconds: 5_840,
+    trainingLoad: 68,
+    averagePaceSecondsPerKm: 365,
+    averageHeartRateBpm: 145,
+    activityKind: "outdoor_run",
+  }),
+  completedResult("2026-08-11", "planned-2026-08-11-easy", 8, {
+    durationSeconds: 2_840,
+    trainingLoad: 31,
+    averagePaceSecondsPerKm: 355,
+    averageHeartRateBpm: 136,
+    activityKind: "outdoor_run",
+  }),
+] satisfies WorkoutResult[];
+
 const readinessRecord = (
   date: IsoDate,
   values: {
@@ -472,6 +510,7 @@ export const DEMO_WORKSPACE_STATE = {
     },
   ],
   workoutResults: [
+    ...DEMO_BACKFILLED_WORKOUT_RESULTS,
     {
       id: "result-2026-08-06-threshold",
       plannedWorkoutId: "planned-2026-08-06-threshold",

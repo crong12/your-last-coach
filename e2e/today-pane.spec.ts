@@ -176,6 +176,35 @@ test("renders the normal Today pane on mobile with seven honest day tiles", asyn
   await today.screenshot({ path: "/tmp/issue-62-today-mobile.png" });
 });
 
+test("switches the Overview calendar from week to month and opens a historical workout @contract", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/#today");
+
+  await page.getByRole("button", { name: "Show month calendar" }).click();
+
+  const calendar = page.getByRole("region", { name: "August 2026" });
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator(".today-month-day")).toHaveCount(31);
+  await expect(calendar.getByText("MISSED", { exact: true })).toHaveCount(0);
+  await expect(
+    calendar.locator('.today-month-day[aria-current="date"]'),
+  ).toContainText("26");
+  await expect(
+    page.getByRole("button", { name: "Show month calendar" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await calendar
+    .getByRole("button", { name: /Sunday 23 August, 20 km long run/ })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => location.hash))
+    .toBe("#workout/planned-2026-08-23-long");
+  await expect(
+    page.getByRole("main", { name: "Workout Result" }),
+  ).toBeVisible();
+});
+
 test("contains the Today 5+2 layout at 360px without nested horizontal scrolling", async ({
   page,
 }) => {

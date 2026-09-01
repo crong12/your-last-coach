@@ -41,7 +41,7 @@ describe("Workout Result detail context", () => {
     });
     expect(
       state.workoutResults.filter((result) => result.status === "completed"),
-    ).toHaveLength(10);
+    ).toHaveLength(15);
   });
 
   it("returns result-backed context with same-type previous attempts newest first and excludes the current result", () => {
