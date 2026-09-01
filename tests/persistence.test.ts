@@ -552,6 +552,16 @@ describe("workspace initialization", () => {
     delete result!.summary.averagePaceSecondsPerKm;
     delete result!.summary.averageHeartRateBpm;
     delete result!.summary.trainingLoad;
+    const warmup = result!.laps.find(({ id }) => id === "lap-threshold-warmup");
+    expect(warmup).toBeDefined();
+    delete warmup!.averageHeartRateBpm;
+    delete warmup!.maximumHeartRateBpm;
+    delete warmup!.paceSecondsPerKm;
+    const firstRepetition = result!.laps.find(
+      ({ id }) => id === "lap-threshold-rep-1",
+    );
+    expect(firstRepetition).toBeDefined();
+    firstRepetition!.maximumHeartRateBpm = 175;
     storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
 
     const initialized = await initializeWorkspace({
@@ -569,6 +579,20 @@ describe("workspace initialization", () => {
       averagePaceSecondsPerKm: 366,
       averageHeartRateBpm: 169,
     });
+    expect(
+      initialized.state.workoutResults
+        .find(({ id }) => id === "result-2026-08-26-threshold")
+        ?.laps.find(({ id }) => id === "lap-threshold-warmup"),
+    ).toMatchObject({
+      paceSecondsPerKm: 375,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 134,
+    });
+    expect(
+      initialized.state.workoutResults
+        .find(({ id }) => id === "result-2026-08-26-threshold")
+        ?.laps.find(({ id }) => id === "lap-threshold-rep-1"),
+    ).toMatchObject({ maximumHeartRateBpm: 175 });
   });
 
   it.each(INVALID_SAVED_CASES)(

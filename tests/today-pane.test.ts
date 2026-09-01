@@ -75,6 +75,9 @@ describe("TodayPane", () => {
     expect(container.textContent).toContain("169 bpm");
     expect(container.textContent).not.toContain("TRAINING LOAD");
     expect(container.textContent).toContain("Workout recorded.");
+    expect(container.textContent).toContain("Today's Workout (26 August 2026)");
+    expect(container.textContent).not.toContain("Target Race");
+    expect(container.textContent).not.toContain("CURRENT PLAN WEEK");
     expect(
       container.querySelector("#today-week-title")?.textContent?.trim(),
     ).toBe("24–30 August 2026");
@@ -87,6 +90,8 @@ describe("TodayPane", () => {
     expect(tiles).toHaveLength(7);
     expect(container.textContent).toContain("Monday 24 August");
     expect(container.textContent).toContain("Tuesday 25 August");
+    expect(container.textContent).toContain("Rest day");
+    expect(container.textContent).not.toContain("Space to recover");
     expect(container.textContent).toContain("Wednesday 26 August");
     expect(container.textContent).toContain("Thursday 27 August");
     expect(container.textContent).toContain("Friday 28 August");
@@ -214,7 +219,7 @@ describe("TodayPane", () => {
     const plannedState = structuredClone(createDemoWorkspaceState());
     plannedState.clock.now = "2026-08-27T12:00:00+01:00";
     const planned = renderPane(selectTodayPane(plannedState));
-    expect(container.textContent).toContain("TODAY");
+    expect(container.textContent).toContain("Today's Workout (27 August 2026)");
     expect(container.textContent).toContain("6 km recovery");
     expect(container.textContent).toContain("Planned distance");
     expect(container.querySelectorAll("button")).toHaveLength(6);

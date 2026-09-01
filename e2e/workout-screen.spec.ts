@@ -103,7 +103,7 @@ test("restores a direct Workout link through reload and returns safely to Today"
   await expect
     .poll(() => page.evaluate(() => location.hash))
     .toBe("#workout/planned-2026-08-30-long");
-  await page.getByRole("button", { name: "Back to Today" }).click();
+  await page.getByRole("button", { name: "Back to Overview" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(screen).not.toBeAttached();
 });
@@ -117,8 +117,10 @@ test("renders the selector-backed partial result composition and suspends the ap
   const screen = page.getByRole("main", { name: "Workout Result" });
   await expect(screen.getByText("26 August 2026")).toBeVisible();
   await expect(screen.getByText("Threshold", { exact: true })).toBeVisible();
-  await expect(screen.getByText("PARTIAL", { exact: true })).toBeVisible();
-  await expect(screen.getByText("7.5 km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("PARTIAL", { exact: true })).toHaveCount(0);
+  await expect(
+    screen.locator(".workout-stats").getByText("7.5 km", { exact: true }),
+  ).toBeVisible();
   await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
   await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
   await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
@@ -138,13 +140,14 @@ test("renders the selector-backed partial result composition and suspends the ap
     screen.getByRole("heading", { name: "Plan versus actual" }),
   ).toBeVisible();
   await expect(
-    screen.getByText("3 of 5 completed", { exact: true }),
+    screen.getByText("3 repetitions", { exact: true }),
   ).toBeVisible();
   await expect(screen.locator("svg[data-result-detail-chart]")).toBeVisible();
-  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(3);
+  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(5);
   await expect(screen.locator("[data-result-chart-readout]")).toContainText(
-    "Lap 1",
+    "6:15/km · Avg HR 130 bpm · Max HR 134 bpm",
   );
+  await expect(screen.locator(".eyebrow")).toHaveCount(0);
   await expect(screen.locator("summary", { hasText: "Splits" })).toBeVisible();
   await expect(screen.locator("details")).not.toHaveAttribute("open", "");
   await expect(
@@ -181,7 +184,9 @@ test("renders the provenance-labelled completed result with recorded chart and e
   await expect(
     screen.getByText("Source: seeded synthetic COROS-shaped Workout Result"),
   ).toBeVisible();
-  await expect(screen.getByText("11 km", { exact: true })).toBeVisible();
+  await expect(
+    screen.locator(".workout-stats").getByText("11 km", { exact: true }),
+  ).toBeVisible();
   await expect(screen.getByText("1:00:00", { exact: true })).toBeVisible();
   await expect(screen.getByText("5:27/km", { exact: true })).toBeVisible();
   await expect(screen.getByText("Derived", { exact: true })).toBeVisible();
@@ -274,7 +279,7 @@ test("keeps a stopped result result-backed without adding a fixture result", asy
   await expect(
     screen.getByText("Workout Result", { exact: true }),
   ).toBeVisible();
-  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(3);
+  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(5);
   await expect(screen.getByText("Per-lap pace and heart rate")).toBeVisible();
 });
 
@@ -344,10 +349,10 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .poll(() => currentScreen.evaluate((screen) => screen.scrollTop))
     .toBe(workoutOriginScrollTop);
   await expect(
-    page.getByRole("button", { name: "Back to Today" }),
+    page.getByRole("button", { name: "Back to Overview" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Back to Today" }).click();
+  await page.getByRole("button", { name: "Back to Overview" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(currentEntry).toBeFocused();
   await expect
@@ -368,7 +373,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   await expect(
-    page.getByRole("button", { name: "Back to Today" }),
+    page.getByRole("button", { name: "Back to Overview" }),
   ).toBeVisible();
 
   await page.goForward();
@@ -415,7 +420,7 @@ test("records workout feedback through the shared application state and Coaching
   await expect(
     screen.getByText("The completed session felt controlled."),
   ).toBeVisible();
-  await screen.getByRole("button", { name: "Back to Today" }).click();
+  await screen.getByRole("button", { name: "Back to Overview" }).click();
   await page.getByRole("button", { name: "Show Coaching pane" }).click();
   const timeline = page.getByRole("region", { name: "Coaching timeline" });
   await expect(
@@ -481,7 +486,7 @@ test("canonicalizes malformed and unknown Workout routes to Today", async ({
     await expect(
       page.getByRole("main", { name: "Planned Workout" }),
     ).not.toBeAttached();
-    await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
   }
 });
 
@@ -507,7 +512,7 @@ test("restores a desktop origin through visible back and browser forward", async
       ? "Trends"
       : origin.hash === "#coaching"
         ? "Coaching"
-        : "Today";
+        : "Overview";
 
   await workout.click();
   await expect

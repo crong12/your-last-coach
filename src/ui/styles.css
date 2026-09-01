@@ -81,11 +81,12 @@ a:focus-visible {
     var(--mist);
 }
 .topbar {
-  position: relative;
+  position: sticky;
   z-index: 5;
-  display: flex;
+  top: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 20px;
   padding: 18px clamp(18px, 3vw, 42px);
   border-bottom: 1px solid rgba(23, 51, 48, 0.12);
@@ -111,7 +112,14 @@ a:focus-visible {
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 10px;
+}
+.demo-date {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .status-wrap {
   position: relative;
@@ -370,7 +378,7 @@ a:focus-visible {
 }
 .workout-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-top: clamp(32px, 5vw, 54px);
 }
@@ -450,6 +458,28 @@ a:focus-visible {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
+}
+.plan-actual-list dd.plan-actual-list__values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.plan-actual-list__values > span {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
+}
+.plan-actual-list__values small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.plan-actual-list__values strong {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .plan-versus-actual__delta,
 .plan-actual-list strong {
@@ -703,14 +733,12 @@ button.previous-attempt:hover {
   font-weight: 700;
 }
 .pane-nav {
-  position: sticky;
-  z-index: 4;
-  top: 12px;
   display: flex;
   justify-content: center;
+  justify-self: center;
   gap: 6px;
   width: fit-content;
-  margin: 18px auto 0;
+  margin: 0;
   padding: 5px;
   border: 1px solid rgba(23, 51, 48, 0.12);
   border-radius: 999px;
@@ -3156,14 +3184,29 @@ h1 {
     padding: 15px;
   }
   .topbar {
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
     padding: 14px 16px;
   }
   .topbar-actions {
-    align-items: center;
+    display: contents;
+  }
+  .demo-date {
+    grid-row: 3;
+    grid-column: 1;
+  }
+  .status-wrap {
+    grid-row: 3;
+    grid-column: 2;
+    justify-self: end;
+  }
+  .app-menu {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
   }
   .status-indicator {
-    max-width: 185px;
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -3172,8 +3215,8 @@ h1 {
     padding: 6px 11px;
   }
   .pane-nav {
-    top: 8px;
-    margin-top: 10px;
+    grid-row: 2;
+    grid-column: 1 / -1;
   }
   .pane-nav__button {
     min-width: 40px;

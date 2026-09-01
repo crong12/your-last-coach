@@ -15,6 +15,7 @@ test("renders the Final Turn mark in the accessible home link", async ({
   await expect(home).toBeVisible();
   await expect(home.locator('[data-brand-mark="final-turn"]')).toBeVisible();
   await expect(home.locator("svg")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByText("Demo date · 26 August 2026")).toBeVisible();
 });
 
 test("publishes the Final Turn mark as the browser icon", async ({ page }) => {
@@ -36,7 +37,7 @@ test("exposes the three-pane navigation and restores a mobile deep link", async 
     name: "Workspace sections",
   });
   await expect(
-    navigation.getByRole("button", { name: "Show Today pane" }),
+    navigation.getByRole("button", { name: "Show Overview pane" }),
   ).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Show Trends pane" }),
@@ -47,7 +48,7 @@ test("exposes the three-pane navigation and restores a mobile deep link", async 
 
   const panes = page.getByRole("group", { name: "Workspace panes" });
   await expect(panes).toHaveAttribute("tabindex", "0");
-  await expect(page.getByRole("region", { name: "Today" })).toBeAttached();
+  await expect(page.getByRole("region", { name: "Overview" })).toBeAttached();
   await expect(page.getByRole("region", { name: "Trends" })).toBeAttached();
   await expect(
     page.getByRole("region", { name: "Coaching", exact: true }),
@@ -129,7 +130,7 @@ test("desktop stacks sections and keeps the sticky section nav in sync", async (
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#coaching");
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   const trends = page.getByRole("region", { name: "Trends" });
   const coaching = page.getByRole("region", {
     name: "Coaching",

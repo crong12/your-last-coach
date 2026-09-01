@@ -95,6 +95,7 @@ export interface WorkoutLap {
   distanceKm: number;
   paceSecondsPerKm?: number;
   averageHeartRateBpm?: number;
+  maximumHeartRateBpm?: number;
 }
 
 export interface WorkoutResult {

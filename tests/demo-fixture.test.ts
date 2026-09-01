@@ -117,6 +117,7 @@ describe("demo-athlete-v1", () => {
         distanceKm: 1,
         paceSecondsPerKm: 276,
         averageHeartRateBpm: 165,
+        maximumHeartRateBpm: 172,
       },
       {
         id: "lap-threshold-rep-2",
@@ -124,6 +125,7 @@ describe("demo-athlete-v1", () => {
         distanceKm: 1,
         paceSecondsPerKm: 279,
         averageHeartRateBpm: 171,
+        maximumHeartRateBpm: 178,
       },
       {
         id: "lap-threshold-rep-3",
@@ -131,8 +133,21 @@ describe("demo-athlete-v1", () => {
         distanceKm: 1,
         paceSecondsPerKm: 288,
         averageHeartRateBpm: 176,
+        maximumHeartRateBpm: 183,
       },
     ]);
+    expect(result?.laps[0]).toMatchObject({
+      id: "lap-threshold-warmup",
+      paceSecondsPerKm: 375,
+      averageHeartRateBpm: 130,
+      maximumHeartRateBpm: 134,
+    });
+    expect(result?.laps.at(-1)).toMatchObject({
+      id: "lap-threshold-cooldown",
+      paceSecondsPerKm: 390,
+      averageHeartRateBpm: 142,
+      maximumHeartRateBpm: 150,
+    });
   });
 
   it("returns an immutable fresh fixture with initial plan history", async () => {

@@ -103,7 +103,6 @@ function RaceHero({ projection }: { projection: TodayPaneProjection }) {
   return (
     <section className="today-hero" aria-labelledby="today-hero-title">
       <div className="today-hero__identity">
-        <span className="eyebrow">Target Race</span>
         <h1 id="today-hero-title">{race.name}</h1>
         <time dateTime={race.date}>{formatDate(race.date)}</time>
       </div>
@@ -191,7 +190,6 @@ function PlannedTodayCard({
     <>
       <div className="today-workout-card__heading">
         <div>
-          <span className="eyebrow">TODAY</span>
           <h2 id="today-workout-title">{workout.title}</h2>
         </div>
         <div className="today-workout-types" aria-label="Workout type">
@@ -245,7 +243,6 @@ function ResultTodayCard({
     <>
       <div className="today-workout-card__heading">
         <div>
-          <span className="eyebrow">TODAY</span>
           <h2 id="today-workout-title">{workout.title}</h2>
         </div>
       </div>
@@ -300,7 +297,6 @@ function RestTodayCard({
 }) {
   return (
     <>
-      <span className="eyebrow">TODAY</span>
       <h2 id="today-workout-title">Rest day</h2>
       <p className="today-rest-copy">
         {nextWorkout
@@ -324,6 +320,9 @@ function TodayWorkoutCard({
       className="today-workout-card"
       aria-labelledby="today-workout-title"
     >
+      <span className="eyebrow">
+        Today's Workout ({formatDate(projection.today)})
+      </span>
       {workout.state === "planned" ? (
         <PlannedTodayCard
           workout={workout.workout}
@@ -377,8 +376,7 @@ function WeekDay({
         </button>
       ) : (
         <div className="today-week-day__rest" aria-label={label}>
-          <strong>Rest</strong>
-          <small>Space to recover</small>
+          <strong>Rest day</strong>
         </div>
       )}
     </li>
@@ -396,13 +394,11 @@ function TodayWeek({
     <section className="today-week" aria-labelledby="today-week-title">
       <header className="today-week__heading">
         <div>
-          <span className="eyebrow">Current plan week</span>
           <h2 id="today-week-title">
             {formatDay(projection.plan.weekStart)}–
             {formatDate(projection.plan.weekEnd)}
           </h2>
         </div>
-        <p>Monday–Sunday</p>
       </header>
       <ol className="today-week-grid">
         {projection.plan.days.map((day) => (

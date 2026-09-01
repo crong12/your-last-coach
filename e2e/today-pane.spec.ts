@@ -128,7 +128,7 @@ test("renders the normal Today pane on mobile with seven honest day tiles", asyn
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#today");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(today.locator(".today-pane")).toBeVisible();
   await expect(
     today.getByRole("heading", { name: "Brighton Marathon" }),
@@ -182,7 +182,7 @@ test("contains the Today 5+2 layout at 360px without nested horizontal scrolling
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/#today");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(today.locator(".today-pane")).toBeVisible();
   await expect(today.locator(".today-week-grid")).toBeVisible();
   expect(
@@ -210,7 +210,7 @@ test("sends the pending signal to Coaching with pane replacement semantics", asy
   await runFallbackTool(page, pendingProposal());
   await page
     .getByRole("main", { name: "Workout Adaptation review" })
-    .getByRole("button", { name: "Back to Today" })
+    .getByRole("button", { name: "Back to Overview" })
     .click();
   const historyLength = await page.evaluate(() => history.length);
   const signal = page.locator("#today-pending-proposal");
@@ -237,7 +237,7 @@ test("pushes a planned Workout tile and restores its focus on Back", async ({
   await expect(
     screen.getByRole("heading", { name: "6 km recovery" }),
   ).toBeFocused();
-  await screen.getByRole("button", { name: "Back to Today" }).click();
+  await screen.getByRole("button", { name: "Back to Overview" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(tile).toBeFocused();
 });
@@ -248,7 +248,7 @@ test("pushes a result-bearing tile and restores its focus on Back", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#today");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   const details = today.getByRole("button", { name: "View workout details" });
   await details.click();
   await expect
@@ -258,14 +258,14 @@ test("pushes a result-bearing tile and restores its focus on Back", async ({
   await expect(
     screen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
-  await expect(screen.getByText("PARTIAL", { exact: true })).toBeVisible();
+  await expect(screen.getByText("PARTIAL", { exact: true })).toHaveCount(0);
   await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
   await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
   await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
   await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
     0,
   );
-  await screen.getByRole("button", { name: "Back to Today" }).click();
+  await screen.getByRole("button", { name: "Back to Overview" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#today");
   await expect(details).toBeFocused();
 });
@@ -276,9 +276,9 @@ test("keeps the desktop Today composition bounded and captures it", async ({
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/#today");
 
-  const today = page.getByRole("region", { name: "Today" });
+  const today = page.getByRole("region", { name: "Overview" });
   await expect(today.locator(".today-pane")).toBeVisible();
-  await expect(today.getByText("Current plan week")).toBeVisible();
+  await expect(today.getByText("Current plan week")).toHaveCount(0);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(1280);
