@@ -174,7 +174,9 @@ test("renders the weekly Coaching notebook in semantic mobile order @contract", 
 
   await evidenceLink.click();
   await expect(page).toHaveURL(/#workout\/planned-2026-08-23-long$/);
-  await page.getByRole("button", { name: "Back" }).click();
+  await page
+    .getByRole("button", { name: "Back to Coaching", exact: true })
+    .click();
   await expect(page).toHaveURL(/#coaching$/);
   await expect(evidenceLink).toBeFocused();
 
