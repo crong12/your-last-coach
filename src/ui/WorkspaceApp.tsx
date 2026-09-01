@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   useSyncExternalStore,
@@ -18,6 +19,12 @@ import type {
 import type { Durability } from "../application/ports";
 import type { WorkspaceApplication } from "../application/createWorkspaceApplication";
 import type { ReviewCoordinator } from "../application/createReviewCoordinator";
+import {
+  DEMO_ADAPTATION_HISTORY,
+  DEMO_WEEKLY_PROGRESS_REVIEWS,
+  type CoachingNotebookReview,
+  type SeededAdaptationHistoryEntry,
+} from "../demo/demoCoachingNotebook";
 import { selectTodayPane } from "../application/today";
 import type { TrendsRange } from "../application/trends";
 import { projectWorkoutResultMetrics } from "../application/workoutResultMetrics";
@@ -1702,81 +1709,423 @@ function RecentTrainingCard({
   );
 }
 
+function reviewDateRange(review: CoachingNotebookReview) {
+  const start = new Date(`${review.weekStart}T00:00:00Z`);
+  const end = new Date(`${review.weekEnd}T00:00:00Z`);
+  if (
+    start.getUTCFullYear() === end.getUTCFullYear() &&
+    start.getUTCMonth() === end.getUTCMonth()
+  ) {
+    return `${start.getUTCDate()}–${formatDate(review.weekEnd)}`;
+  }
+  return `${formatDate(review.weekStart)}–${formatDate(review.weekEnd)}`;
+}
+
+function EvidenceReferences({
+  evidenceRefs,
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  evidenceRefs: string[];
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  const evidenceListId = useId();
+  const references = [...new Set(evidenceRefs)].map((ref) => {
+    const result = workoutResultForEvidenceRef(ref, context);
+    const plannedWorkoutId = ref.startsWith("planned-workout:")
+      ? ref.slice("planned-workout:".length)
+      : result?.plannedWorkoutId;
+    const workout = plannedWorkouts.find(({ id }) => id === plannedWorkoutId);
+    return {
+      ref,
+      label: sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
+      workout,
+      opensTrends:
+        ref.startsWith("observation:") &&
+        !sourceLabelForEvidenceRef(ref, context, plannedWorkouts).startsWith(
+          "Evidence reference ",
+        ),
+    };
+  });
+  if (references.length === 0) {
+    return (
+      <p className="notebook-empty notebook-empty--inline">
+        Evidence unavailable.
+      </p>
+    );
+  }
+  return (
+    <nav className="evidence-reference-list" aria-label="Supporting evidence">
+      {references.map(({ ref, label, workout, opensTrends }, index) => {
+        if (!workout && !opensTrends) {
+          return (
+            <span className="evidence-reference-list__literal" key={ref}>
+              {label}
+            </span>
+          );
+        }
+        return (
+          <a
+            id={`${evidenceListId}-evidence-${index}`}
+            key={ref}
+            href={
+              workout
+                ? workspaceRouteHash({ kind: "workout", workoutId: workout.id })
+                : "#trends"
+            }
+            onClick={
+              workout && onSelectWorkout
+                ? (event) => {
+                    event.preventDefault();
+                    onSelectWorkout(workout, event.currentTarget);
+                  }
+                : undefined
+            }
+          >
+            {label}
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ReviewSections({
+  review,
+  headingLevel = 4,
+}: {
+  review: CoachingNotebookReview;
+  headingLevel?: 3 | 4;
+}) {
+  const Heading = headingLevel === 3 ? "h3" : "h4";
+  const sections = [
+    { label: "Progress", statements: review.progress },
+    { label: "Watch", statements: review.watch },
+    { label: "Next focus", statements: review.nextFocus },
+  ];
+  return (
+    <div className="weekly-review-sections">
+      {sections.map(({ label, statements }) => (
+        <section key={label}>
+          <Heading>{label}</Heading>
+          {statements.length === 0 ? (
+            <p className="weekly-review-sections__quiet">
+              Nothing new to flag.
+            </p>
+          ) : (
+            <ul>
+              {statements.map((statement) => (
+                <li key={statement}>{statement}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function LatestWeeklyReview({
+  review,
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  review: CoachingNotebookReview | null;
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  return (
+    <section
+      className="notebook-card latest-weekly-review"
+      aria-label="Latest Weekly Progress Review"
+    >
+      <div className="notebook-card__heading">
+        <div>
+          <span className="eyebrow">Latest Weekly Progress Review</span>
+          <h2>
+            {review ? reviewDateRange(review) : "No completed review yet"}
+          </h2>
+        </div>
+        {review && (
+          <time dateTime={review.recordedAt}>
+            Recorded {formatDate(review.recordedAt.slice(0, 10))}
+          </time>
+        )}
+      </div>
+      {review ? (
+        <>
+          <h3>{review.headline}</h3>
+          <p className="latest-weekly-review__assessment">
+            {review.assessment}
+          </p>
+          <ReviewSections review={review} />
+          <div className="notebook-provenance">
+            <span>Coaching Evidence</span>
+            <EvidenceReferences
+              evidenceRefs={review.evidenceRefs}
+              context={context}
+              plannedWorkouts={plannedWorkouts}
+              onSelectWorkout={onSelectWorkout}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="notebook-empty">
+          A completed Monday–Sunday review will appear here when one is
+          recorded.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CoachingTopicsCard({
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  return (
+    <section
+      className="notebook-card coaching-topics-card"
+      aria-label="Coaching Topics"
+    >
+      <div className="notebook-card__heading">
+        <div>
+          <span className="eyebrow">Still shaping future coaching</span>
+          <h2>Coaching Topics</h2>
+        </div>
+      </div>
+      {context.activeCoachingTopics.length === 0 ? (
+        <p className="notebook-empty">No active Coaching Topics.</p>
+      ) : (
+        <div className="coaching-topic-list">
+          {context.activeCoachingTopics.map((topic) => (
+            <article className="coaching-topic" key={topic.id}>
+              <header>
+                <h3>{topic.title}</h3>
+                <span>{formatClassification(topic.status)}</span>
+              </header>
+              <blockquote>{topic.athleteReport}</blockquote>
+              <dl>
+                <div>
+                  <dt>Matters when</dt>
+                  <dd>{topic.followUpCondition}</dd>
+                </div>
+                <div>
+                  <dt>Last reported</dt>
+                  <dd>
+                    <time dateTime={topic.latestReportedAt}>
+                      {formatDate(topic.latestReportedAt.slice(0, 10))}
+                    </time>
+                  </dd>
+                </div>
+              </dl>
+              <EvidenceReferences
+                evidenceRefs={topic.evidenceRefs}
+                context={context}
+                plannedWorkouts={plannedWorkouts}
+                onSelectWorkout={onSelectWorkout}
+              />
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReviewArchive({
+  reviews,
+  context,
+  plannedWorkouts,
+  onSelectWorkout,
+}: {
+  reviews: CoachingNotebookReview[];
+  context: AthleteContextData;
+  plannedWorkouts: PlannedWorkout[];
+  onSelectWorkout?: WorkoutSelect;
+}) {
+  return (
+    <section
+      className="notebook-card review-archive"
+      aria-label="Weekly Progress Review archive"
+    >
+      <div className="notebook-card__heading">
+        <div>
+          <span className="eyebrow">Prior assessments</span>
+          <h2>Review archive</h2>
+        </div>
+      </div>
+      {reviews.length === 0 ? (
+        <p className="notebook-empty">No prior reviews yet.</p>
+      ) : (
+        <div className="review-archive-list">
+          {reviews.map((review) => (
+            <details className="review-archive-entry" key={review.id}>
+              <summary>
+                <span>
+                  <time dateTime={review.weekEnd}>
+                    {formatDate(review.weekEnd)}
+                  </time>
+                  <strong>{review.headline}</strong>
+                </span>
+                <span aria-hidden="true">＋</span>
+              </summary>
+              <div className="review-archive-entry__body">
+                <p>{review.assessment}</p>
+                <ReviewSections review={review} headingLevel={3} />
+                <EvidenceReferences
+                  evidenceRefs={review.evidenceRefs}
+                  context={context}
+                  plannedWorkouts={plannedWorkouts}
+                  onSelectWorkout={onSelectWorkout}
+                />
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdaptationHistoryCard({
+  context,
+  seededAdaptations,
+  onReview,
+}: {
+  context: AthleteContextData;
+  seededAdaptations: SeededAdaptationHistoryEntry[];
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
+}) {
+  const adaptations = [
+    ...context.recentAdaptationHistory.map((receipt) => ({
+      id: receipt.reviewId,
+      label: receipt.selectedOption.label,
+      appliedAt: receipt.appliedAt,
+      affectedWorkoutCount: receipt.affectedWorkouts.length,
+      planVersionBefore: receipt.planVersionBefore,
+      planVersionAfter: receipt.planVersionAfter,
+      reviewId: receipt.reviewId,
+    })),
+    ...seededAdaptations.map((entry) => ({ ...entry, reviewId: null })),
+  ].sort(
+    (a, b) =>
+      Date.parse(b.appliedAt) - Date.parse(a.appliedAt) ||
+      b.id.localeCompare(a.id),
+  );
+  return (
+    <section
+      className="notebook-card adaptation-history"
+      aria-label="Adaptation History"
+    >
+      <div className="notebook-card__heading">
+        <div>
+          <span className="eyebrow">Decisions that changed the plan</span>
+          <h2>Adaptation History</h2>
+        </div>
+      </div>
+      {adaptations.length === 0 ? (
+        <p className="notebook-empty">No approved adaptations yet.</p>
+      ) : (
+        <ol className="adaptation-history-list">
+          {adaptations.map((adaptation) => (
+            <li
+              id={coachingEntryId("approved-adaptation", adaptation.id)}
+              key={adaptation.id}
+              tabIndex={-1}
+            >
+              <header>
+                <h3>{adaptation.label}</h3>
+                <time dateTime={adaptation.appliedAt}>
+                  {formatDate(adaptation.appliedAt.slice(0, 10))}
+                </time>
+              </header>
+              <p>
+                {adaptation.affectedWorkoutCount} workouts · Plan v
+                {adaptation.planVersionBefore} → v{adaptation.planVersionAfter}
+              </p>
+              {adaptation.reviewId && (
+                <a
+                  href={workspaceRouteHash({
+                    kind: "adaptation",
+                    reviewId: adaptation.reviewId,
+                  })}
+                  id={`${coachingEntryId("approved-adaptation", adaptation.id)}-receipt-link`}
+                  onClick={(event) => {
+                    if (!onReview) return;
+                    event.preventDefault();
+                    onReview(adaptation.reviewId, event.currentTarget);
+                  }}
+                >
+                  Inspect receipt
+                </a>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 export function CoachingPane({
   context,
   plannedWorkouts,
-  pending,
-  declinedAdaptations = [],
-  onReview,
   onSelectWorkout,
+  onReview,
+  reviews = DEMO_WEEKLY_PROGRESS_REVIEWS,
+  seededAdaptations = DEMO_ADAPTATION_HISTORY,
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
   pending?: PendingAdaptationProposal | null;
   declinedAdaptations?: DeclinedPlanAdaptation[];
-  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
+  onViewAdaptation?: (reviewId: string) => void;
+  reviews?: CoachingNotebookReview[];
+  seededAdaptations?: SeededAdaptationHistoryEntry[];
 }) {
-  const entries = projectCoachingTimeline(
-    context,
-    plannedWorkouts,
-    declinedAdaptations,
+  const orderedReviews = [...reviews].sort(
+    (a, b) =>
+      b.weekEnd.localeCompare(a.weekEnd) ||
+      Date.parse(b.recordedAt) - Date.parse(a.recordedAt) ||
+      b.id.localeCompare(a.id),
   );
   return (
-    <div className="coaching-pane">
-      {pending && onReview && (
-        <PendingAdaptationCard
-          pending={pending}
-          context={context}
-          plannedWorkouts={plannedWorkouts}
-          onReview={onReview}
-        />
-      )}
-      <section
-        className="coaching-timeline"
-        aria-labelledby="coaching-timeline-title"
-      >
-        <div className="section-heading section-heading--small">
-          <div>
-            <span className="eyebrow">Shared coaching story</span>
-            <h2 id="coaching-timeline-title" tabIndex={-1}>
-              Coaching timeline
-            </h2>
-          </div>
-        </div>
-        {entries.length === 0 ? (
-          <div className="coaching-timeline__empty">
-            <h3>No coaching activity yet</h3>
-            <p>
-              Athlete Feedback, Coach Recommendations, and Workout Results will
-              appear here.
-            </p>
-          </div>
-        ) : (
-          <ol className="coaching-timeline-list">
-            {entries.map((entry) => (
-              <CoachingTimelineEntryView
-                key={entry.id}
-                entry={entry}
-                entries={entries}
-                context={context}
-                plannedWorkouts={plannedWorkouts}
-                onSelectWorkout={onSelectWorkout}
-              />
-            ))}
-          </ol>
-        )}
-      </section>
-      {/* The longitudinal context behind the timeline: what is still open, and
-          what the Athlete has actually done lately. */}
-      <div className="coaching-context">
-        <MonitoringCard context={context} />
-        <RecentTrainingCard
-          context={context}
-          plannedWorkouts={plannedWorkouts}
-        />
-      </div>
-      <AthleteProfileSummary context={context} />
+    <div className="coaching-pane coaching-notebook">
+      <LatestWeeklyReview
+        review={orderedReviews[0] ?? null}
+        context={context}
+        plannedWorkouts={plannedWorkouts}
+        onSelectWorkout={onSelectWorkout}
+      />
+      <CoachingTopicsCard
+        context={context}
+        plannedWorkouts={plannedWorkouts}
+        onSelectWorkout={onSelectWorkout}
+      />
+      <ReviewArchive
+        reviews={orderedReviews.slice(1)}
+        context={context}
+        plannedWorkouts={plannedWorkouts}
+        onSelectWorkout={onSelectWorkout}
+      />
+      <AdaptationHistoryCard
+        context={context}
+        seededAdaptations={seededAdaptations}
+        onReview={onReview}
+      />
     </div>
   );
 }
@@ -1801,7 +2150,7 @@ function ContextRail({
   onTrendsRangeChange?: (range: TrendsRange) => void;
   pending?: PendingAdaptationProposal | null;
   declinedAdaptations?: DeclinedPlanAdaptation[];
-  onReview?: (reviewId: string, invoker: HTMLButtonElement) => void;
+  onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
   onViewAdaptation?: (adaptationId: string) => void;
   state?: WorkspaceState;
@@ -1816,6 +2165,7 @@ function ContextRail({
         declinedAdaptations={declinedAdaptations}
         onReview={onReview}
         onSelectWorkout={onSelectWorkout}
+        onViewAdaptation={onViewAdaptation}
       />
     );
   }
@@ -2639,7 +2989,7 @@ export function WorkspaceApp({
       selectPane("coaching");
       window.requestAnimationFrame(() => {
         const target = document.getElementById(
-          `coaching-entry-approved-adaptation-${adaptationId}`,
+          coachingEntryId("approved-adaptation", adaptationId),
         );
         target?.scrollIntoView({
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -3321,7 +3671,11 @@ export function WorkspaceApp({
               <div className="workspace workspace--single workspace--today">
                 <TodayPane
                   projection={selectTodayPane(state)}
-                  onViewPendingProposal={() => selectPane("coaching", true)}
+                  onViewPendingProposal={(invoker) => {
+                    const pending = state.pendingAdaptationProposal;
+                    if (!pending) return;
+                    openAdaptationRoute(pending.proposal.reviewId, invoker);
+                  }}
                   onSelectWorkout={openWorkout}
                 />
               </div>
@@ -3383,8 +3737,8 @@ export function WorkspaceApp({
                   <span className="eyebrow">Shared Coaching Workspace</span>
                   <h2 id="coaching-pane-title">Coaching</h2>
                   <p>
-                    A readable account of Athlete Feedback, Workout Results, and
-                    approved Plan Adaptations.
+                    A weekly notebook of what your Coach has learned, what still
+                    matters, and the decisions that shaped your plan.
                   </p>
                 </div>
               </div>

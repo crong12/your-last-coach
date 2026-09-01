@@ -403,7 +403,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe(workoutOriginScrollTop);
 });
 
-test("records workout feedback through the shared application state and Coaching timeline @contract", async ({
+test("records workout feedback through shared application state and keeps it on the Workout Result @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -421,10 +421,11 @@ test("records workout feedback through the shared application state and Coaching
     screen.getByText("The completed session felt controlled."),
   ).toBeVisible();
   await screen.getByRole("button", { name: "Back to Overview" }).click();
-  await page.getByRole("button", { name: "Show Coaching pane" }).click();
-  const timeline = page.getByRole("region", { name: "Coaching timeline" });
+  await page.goto("/#workout/planned-2026-08-06-threshold");
   await expect(
-    timeline.getByText("The completed session felt controlled."),
+    page
+      .getByRole("main", { name: "Workout Result" })
+      .getByText("The completed session felt controlled."),
   ).toBeVisible();
 });
 

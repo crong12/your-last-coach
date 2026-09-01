@@ -1,83 +1,63 @@
-# Pane 3 — Coaching (specification)
+# Pane 3 — Coaching notebook
 
-- Decision ticket: [Specify Pane 3 — Coaching](https://github.com/crong12/your-last-coach/issues/49)
-- Route: `#coaching`; adaptation review pushes `#adaptation/<id>`
-- Inputs: map #43 locked remit; ADR 0001 (routes); #46 (full-push rule); PRODUCT.md principles
-- Status: draft accepted for implementation; marked iteration points expected to move during build
+- Active implementation ticket: [Revamp Coaching as a weekly coaching notebook](https://github.com/crong12/your-last-coach/issues/89)
+- Route: `#coaching`; adaptation review and receipt routes remain `#adaptation/<id>`
+- Visual authority: [`DESIGN.md`](../../DESIGN.md) and the shared tokens in `src/ui/styles.css`
 
 ## Purpose
 
-The coaching relationship made visible: Athlete Feedback, proposed and approved Workout Adaptations, and the narrative connecting Feedback → Adaptations → subsequent Workout Results. This pane is where Athlete authority is exercised.
+Coaching is the durable, readable account of what the Coach has learned, what still matters, and which approved decisions shaped the Training Plan. Objective measurements and charts remain in Trends; Coaching interprets and links to that evidence without reproducing it.
 
-## Vertical order (mobile)
+This demo slice uses deterministic synthetic Weekly Progress Reviews and one seeded Adaptation History entry. It does not add a review-generation command, persistence schema, Coaching Briefing projection, scheduler, or WebMCP write tool.
 
-1. Awaiting-your-review card (conditional, pinned)
-2. Coaching timeline
-3. Athlete Profile summary card
-4. (Demo chrome lives outside the pane — see below)
+## Reading order
 
-## 1. Awaiting-your-review card (pending proposals)
+The semantic and mobile order is:
 
-When one or more proposed Workout Adaptations are pending, a pinned card sits above the timeline:
+1. Latest Weekly Progress Review
+2. Coaching Topics
+3. Weekly Progress Review archive
+4. Adaptation History
 
-- Eyebrow `AWAITING YOUR REVIEW` with a coral dot (the same attention semantics as everywhere).
-- Proposal title, the Coach Agent's one-line rationale, timestamp, and its Coaching Evidence provenance line.
-- Primary action **Review proposal** → pushes `#adaptation/<id>`.
+Desktop uses the same DOM order in a balanced two-column notebook. The latest review remains the focal surface; Topics, archive, and history provide supporting context.
 
-Prominence comes from position and the pane's only coral accent — no notification chrome, no badges, no counts in the section nav, and no Today-chip echo. A published fallback proposal is application-owned and remains available through registration or page teardown until the Athlete decides, the persisted deadline expires, the Training Plan becomes stale, or the demo is reset. When nothing is pending the card does not exist.
+## Latest Weekly Progress Review
 
-## 2. Coaching timeline
+The focal card shows the reviewed Monday–Sunday range, recorded date, editorial headline, overall assessment, Progress, Watch, Next focus, and links to the supporting Coaching Evidence. Newsreader is reserved for the assessment and headline; dates and counts use tabular numerals.
 
-**Form: a single vertical narrative stream**, newest first, with a hairline spine connecting entries. Rejected: separate event-stream tabs and grouping by Coaching Topic — one story, in order, matches the coaching-relationship framing; topic grouping can be revisited if volume ever demands it. ⚠️ _Iteration point: newest-first vs oldest-first reading order may flip after real use._
+When no completed review is available, the card states this explicitly without substituting a generated summary.
 
-Entry types, each visually typed by eyebrow + icon, sharing one card grammar:
+## Weekly Progress Review archive
 
-- **Athlete Feedback** — the Athlete's words, quoted, in editorial Newsreader; timestamp.
-- **Coach Recommendation / proposed Workout Adaptation** — title, one-line rationale, status (proposed / approved / declined / superseded), link to its `#adaptation/<id>` record.
-- **Approved Adaptation receipt** — what changed in the Training Plan, when, "approved by you".
-- **Linked Workout Result** — the subsequent session evidence ("the workout this adaptation produced"), with **View workout** → `#workout/<id>`.
+Prior deterministic demo reviews appear newest first. Each archive row shows its week-ending date and headline. The native disclosure expands to the complete assessment, Progress, Watch, Next focus, and evidence references. Summary rows and evidence links provide at least a 44 px effective target and retain the shared focus treatment.
 
-**Provenance is a first-class line on every non-Feedback entry** (roadmap's provenance-over-apparent-certainty): muted small text naming the exact Coaching Evidence consumed, e.g. `Based on: threshold Workout Result 26 Aug · your feedback 26 Aug · 7-night HRV trend`. Entries never claim certainty without naming sources; uncertainty phrasing from the Coach Agent is preserved verbatim.
+## Coaching Topics
 
-**Threading**: related entries (feedback → proposal → decision → result) reference each other with quiet "↳ in response to" links that scroll to the referenced entry. No collapsible thread machinery in v1.
+The former Monitoring presentation is renamed Coaching Topics. Each active topic shows its status, current Athlete report, existing follow-up condition, last-reported date, and supporting evidence links. The UI does not add private Coach notes or hidden memory.
 
-## 3. Adaptation review-and-approval flow
+## Adaptation History
 
-The old modal is retired. Review is a **pushed screen** (`#adaptation/<id>`, full-push per #46) — the product's most consequential act deserves a full page, and the back gesture safely leaves review without deciding.
+Approved application receipts appear newest first with selected option, application date, affected-workout count, and Training Plan version change. Persisted receipts link to their complete `#adaptation/<id>` record. The deterministic seed demonstrates the composition without pretending that a non-persisted demo record has a complete receipt route.
 
-Screen composition:
+## Removed composition
 
-- Header: proposal title, proposed-at, Coach Agent attribution.
-- **Plan-versus-proposed comparison**: the affected Planned Workout(s) side by side — current plan vs proposed change, differences highlighted (quiet ink for equal values, ochre/ember only where a change warrants attention semantics).
-- Rationale block: the Coach Agent's full reasoning with its provenance line and uncertainty statement.
-- Ranked alternatives when present (the demo proposes two ranked adaptations): the non-primary option rendered collapsed beneath.
-- Decision bar (sticky at screen bottom): **Adapt my plan** (primary, coral) and **Keep current plan** (secondary). Explicit selection and tap are required; no option is selected by default. Approval pops back to Coaching with an Adaptation History receipt; keeping the current plan pops back with a durable declined timeline entry and no Training Plan mutation. `open_workout_adaptation_review` opens this same route; `read_workout_adaptation_decision` reads the explicit terminal result.
+Coaching no longer renders:
 
-## 4. Context-rail dissolution (what moves, what dies)
+- the chronological Coaching timeline;
+- the raw Recent training list and hard-coded weekly summary;
+- the pending Plan Adaptation card; or
+- the Athlete Profile summary.
 
-The desktop context rail does not survive the pane structure:
+The full-page Plan Approval flow and its explicit Athlete decision remain unchanged. A pending proposal can still be opened through its existing adaptation route; it is simply not promoted inside the Coaching notebook.
 
-- **Target Race card** → dies here; its content is the Today hero.
-- **Athlete Profile card** → becomes a compact summary card at the bottom of this pane (name, goal framing, training availability, constraints) — it is coaching context, and the Coach Agent's briefing draws from it. Tap → expands inline (no pushed screen for v1). ⚠️ _Iteration point: may move behind a header affordance if the pane gets long._
-- **Monitoring card** → lives here, paired with Recent training in a two-up row beneath the Coaching timeline. It was briefly assigned to Trends; both blocks are longitudinal coaching context rather than chart evidence, so Trends carries only the arrival strip and the charts. See [desktop-frame-and-trends-grid.md](desktop-frame-and-trends-grid.md).
+## Empty and degraded states
 
-## 5. Demo chrome placement
+Each notebook collection owns a quiet explicit state: no completed review, no active Coaching Topics, no prior reviews, or no approved adaptations. Unresolvable evidence remains a literal evidence reference rather than being inferred or silently dropped.
 
-Demo Guide and Reset leave the coaching surface: they move to an overflow menu (`⋯`) in the top app bar (mobile) / sticky header (desktop), rendering as pushed screens or dialogs exactly as today. Demo chrome is workspace furniture, not coaching content — it must not sit inside any pane.
+## Accessibility and responsive behavior
 
-## Data prerequisites & degraded states
-
-- All records are application-owned (per #45 this pane has no COROS prerequisite); linked Workout Results use COROS reads where connected.
-- Empty timeline (fresh state): honest empty narrative — "No coaching activity yet" with one line explaining what will appear here.
-
-## Accessibility & motion
-
-- The timeline is a list with typed, fully-labelled entries; the pinned review card is announced first.
-- The decision bar buttons carry explicit accessible names ("Adapt my plan: <proposal title>"). The pushed screen moves focus to its heading; Back and Escape leave the proposal undecided and restore the originating Coaching target.
-- Reduced motion: push and disclosure transitions are cuts; no timeline entrance animations.
-
-## Open iteration points
-
-1. Timeline reading order (newest-first chosen provisionally).
-2. Athlete Profile placement (bottom-of-pane vs header affordance).
-3. Whether declined proposals stay in the timeline or collapse after 30 days.
+- Heading hierarchy and DOM order remain logical in both layouts.
+- Evidence references and archive disclosures are semantic links or native controls with visible focus treatment.
+- Mobile collapses to one column at the established breakpoint and remains usable at 360 px.
+- The notebook adds no animation; existing reduced-motion behavior remains authoritative.
+- Sea-green and cream carry structure. Coral remains reserved for genuine attention states and is not used decoratively in the notebook.

@@ -965,11 +965,13 @@ test("completes the fallback six-tool coaching lifecycle @contract", async ({
     )?.id;
   expect(thresholdWorkoutId).toBeDefined();
   await showPane(page, "Coaching");
+  const coachingTopics = page.getByRole("region", { name: "Coaching Topics" });
   await expect(
-    page
-      .getByRole("region", { name: "Monitoring" })
-      .locator(".monitoring-status"),
-  ).toHaveText("Monitoring");
+    coachingTopics
+      .locator(".coaching-topic")
+      .filter({ hasText: "Shin discomfort" })
+      .getByText("Monitoring", { exact: true }),
+  ).toBeVisible();
 
   const rawText =
     "That was rough. My legs felt heavy from the warm-up and the reps felt like a 9 out of 10. I stopped after three because I couldn’t hold the pace. No pain. Can we make the rest of this week easier?";
@@ -1140,19 +1142,19 @@ test("completes the fallback six-tool coaching lifecycle @contract", async ({
     appliedAt: "2026-08-26T20:15:00+01:00",
     evidenceRefs: expect.arrayContaining(proposal.evidenceRefs),
   });
-  const timeline = page.getByRole("region", { name: "Coaching timeline" });
-  await expect(timeline).toBeVisible();
+  const adaptationHistory = page.getByRole("region", {
+    name: "Adaptation History",
+  });
+  const adaptationEntry = adaptationHistory.locator(
+    "#coaching-entry-approved-adaptation-fresh-agent-lifecycle",
+  );
   await expect(
-    timeline.getByText(proposal.recommended.label, { exact: true }),
+    adaptationEntry.getByText(proposal.recommended.label, { exact: true }),
   ).toBeVisible();
-  await expect(timeline.getByText("1 → 2", { exact: true })).toBeVisible();
+  await expect(adaptationEntry).toContainText("3 workouts · Plan v1 → v2");
+  await expect(adaptationEntry.locator("time")).toBeVisible();
   await expect(
-    timeline
-      .locator("#coaching-entry-approved-adaptation-fresh-agent-lifecycle")
-      .locator("time"),
-  ).toBeVisible();
-  await expect(
-    timeline.getByText("Workouts affected", { exact: true }),
+    adaptationEntry.getByRole("link", { name: "Inspect receipt" }),
   ).toBeVisible();
 });
 
@@ -1202,38 +1204,90 @@ test("records, persists, and resets Athlete Feedback through the injected host @
       },
       { rawText },
     );
+  const readRecentFeedback = () =>
+    page.evaluate(async () => {
+      const registrations = (
+        window as unknown as {
+          __webMcpHarness: {
+            registrations: Array<{
+              tool: {
+                name: string;
+                execute: (
+                  input: Record<string, unknown>,
+                  options: { signal: AbortSignal },
+                ) => Promise<unknown>;
+              };
+            }>;
+          };
+        }
+      ).__webMcpHarness.registrations;
+      const tool = registrations.find(
+        ({ tool }) => tool.name === "get_coaching_briefing",
+      )?.tool;
+      if (!tool) throw new Error("Coaching briefing tool was not registered");
+      return tool.execute(
+        {},
+        { signal: new AbortController().signal },
+      ) as Promise<{
+        status: string;
+        data: {
+          recentAthleteFeedback: Array<{
+            requestId: string;
+            rawText: string;
+          }>;
+        };
+      }>;
+    });
 
   await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
-  await showPane(page, "Coaching");
-  await expect(
-    page
-      .locator("#coaching-entry-athlete-feedback-hero-feedback-request")
-      .getByText("Athlete Feedback", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(rawText)).toBeVisible();
-  await expect(page.getByText("9/10 effort")).toBeVisible();
-  await expect(page.getByText("No pain reported")).toBeVisible();
+  await expect(readRecentFeedback()).resolves.toMatchObject({
+    status: "ok",
+    data: {
+      recentAthleteFeedback: expect.arrayContaining([
+        expect.objectContaining({
+          requestId: "hero-feedback-request",
+          rawText,
+        }),
+      ]),
+    },
+  });
 
   await expect(recordFeedback()).resolves.toMatchObject({ status: "ok" });
-  await expect(page.getByText(rawText)).toHaveCount(1);
+  expect(
+    (await readRecentFeedback()).data.recentAthleteFeedback.filter(
+      ({ requestId }) => requestId === "hero-feedback-request",
+    ),
+  ).toHaveLength(1);
 
   await page.reload();
-  await expect(page.getByText(rawText)).toBeVisible();
+  await expect(readRecentFeedback()).resolves.toMatchObject({
+    data: {
+      recentAthleteFeedback: expect.arrayContaining([
+        expect.objectContaining({
+          requestId: "hero-feedback-request",
+          rawText,
+        }),
+      ]),
+    },
+  });
 
   await openResetDialog(page);
   await page
     .getByRole("dialog", { name: "Reset the demo?" })
     .getByRole("button", { name: "Reset demo" })
     .click();
-  await showPane(page, "Coaching");
-  const timeline = page.getByRole("region", { name: "Coaching timeline" });
-  await expect(timeline).toBeVisible();
-  await expect(
-    timeline.getByText(
-      "My right shin felt a little sore near the end of Sunday's long run. It was mild, but let's keep an eye on it.",
+  const feedbackAfterReset = (await readRecentFeedback()).data
+    .recentAthleteFeedback;
+  expect(feedbackAfterReset).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ requestId: "seed-shin-discomfort" }),
+    ]),
+  );
+  expect(
+    feedbackAfterReset.some(
+      ({ requestId }) => requestId === "hero-feedback-request",
     ),
-  ).toBeVisible();
-  await expect(page.getByText(rawText)).toBeHidden();
+  ).toBe(false);
 });
 
 test("persists the seeded envelope across reload and resets with in-page approval", async ({

@@ -210,6 +210,17 @@ the existing refresh path.
 
 All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
 
+### Submission UI fixture exception
+
+The Coaching notebook submission demo includes deterministic Weekly Progress
+Review presentation fixtures and one seeded Adaptation History row. They are a
+temporary, read-only visual aid for demonstrating the revamped tab; they are not
+authoritative domain records, are not persisted, and are not exposed through
+WebMCP reads or writes. Existing real adaptation receipts continue to come from
+`WorkspaceState`. A production implementation must move weekly reviews and any
+seeded history into a reducer-owned, persisted state slice before either becomes
+Coach-Agent-readable or editable.
+
 The shipped read and state path is:
 
 ```text
