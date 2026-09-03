@@ -7,29 +7,25 @@
 
 ## Purpose
 
-Everything about one workout — planned or completed — one push away from any reference to it. One route, two compositions selected by workout state.
+Everything about one workout — planned or completed — one push away from any reference to it. One route, one unified composition: every workout renders the same skeleton, and the result-only sections stay honestly empty until a Workout Result exists. (Supersedes the earlier two-composition split; the plan's intent and prescription never disappear once a workout is completed.)
 
 ## Entry points and back behavior
 
 Entered from: Today's workout card, week-strip tiles, Trends (pace-vs-HR inspect readout, repeated-sessions card), Coaching timeline (linked Workout Results), and the Coach Agent (WebMCP flows referencing a workout). Per #46: `pushState` on entry; browser/OS back or the on-screen ← pops to the exact origin (pane + scroll position on mobile, scroll position on desktop). The screen never cares where it came from — history does.
 
-## Composition A — planned workout
+## Unified composition
 
-1. **Header**: ← back, workout title, planned date, type chips (e.g. Quality · Threshold), status `PLANNED`.
+Sections 1–4 come from the Planned Workout and always render; sections 5–7 belong to the Workout Result and render only once it exists (the result slot shows an honest "not completed yet" note beforehand); 8–9 render for both states when data exists.
+
+1. **Header**: ← back, workout title, planned/actual date, type chips (e.g. Quality · Threshold), status `PLANNED` / `COMPLETED` / `STOPPED`. Partial results deliberately render no status chip: the header stays quiet rather than badging an athlete's cut-short session, and the partial story is told by the plan-versus-actual rows.
 2. **Coach's intent**: short editorial paragraph (Newsreader) — why this session exists in the plan, from the Planned Workout record. Provenance line if the intent came from an approved Workout Adaptation ("Adjusted 26 Aug — view adaptation" → `#adaptation/<id>`).
 3. **Structure blocks**: warm-up / main set / cool-down as labelled rows with target values (pace range, reps, recoveries) in tabular numerals.
 4. **Targets table**: consolidated label/value rows — target pace, effort/HR guidance, planned distance/duration, recovery protocol.
-5. **Previous attempts** (conditional): if comparable past sessions exist, the comparison section (below) renders here too — seeing your last attempt before running is the point.
-
-## Composition B — completed workout
-
-1. **Header**: as above with actual date, status `COMPLETED`.
-2. **Stat row**: distance · time · average pace · average HR, large tabular numerals (fields verified in #45 `getActivityDetail`). Training Load is omitted because an unexplained raw score is not useful to the Athlete.
-3. **Plan versus actual**: when a Planned Workout backs this Workout Result — rows comparing target vs actual (pace, distance/duration, effort). Deltas rendered quietly in ink; ochre only where the miss is coaching-relevant (per metric semantics), never shame-red. Unplanned runs omit this block.
-4. **Per-lap chart**: vertical bars, one per normalized 1 km lap group (per #45; prefer the appropriate lap group — aggregate rows may lack fields), bar height = pace (faster = taller), average-HR dot overlaid per lap with a connecting hairline. Tap-to-inspect per #47 (readout: lap n, pace, avg/max HR). Static, token-themed, ADR 0002 rendering. ⚠️ _Iteration point: pace-as-height polarity (faster=taller) must be validated for legibility; the inverse may read better._
-5. **Splits table**: collapsible "Splits" section under the chart — exact per-lap rows (lap, distance, pace, avg HR, max HR). The chart gives shape; the table gives numbers.
-6. **Previous attempts** (comparison section — see below).
-7. **Athlete Feedback** (see below).
+5. **Stat row** (result only): distance · time · average pace · average HR, large tabular numerals (fields verified in #45 `getActivityDetail`). Training Load is omitted because an unexplained raw score is not useful to the Athlete. Before completion this slot renders a single quiet note that results will appear here once recorded.
+6. **Plan versus actual** (result only): when a Planned Workout backs this Workout Result — rows comparing target vs actual (pace, distance/duration, effort). Deltas rendered quietly in ink; ochre only where the miss is coaching-relevant (per metric semantics), never shame-red. Unplanned runs omit this block.
+7. **Per-lap chart + splits** (result only): two linked left-right facets sharing the lap x-axis — Pace (vertical bars, series-1, faster = taller) and Heart rate (gap-broken line + dots, series-2). Each facet renders proper axes: y-ticks from `scale.ticks()` with hairline gridlines and formatted labels, baseline, and lap numbers; missing laps show baseline dashes. Facets sit side by side on wide viewports and stack on narrow ones. Inspection: tap/keyboard select updates the aria-live readout (per #47); hover/focus additionally shows a per-facet tooltip and a linked highlight across both facets. Token-themed, ADR 0002 rendering (axes are hand-rendered JSX; d3 supplies scale/tick/line math only). Collapsible "Splits" section under the chart — exact per-lap rows (lap, distance, pace, avg HR, max HR). The chart gives shape; the table gives numbers. ⚠️ _Iteration point: pace-as-height polarity (faster=taller) must be validated for legibility; the inverse may read better._
+8. **Previous attempts** (conditional, both states — see below): seeing your last attempt before running is the point.
+9. **Athlete Feedback** (both states — see below).
 
 ## Repeated-session comparison (lives here, not on Trends)
 

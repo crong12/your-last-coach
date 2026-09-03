@@ -259,19 +259,21 @@ export function selectWorkoutContext(
       ({ plannedWorkoutId }) => plannedWorkoutId === plannedWorkout.id,
     ) ?? null;
   const currentResultId = workoutResult?.id;
-  const currentResultStartedAt = workoutResult
+  // Attempts count as "previous" relative to the current result when one
+  // exists, otherwise relative to the planned date, so upcoming workouts
+  // still surface comparable past sessions before the athlete runs.
+  const attemptCutoff = workoutResult
     ? Date.parse(workoutResult.startedAt)
-    : null;
+    : Date.parse(plannedWorkout.date);
   const relatedWorkouts = new Map(
     state.trainingPlan.plannedWorkouts.map((workout) => [workout.id, workout]),
   );
   const previousAttempts = state.workoutResults
     .filter(
       (candidate) =>
-        currentResultId !== undefined &&
         candidate.id !== currentResultId &&
-        currentResultStartedAt !== null &&
-        Date.parse(candidate.startedAt) < currentResultStartedAt,
+        Number.isFinite(attemptCutoff) &&
+        Date.parse(candidate.startedAt) < attemptCutoff,
     )
     .map((candidate) => {
       const candidateWorkout = candidate.plannedWorkoutId

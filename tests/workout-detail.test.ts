@@ -107,6 +107,26 @@ describe("Workout Result detail context", () => {
     );
   });
 
+  it("presents same-type previous attempts for an upcoming planned workout without a result", () => {
+    const context = selectWorkoutContext(createDemoWorkspaceState(), {
+      workoutId: "planned-2026-08-30-long",
+    });
+
+    expect(context.status).toBe("ok");
+    if (context.status !== "ok") throw new Error("Expected workout context");
+    expect(context.data.workoutResult).toBeNull();
+    expect(
+      context.data.previousAttempts.map(
+        ({ workoutResult }) => workoutResult.plannedWorkoutId,
+      ),
+    ).toEqual([
+      "planned-2026-08-23-long",
+      "planned-2026-08-16-long",
+      "planned-2026-08-09-long",
+      "planned-2026-08-02-long",
+    ]);
+  });
+
   it("derives planned repetitions from the prescription even when result summary metadata disagrees", () => {
     const state = structuredClone(createDemoWorkspaceState());
     const result = state.workoutResults.find(
