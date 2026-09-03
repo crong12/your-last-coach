@@ -203,15 +203,11 @@ type PersistedWorkspace = {
 };
 ```
 
-Schema-v1 envelopes from before the declined-decision field are migrated by
-defaulting missing `declinedAdaptations` to an empty array. Narrow fixture-data
-migrations also recognize the exact previously released August threshold
-records, replace them with their corrected canonical records, and update saved
-feedback references when a historical ID changed. These migrations match the
-released record fingerprints rather than IDs alone, so non-legacy or adapted
-workouts remain authoritative. Other incomplete or invalid snapshots are
-rejected and replaced with the exact demo fixture through the existing refresh
-path.
+The submission is a fixed demo snapshot, not an upgradeable product data store.
+A saved envelope that satisfies the current schema and domain invariants is
+restored as-is. Missing, incomplete, invalid, or unsupported snapshots are
+rejected and replaced with the exact current demo fixture through the refresh
+path; the application does not carry historical fixture-data migrations.
 
 All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
 
@@ -389,7 +385,7 @@ Initialization order:
 6. Register the six fallback tools when `document.modelContext` is available. The pending-call review mode is limited to controlled development tests and is not selected by the shipped app.
 7. Publish `connected`, `unavailable`, or `error` status to the UI.
 
-An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. Migration is limited to the compatible schema-v1 default above; a future schema version would require an explicit migration decision.
+An invalid saved snapshot is replaced rather than heuristically repaired. The UI shows a restrained notice that demo state was refreshed. Supporting upgrade migrations belongs to the post-hackathon product roadmap and would require an explicit architecture decision.
 
 **Reset demo** uses a lightweight in-page confirmation. Approval of reset:
 

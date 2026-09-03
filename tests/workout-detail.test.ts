@@ -34,7 +34,7 @@ describe("Workout Result detail context", () => {
     expect(partial).toMatchObject({
       status: "partial",
       summary: {
-        distanceKm: 7.5,
+        distanceKm: 7,
         completedWorkRepetitions: 3,
         plannedWorkRepetitions: 5,
       },

@@ -35,7 +35,7 @@ describe("issue 64 fixture evidence", () => {
       readAt: "2026-08-26T20:15:00+01:00",
     });
     expect(result.summary).toMatchObject({
-      distanceKm: 7.5,
+      distanceKm: 7,
       activityKind: "outdoor_run",
       completedWorkRepetitions: 3,
       plannedWorkRepetitions: 5,
@@ -337,7 +337,7 @@ describe("issue 64 fixture evidence", () => {
     expect(projection.weeks).toHaveLength(4);
     expect(projection.weeks.at(-1)).toMatchObject({
       weekStart: "2026-08-24",
-      distanceKm: 13.5,
+      distanceKm: 13,
       trainingLoad: null,
     });
     expect(projection.coverage).toEqual({ availableLoads: 14, results: 16 });
@@ -368,7 +368,7 @@ describe("issue 64 fixture evidence", () => {
     const projection = projectWeeklyVolumeLoad(state, "4w");
     expect(projection.weeks.at(-1)).toMatchObject({
       weekStart: "2026-08-24",
-      distanceKm: 33.5,
+      distanceKm: 33,
     });
   });
 
@@ -400,8 +400,8 @@ describe("issue 64 fixture evidence", () => {
 
     expect(projection.points.at(-1)).toMatchObject({
       workoutResultId: result!.id,
-      paceSecondsPerKm: 2_747 / 7.5,
-      heartRateBpm: 169,
+      paceSecondsPerKm: 2_358 / 7,
+      heartRateBpm: 152,
     });
   });
 
