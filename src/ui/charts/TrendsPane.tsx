@@ -495,7 +495,12 @@ function VolumeAnnotations({
                   points={`${x},23 ${x + 8},31 ${x},39 ${x - 8},31`}
                   fill="var(--track)"
                 />
-                <text data-chart-annotation-label x={x + 12} y={35}>
+                <text
+                  data-chart-annotation-label
+                  className="chart-annotation__label chart-annotation__label--phase"
+                  x={x + 12}
+                  y={35}
+                >
                   {annotation.label}
                 </text>
               </g>
@@ -587,6 +592,12 @@ function VolumeLoadChart({
       };
     });
   }, [annotations, projection.weeks]);
+  const formatRamp = (percent: number) => {
+    const rounded = Math.round(percent);
+    return rounded === 0
+      ? "even with prior week"
+      : `${rounded > 0 ? "+" : "−"}${Math.abs(rounded)}% vs prior week`;
+  };
   const selectedWeek = projection.weeks.find(
     ({ weekStart }) => weekStart === selection.value,
   );
@@ -610,7 +621,11 @@ function VolumeLoadChart({
                 : `Race day: ${selectedAnnotation.label}`
           }`
         : selectedWeek
-          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}`
+          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}${
+              selectedWeek.distanceChangePercent === null
+                ? ""
+                : ` · ${formatRamp(selectedWeek.distanceChangePercent)}`
+            }`
           : projection.status === "unavailable"
             ? "Training history unavailable"
             : "No Workout Results in this range";
@@ -620,6 +635,23 @@ function VolumeLoadChart({
     lastWeek?.trainingLoad === undefined || lastWeek?.trainingLoad === null
       ? "—"
       : String(lastWeek.trainingLoad);
+  const [hoverWeek, setHoverWeek] = useState<string | null>(null);
+  const rampRounded =
+    lastWeek?.distanceChangePercent === undefined ||
+    lastWeek?.distanceChangePercent === null
+      ? null
+      : Math.round(lastWeek.distanceChangePercent);
+  const rampTrend =
+    rampRounded === null
+      ? null
+      : {
+          label:
+            rampRounded === 0
+              ? "even with last week"
+              : `${rampRounded > 0 ? "+" : "−"}${Math.abs(rampRounded)}% vs last week`,
+          glyph:
+            rampRounded > 0 ? "▲" : rampRounded < 0 ? "▼" : undefined,
+        };
   const hasWeeks =
     projection.weeks.length > 0 && projection.status !== "unavailable";
   const plot = hasWeeks ? (
@@ -668,7 +700,27 @@ function VolumeLoadChart({
             annotationIsInRange(annotation, rangeFrom, rangeTo),
         )
         .map(({ label }) => label);
-      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}.${
+        rampTrend ? ` Week-over-week distance: ${rampTrend.label}.` : ""
+      } Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const hoveredWeek = projection.weeks.find(
+        ({ weekStart }) => weekStart === hoverWeek,
+      );
+      const hoveredParsed = hoveredWeek
+        ? parseChartDate(hoveredWeek.weekStart)
+        : null;
+      const tooltip: ChartTooltip | null =
+        hoveredWeek && hoveredParsed
+          ? {
+              x: xScale(hoveredParsed),
+              y: distanceScale(hoveredWeek.distanceKm),
+              text: `${formatShortDate(hoveredWeek.weekStart)} week · ${hoveredWeek.distanceKm.toFixed(1)} km · Load ${
+                hoveredWeek.trainingLoad === null
+                  ? "unavailable"
+                  : hoveredWeek.trainingLoad
+              }`,
+            }
+          : null;
       return (
         <div className="chart-card__plot chart-card__plot--volume-load">
           <svg
@@ -684,9 +736,67 @@ function VolumeLoadChart({
             </title>
             <desc id="volume-load-description">{description}</desc>
             <g data-chart-grid aria-hidden="true">
-              {[42, 106, 170, 242, 307, 372].map((y) => (
+              {distanceScale
+                .ticks(3)
+                .filter((tick) => tick > 0)
+                .map((tick) => {
+                  const y = distanceScale(tick);
+                  if (y < 42) return null;
+                  return (
+                    <g key={`distance-${tick}`}>
+                      <line
+                        data-chart-gridline
+                        x1={CHART_PLOT.left}
+                        x2={CHART_PLOT.right}
+                        y1={y}
+                        y2={y}
+                        stroke="var(--line)"
+                        strokeWidth="1"
+                        shapeRendering="crispEdges"
+                      />
+                      <text
+                        data-chart-y-label
+                        className="chart-axis-label"
+                        x={CHART_PLOT.left + 4}
+                        y={y - 5}
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+              {loadScale
+                .ticks(3)
+                .filter((tick) => tick > 0)
+                .map((tick) => {
+                  const y = loadScale(tick);
+                  if (y < 242) return null;
+                  return (
+                    <g key={`load-${tick}`}>
+                      <line
+                        data-chart-gridline
+                        x1={CHART_PLOT.left}
+                        x2={CHART_PLOT.right}
+                        y1={y}
+                        y2={y}
+                        stroke="var(--line)"
+                        strokeWidth="1"
+                        shapeRendering="crispEdges"
+                      />
+                      <text
+                        data-chart-y-label
+                        className="chart-axis-label"
+                        x={CHART_PLOT.left + 4}
+                        y={y - 5}
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+              {[170, 372].map((y) => (
                 <line
-                  key={y}
+                  key={`baseline-${y}`}
                   data-chart-gridline
                   x1={CHART_PLOT.left}
                   x2={CHART_PLOT.right}
@@ -697,10 +807,20 @@ function VolumeLoadChart({
                   shapeRendering="crispEdges"
                 />
               ))}
-              <text data-chart-y-label x="64" y="18">
+              <text
+                data-chart-y-label
+                className="chart-axis-label"
+                x="64"
+                y="18"
+              >
                 Distance km
               </text>
-              <text data-chart-y-label x="64" y="236">
+              <text
+                data-chart-y-label
+                className="chart-axis-label"
+                x="64"
+                y="236"
+              >
                 Training Load
               </text>
             </g>
@@ -743,6 +863,10 @@ function VolumeLoadChart({
                       event.preventDefault();
                       setSelection({ kind: "week", value: week.weekStart });
                     }}
+                    onPointerEnter={() => setHoverWeek(week.weekStart)}
+                    onPointerLeave={() => setHoverWeek(null)}
+                    onFocus={() => setHoverWeek(week.weekStart)}
+                    onBlur={() => setHoverWeek(null)}
                   >
                     <rect
                       data-chart-hit-area
@@ -762,6 +886,15 @@ function VolumeLoadChart({
                       height={170 - y}
                       fill="var(--series-1)"
                     />
+                    <text
+                      data-volume-bar-value
+                      className="chart-axis-label"
+                      x={x}
+                      y={y - 6}
+                      textAnchor="middle"
+                    >
+                      {week.distanceKm.toFixed(1)}
+                    </text>
                   </g>
                 );
               })}
@@ -809,38 +942,81 @@ function VolumeLoadChart({
                 );
               })}
               {averagePath && (
-                <path
-                  data-load-average-line
-                  d={averagePath}
-                  fill="none"
-                  stroke="var(--track)"
-                  strokeWidth="2"
-                />
+                <>
+                  <path
+                    data-load-average-line
+                    d={averagePath}
+                    fill="none"
+                    stroke="var(--series-1)"
+                    strokeWidth="2"
+                    strokeDasharray="6 4"
+                    opacity="0.85"
+                  />
+                  {(() => {
+                    const lastAverage = projection.weeks.at(-1);
+                    const lastParsed = lastAverage
+                      ? parseChartDate(lastAverage.weekStart)
+                      : null;
+                    if (
+                      !lastAverage ||
+                      !lastParsed ||
+                      lastAverage.fourWeekAverageLoad === null
+                    ) {
+                      return null;
+                    }
+                    return (
+                      <text
+                        data-load-average-label
+                        className="chart-axis-label"
+                        x={xScale(lastParsed) + 26}
+                        y={loadScale(lastAverage.fourWeekAverageLoad) + 4}
+                        textAnchor="start"
+                      >
+                        4-wk avg
+                      </text>
+                    );
+                  })()}
+                </>
               )}
             </g>
             <g data-chart-x-labels aria-hidden="true">
-              {projection.weeks
-                .filter(
-                  (_, index) =>
-                    index === 0 || index === projection.weeks.length - 1,
-                )
-                .map((week, index) => {
-                  const parsed = parseChartDate(week.weekStart);
-                  if (!parsed) return null;
-                  return (
-                    <text
-                      key={week.weekStart}
-                      data-chart-x-label
-                      x={xScale(parsed)}
-                      y="408"
-                      textAnchor={index === 0 ? "start" : "end"}
-                    >
-                      {formatShortDate(week.weekStart)}
-                    </text>
-                  );
-                })}
+              {projection.weeks.map((week, index) => {
+                const parsed = parseChartDate(week.weekStart);
+                if (!parsed) return null;
+                return (
+                  <text
+                    key={week.weekStart}
+                    data-chart-x-label
+                    className="chart-axis-label"
+                    x={xScale(parsed)}
+                    y="408"
+                    textAnchor={
+                      index === 0
+                        ? "start"
+                        : index === projection.weeks.length - 1
+                          ? "end"
+                          : "middle"
+                    }
+                  >
+                    {formatShortDate(week.weekStart)}
+                  </text>
+                );
+              })}
             </g>
           </svg>
+          {tooltip && (
+            <div
+              className="chart-plot__tooltip"
+              data-chart-tooltip
+              aria-hidden="true"
+              style={{
+                left: `clamp(56px, ${(tooltip.x / 720) * 100}%, calc(100% - 56px))`,
+                top: `${(tooltip.y / 420) * 100}%`,
+              }}
+            >
+              {tooltip.text}
+            </div>
+          )}
         </div>
       );
     })()
@@ -874,6 +1050,13 @@ function VolumeLoadChart({
       unit="km"
       averageLabel={`Load ${loadCurrent}`}
       averageBasis="latest week · sourced per Workout Result"
+      trendLabel={
+        projection.status === "unavailable" ? undefined : rampTrend?.label
+      }
+      trendGlyph={
+        projection.status === "unavailable" ? undefined : rampTrend?.glyph
+      }
+      directionHint="weekly km · training load · dashed = 4-wk avg load"
       readout={fixedReadout}
       plot={plot}
       coverage={
