@@ -247,7 +247,7 @@ describe("durable adaptation review", () => {
     });
   });
 
-  it("preserves reset cancellation for exact-once fallback delivery", async () => {
+  it("clears fallback cancellation delivery during an explicit demo reset", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const { repository } = recordingRepository();
     const application = createWorkspaceApplication({
@@ -265,13 +265,6 @@ describe("durable adaptation review", () => {
     });
     await application.command({ type: "reset_demo" });
 
-    await expect(
-      application.readFallbackResult(proposal.reviewId),
-    ).resolves.toEqual({
-      status: "cancelled",
-      reviewId: proposal.reviewId,
-      reason: "reset",
-    });
     await expect(
       application.readFallbackResult(proposal.reviewId),
     ).resolves.toEqual({

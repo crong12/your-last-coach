@@ -274,7 +274,7 @@ The review coordinator owns only runtime orchestration:
 - abort and unload cleanup;
 - exactly-once settlement for controlled-development waiters.
 
-An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A published fallback proposal survives registration/page teardown and reload with its persisted deadline; timeout, reset, stale-plan change, and other explicit fallback cancellation paths store `cancelled`, while **Keep current plan** stores `declined`. Approval uses the same application command in both paths. The exact fallback terminal statuses and approved/declined payloads are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
+An unfinished controlled-development pending-call review is cancelled on reload, unload, reset, or host abort. A published fallback proposal survives registration/page teardown and reload with its persisted deadline; timeout, stale-plan change, and other explicit fallback cancellation paths store `cancelled`, while **Keep current plan** stores `declined`. An explicit demo reset clears pending and undelivered fallback review state so the deterministic fixture is immediately ready for a fresh Agent. Approval uses the same application command in both paths. The exact fallback terminal statuses and approved/declined payloads are defined in the [Demo Athlete and coaching tool contract](demo-athlete-coaching-contract-v1.md).
 
 ## Planned Workout and Workout Result
 
@@ -390,7 +390,7 @@ An invalid saved snapshot is replaced rather than heuristically repaired. The UI
 **Reset demo** uses a lightweight in-page confirmation. Approval of reset:
 
 - cancels an active controlled review with reason `reset` and clears its published fallback proposal;
-- clears the persisted envelope while preserving one undelivered fallback `cancelled` result when reset settled a fallback review;
+- clears the persisted envelope and all undelivered fallback results;
 - clears new Athlete Feedback, plan changes, idempotency records, receipts, selection, and preview;
 - restores the exact seeded Athlete Profile, Coaching Topic, fixed clock, and initial `planVersion`;
 - leaves browser capability detection and tool definitions available.

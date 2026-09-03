@@ -953,6 +953,7 @@ describe("WebMCP coaching tools", () => {
 
     expect(recorded).toMatchObject({
       status: "ok",
+      evidenceRef: "athlete-feedback:athlete-feedback:webmcp-feedback",
       feedback: {
         requestId: "webmcp-feedback",
         rawText: "That was rough. No pain.",
@@ -964,6 +965,40 @@ describe("WebMCP coaching tools", () => {
       data: {
         athleteFeedback: [{ requestId: "webmcp-feedback" }],
       },
+    });
+  });
+
+  it("opens a fresh fallback review immediately after resetting an active review", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
+    await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+    });
+    const tools = Object.fromEntries(
+      registrations.map(({ tool }) => [tool.name, tool]),
+    );
+    const execution = { signal: new AbortController().signal };
+
+    await tools.open_workout_adaptation_review.execute(
+      reviewProposal() as unknown as Record<string, unknown>,
+      execution,
+    );
+    await coordinator.reset();
+    await application.command({ type: "reset_demo" });
+
+    const nextProposal = reviewProposal();
+    nextProposal.reviewId = "review:webmcp:after-reset";
+    nextProposal.expectedPlanVersion = 1;
+    await expect(
+      tools.open_workout_adaptation_review.execute(
+        nextProposal as unknown as Record<string, unknown>,
+        execution,
+      ),
+    ).resolves.toEqual({
+      status: "review_opened",
+      reviewId: "review:webmcp:after-reset",
     });
   });
 

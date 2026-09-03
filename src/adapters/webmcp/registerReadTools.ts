@@ -376,7 +376,7 @@ function createTools(
     name: "record_athlete_feedback",
     title: "Record athlete feedback",
     description:
-      "Record the current Athlete message when it reports new workout experience; preserve the raw words and only explicitly stated structured fields before proposing related changes. Reusing the same requestId returns the original feedback without recording twice.",
+      "Record the current Athlete message when it reports new workout experience; preserve the raw words and only explicitly stated structured fields before proposing related changes. The result includes evidenceRef; reuse that value verbatim in a later adaptation proposal. Reusing the same requestId returns the original feedback without recording twice.",
     inputSchema: {
       type: "object",
       properties: {
