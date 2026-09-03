@@ -137,7 +137,16 @@ function LapFacet({
   const spacing =
     laps.length > 1 ? Math.abs(xScale(1) - xScale(0)) : PLOT.right - PLOT.left;
   const barWidth = Math.min(26, Math.max(10, spacing - 16));
-  const hitWidth = Math.max(44, spacing);
+  // Partition the plot into non-overlapping columns at the midpoints between
+  // lap centres so every pointer position resolves to exactly one lap; the
+  // first and last columns extend to the plot edges.
+  const columnBounds = (index: number): { x: number; width: number } => {
+    const centre = xScale(index);
+    const left = index === 0 ? PLOT.left : (xScale(index - 1) + centre) / 2;
+    const right =
+      index === laps.length - 1 ? PLOT.right : (centre + xScale(index + 1)) / 2;
+    return { x: left, width: right - left };
+  };
   const readValue = (lap: ResultDetailLap) =>
     isPace ? lap.paceSecondsPerKm : lap.averageHeartRateBpm;
   const heartRatePath = isPace ? "" : createHeartRatePath(laps, xScale, yScale);
@@ -244,6 +253,7 @@ function LapFacet({
           <g data-result-lap-series>
             {laps.map((lap, index) => {
               const x = xScale(index);
+              const column = columnBounds(index);
               const value = readValue(lap);
               const recorded = value !== null;
               const emphasized = linkedIndex === index;
@@ -265,9 +275,9 @@ function LapFacet({
                 >
                   <rect
                     data-result-lap-hit-area
-                    x={x - hitWidth / 2}
+                    x={column.x}
                     y={PLOT.top - 6}
-                    width={hitWidth}
+                    width={column.width}
                     height={PLOT.bottom - PLOT.top + 34}
                     fill="var(--paper)"
                     fillOpacity="0.001"

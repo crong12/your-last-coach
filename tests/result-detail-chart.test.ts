@@ -164,6 +164,40 @@ describe("Workout Result lap chart", () => {
     expect(container.querySelector("[data-result-chart-tooltip]")).toBeNull();
   });
 
+  it("keeps dense lap hit regions non-overlapping so each column selects its own lap", () => {
+    const denseLaps: ResultDetailLap[] = Array.from(
+      { length: 11 },
+      (_, index) => ({
+        id: `lap-${index + 1}`,
+        label: `Lap ${index + 1}`,
+        distanceKm: 1,
+        paceSecondsPerKm: 280 + index * 4,
+        averageHeartRateBpm: 150 + index,
+        maximumHeartRateBpm: 160 + index,
+      }),
+    );
+    renderChart(denseLaps);
+
+    const hitAreas = Array.from(
+      container.querySelectorAll(
+        '[data-result-facet="pace"] [data-result-lap-hit-area]',
+      ),
+    ).map((area) => ({
+      x: Number(area.getAttribute("x")),
+      width: Number(area.getAttribute("width")),
+    }));
+    expect(hitAreas).toHaveLength(11);
+    for (const area of hitAreas) {
+      expect(area.width).toBeGreaterThan(0);
+    }
+    const sorted = [...hitAreas].sort((a, b) => a.x - b.x);
+    for (let index = 1; index < sorted.length; index += 1) {
+      expect(sorted[index - 1].x + sorted[index - 1].width).toBeLessThanOrEqual(
+        sorted[index].x + 0.001,
+      );
+    }
+  });
+
   it("renders an honest heart-rate facet placeholder when no lap HR exists", () => {
     renderChart([
       {

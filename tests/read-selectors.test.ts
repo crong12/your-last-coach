@@ -402,6 +402,14 @@ describe("shared coaching read selectors", () => {
     expect(result.data.sources.workoutResult).toBeNull();
     expect(result.evidenceRefs).toEqual([
       "planned-workout:planned-2026-08-30-long",
+      "planned-workout:planned-2026-08-23-long",
+      "workout-result:result-2026-08-23",
+      "planned-workout:planned-2026-08-16-long",
+      "workout-result:result-2026-08-16",
+      "planned-workout:planned-2026-08-09-long",
+      "workout-result:result-2026-08-09",
+      "planned-workout:planned-2026-08-02-long",
+      "workout-result:result-2026-08-02",
     ]);
   });
 });

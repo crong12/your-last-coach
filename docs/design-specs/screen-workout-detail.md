@@ -17,7 +17,7 @@ Entered from: Today's workout card, week-strip tiles, Trends (pace-vs-HR inspect
 
 Sections 1–4 come from the Planned Workout and always render; sections 5–7 belong to the Workout Result and render only once it exists (the result slot shows an honest "not completed yet" note beforehand); 8–9 render for both states when data exists.
 
-1. **Header**: ← back, workout title, planned/actual date, type chips (e.g. Quality · Threshold), status `PLANNED` / `COMPLETED` / `STOPPED`.
+1. **Header**: ← back, workout title, planned/actual date, type chips (e.g. Quality · Threshold), status `PLANNED` / `COMPLETED` / `STOPPED`. Partial results deliberately render no status chip: the header stays quiet rather than badging an athlete's cut-short session, and the partial story is told by the plan-versus-actual rows.
 2. **Coach's intent**: short editorial paragraph (Newsreader) — why this session exists in the plan, from the Planned Workout record. Provenance line if the intent came from an approved Workout Adaptation ("Adjusted 26 Aug — view adaptation" → `#adaptation/<id>`).
 3. **Structure blocks**: warm-up / main set / cool-down as labelled rows with target values (pace range, reps, recoveries) in tabular numerals.
 4. **Targets table**: consolidated label/value rows — target pace, effort/HR guidance, planned distance/duration, recovery protocol.

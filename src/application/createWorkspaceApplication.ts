@@ -285,7 +285,17 @@ export function createWorkspaceApplication(
         });
         continue;
       }
-      const after = { ...before, ...structuredClone(change.changes) };
+      const changes = structuredClone(change.changes);
+      const after = { ...before, ...changes };
+      // Coach targets describe one specific prescription. When an adaptation
+      // rewrites the distance or prescription without supplying fresh
+      // targets, drop the stale ones instead of letting them mislead.
+      if (
+        ("distanceKm" in changes || "prescription" in changes) &&
+        !("targets" in changes)
+      ) {
+        delete after.targets;
+      }
       next.set(change.workoutId, after);
       affectedWorkouts.push({ workoutId: change.workoutId, before, after });
     }

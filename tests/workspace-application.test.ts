@@ -101,6 +101,41 @@ describe("Workspace application", () => {
     expect(notifications).toEqual([2]);
   });
 
+  it("invalidates seeded coach targets when an adaptation changes distance or prescription", async () => {
+    const source = createDemoCoachingContextSource();
+    const { repository } = createRecordingRepository();
+    const application = createWorkspaceApplication({
+      initialState: await source.loadContext(),
+      fixtureSource: source,
+      repository,
+    });
+    const before = application
+      .getState()
+      .trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === "planned-2026-08-30-long",
+      );
+    expect(before?.targets).toBeDefined();
+
+    const proposal = acceptedProposal();
+    application.activatePlanReview(proposal);
+    await application.command({
+      type: "apply_plan_approval",
+      reviewId: proposal.reviewId,
+      expectedPlanVersion: proposal.expectedPlanVersion,
+      selectedOption: proposal.recommended,
+    });
+
+    const workouts = application.getState().trainingPlan.plannedWorkouts;
+    const strides = workouts.find(
+      ({ id }) => id === "planned-2026-08-29-strides",
+    );
+    const long = workouts.find(({ id }) => id === "planned-2026-08-30-long");
+    expect(strides).toBeDefined();
+    expect(long).toBeDefined();
+    expect(strides?.targets).toBeUndefined();
+    expect(long?.targets).toBeUndefined();
+  });
+
   it("replays an applied review without validating divergent input or saving again", async () => {
     const source = createDemoCoachingContextSource();
     const { repository, saves } = createRecordingRepository();
