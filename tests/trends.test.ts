@@ -759,3 +759,39 @@ describe("trends charts revamp derived series", () => {
     expect(sparse.fit).toBeNull();
   });
 });
+
+describe("codex review fixes", () => {
+  const WINDOW_DATES = (() => {
+    const dates: string[] = [];
+    for (let offset = 0; offset < 28; offset += 1) {
+      const date = new Date(Date.UTC(2026, 6, 30 + offset, 12));
+      dates.push(date.toISOString().slice(0, 10));
+    }
+    return dates;
+  })();
+
+  it("anchors the readiness baseline to the evidence boundary for the build range", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    (state.observations as { readinessHistory: unknown }).readinessHistory =
+      WINDOW_DATES.map((date) => ({
+        date,
+        hrvMs: 50,
+        restingHeartRateBpm: 48,
+        sleep: { durationMinutes: 440 },
+        source: {
+          adapter: "synthetic-coros-shaped",
+          readAt: `${date}T20:00:00+01:00`,
+          label: "seeded synthetic COROS-shaped observations",
+        },
+      }));
+
+    const projection = projectReadinessSeries(state, "hrv", "build");
+    // The build window's `to` is the future race date; the baseline must use
+    // the evidence boundary (clock), where 28 recorded days exist.
+    expect(projection.baseline).not.toBeNull();
+    expect(projection.baseline?.sampleCount).toBe(28);
+    expect(projection.baseline?.mean).toBeCloseTo(50);
+  });
+});

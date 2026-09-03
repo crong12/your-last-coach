@@ -65,7 +65,12 @@ export interface HrvChartProps {
   average?: number | null;
   /** 7-day rolling average series; when provided it becomes the primary line. */
   rollingAverage?: readonly ChartPoint[];
-  /** Personal 28-day baseline band; when provided the header shows the delta. */
+  /**
+   * Personal 28-day baseline band. Undefined means the chart does not use a
+   * baseline (legacy/harness mode); an explicit null means a baseline was
+   * expected but is unavailable (fewer than 7 recorded days) and the header
+   * says so instead of silently falling back to the 7-night average.
+   */
   baseline?: ReadinessBandProps | null;
   baselineDelta?: number | null;
   baselineStatus?: "within" | "above" | "below" | null;
@@ -173,7 +178,7 @@ export function HrvChart({
   displayTo,
   average: suppliedAverage,
   rollingAverage,
-  baseline = null,
+  baseline,
   baselineDelta = null,
   baselineStatus = null,
   polarity = "higher",
@@ -241,11 +246,14 @@ export function HrvChart({
       ? annotationReadout(selection.annotation)
       : readoutForPoint(selectedPoint ?? latestObserved, unit);
   const currentLabel = latestObserved ? String(latestObserved.value) : "—";
+  const baselineUnavailable = baseline === null;
   const averageLabel = baseline
     ? `28d baseline ${Math.round(baseline.mean)} ${unit}`
-    : average === null
-      ? "7-night avg —"
-      : `7-night avg ${average} ${unit}`;
+    : baselineUnavailable
+      ? "28d baseline —"
+      : average === null
+        ? "7-night avg —"
+        : `7-night avg ${average} ${unit}`;
   const trend = trendFor(latestObserved?.value ?? null, average);
   const outsideBadSide =
     (polarity === "higher" && baselineStatus === "below") ||
@@ -274,7 +282,9 @@ export function HrvChart({
           ? "within the baseline range"
           : `${baselineStatus} the baseline range`
       }.`
-    : "";
+    : baselineUnavailable
+      ? " Personal baseline unavailable: fewer than 7 recorded days in the last 28."
+      : "";
   const summary = latestObserved
     ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}.${baselineSummary} Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
     : `${metric}. Current: —. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
@@ -506,7 +516,13 @@ export function HrvChart({
       currentValue={status === "unavailable" ? "—" : currentLabel}
       unit={unit}
       averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
-      averageBasis={baseline ? "recorded days" : "recorded nights"}
+      averageBasis={
+        baseline
+          ? "recorded days"
+          : baselineUnavailable
+            ? "fewer than 7 recorded days"
+            : "recorded nights"
+      }
       trendLabel={status === "unavailable" ? undefined : deltaTrend?.label}
       trendGlyph={status === "unavailable" ? undefined : deltaTrend?.glyph}
       trendTone={deltaTrend?.tone}

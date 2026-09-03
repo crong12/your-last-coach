@@ -384,7 +384,9 @@ export function projectReadinessSeries(
       value: values.length >= 4 ? mean(values) : null,
     };
   });
-  const baselineValues = trailingValues(window.to, 28);
+  // Anchor to the evidence boundary: for the retained "build" range,
+  // window.to is the future race date while evidence stops at the clock.
+  const baselineValues = trailingValues(window.evidenceTo, 28);
   const baseline: ReadinessBaseline | null =
     baselineValues.length >= 7
       ? (() => {

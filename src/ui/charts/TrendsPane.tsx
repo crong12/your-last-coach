@@ -26,6 +26,7 @@ import {
 } from "./chartMath";
 import { ChartHitColumns } from "./ChartHitColumns";
 import { HrvChart } from "./HrvChart";
+import { sleepStageSegments } from "./sleepStages";
 import {
   CHART_PLOT,
   CHART_VIEWBOX,
@@ -201,49 +202,28 @@ function SleepChart({
           Math.min(20, (xScale(nextDate) - xScale(currentDate)) * 0.62),
         );
       };
+      const stageStyles = {
+        deep: {
+          fill: "var(--series-1)",
+          fillOpacity: 1,
+          stroke: undefined as string | undefined,
+        },
+        light: {
+          fill: "var(--series-2)",
+          fillOpacity: 0.85,
+          stroke: undefined,
+        },
+        rem: { fill: "var(--series-2)", fillOpacity: 0.4, stroke: undefined },
+        awake: { fill: "var(--paper)", fillOpacity: 1, stroke: "var(--line)" },
+      } as const;
       const stageSegments = (index: number) => {
-        const stages = projection.records[index]?.sleep?.stages;
-        if (!stages) return null;
-        const entries = [
-          {
-            key: "deep",
-            ratio: stages.deepRatio,
-            fill: "var(--series-1)",
-            fillOpacity: 1,
-            stroke: undefined as string | undefined,
-          },
-          {
-            key: "light",
-            ratio: stages.lightRatio,
-            fill: "var(--series-2)",
-            fillOpacity: 0.85,
-            stroke: undefined,
-          },
-          {
-            key: "rem",
-            ratio: stages.remRatio,
-            fill: "var(--series-2)",
-            fillOpacity: 0.4,
-            stroke: undefined,
-          },
-          {
-            key: "awake",
-            ratio: stages.awakeRatio,
-            fill: "var(--paper)",
-            fillOpacity: 1,
-            stroke: "var(--line)",
-          },
-        ].filter(
-          (entry) =>
-            typeof entry.ratio === "number" &&
-            Number.isFinite(entry.ratio) &&
-            entry.ratio > 0,
+        const segments = sleepStageSegments(
+          projection.records[index]?.sleep?.stages,
         );
-        const total = entries.reduce((sum, { ratio }) => sum + ratio!, 0);
-        if (total <= 0) return null;
-        return entries.map((entry) => ({
-          ...entry,
-          share: (entry.ratio as number) / total,
+        if (!segments) return null;
+        return segments.map((segment) => ({
+          ...segment,
+          ...stageStyles[segment.key],
         }));
       };
       const hoverPoint =
