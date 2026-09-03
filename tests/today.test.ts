@@ -184,7 +184,7 @@ describe("Today pane selector", () => {
       prescription: {
         targetPaceSecondsPerKm: { min: 275, max: 280 },
         recoverySeconds: 90,
-        distanceKm: 13,
+        distanceKm: 9.5,
       },
     });
 

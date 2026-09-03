@@ -91,7 +91,7 @@ The Shared Coaching Workspace renders the same briefing from the same authoritat
 | Date       | Planned Workout / Workout Result     |  Distance |
 | ---------- | ------------------------------------ | --------: |
 | Thu 6 Aug  | Completed `3 × 2 km threshold`       |     11 km |
-| Thu 13 Aug | Completed `5 × 1 km threshold`       |     13 km |
+| Thu 13 Aug | Completed `5 × 1 km threshold`       |    9.5 km |
 | Sat 15 Aug | Easy run with strides                |      8 km |
 | Sun 16 Aug | Long run                             |     18 km |
 | Tue 18 Aug | Easy run                             |     10 km |

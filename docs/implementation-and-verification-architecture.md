@@ -204,9 +204,14 @@ type PersistedWorkspace = {
 ```
 
 Schema-v1 envelopes from before the declined-decision field are migrated by
-defaulting missing `declinedAdaptations` to an empty array. Other incomplete or
-invalid snapshots are rejected and replaced with the exact demo fixture through
-the existing refresh path.
+defaulting missing `declinedAdaptations` to an empty array. Narrow fixture-data
+migrations also recognize the exact previously released August threshold
+records, replace them with their corrected canonical records, and update saved
+feedback references when a historical ID changed. These migrations match the
+released record fingerprints rather than IDs alone, so non-legacy or adapted
+workouts remain authoritative. Other incomplete or invalid snapshots are
+rejected and replaced with the exact demo fixture through the existing refresh
+path.
 
 All human views and WebMCP reads use selectors over the same state instance. No independently cached Training Plan, UI-only profile, Agent memory blob, or prose summary is authoritative.
 

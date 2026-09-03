@@ -90,7 +90,7 @@ describe("demo-athlete-v1", () => {
     expect(planned).toMatchObject({
       date: "2026-08-26",
       title: "5 × 1 km threshold",
-      distanceKm: 13,
+      distanceKm: 9.5,
       prescription: {
         blocks: [
           { kind: "warmup", distanceKm: 2 },
@@ -190,7 +190,7 @@ describe("demo-athlete-v1", () => {
     expect(august13Plan).toMatchObject({
       title: "5 × 1 km threshold",
       type: "threshold",
-      distanceKm: 13,
+      distanceKm: 9.5,
       prescription: {
         blocks: [
           { kind: "warmup", distanceKm: 2 },
@@ -208,10 +208,26 @@ describe("demo-athlete-v1", () => {
     expect(august13Result).toMatchObject({
       status: "completed",
       summary: {
+        distanceKm: 9.5,
+        durationSeconds: 3_033,
+        averagePaceSecondsPerKm: 3_033 / 9.5,
         completedWorkRepetitions: 5,
         plannedWorkRepetitions: 5,
       },
     });
+    expect(
+      august13Result?.laps.reduce(
+        (distanceKm, lap) => distanceKm + lap.distanceKm,
+        0,
+      ),
+    ).toBe(august13Result?.summary.distanceKm);
+    expect(
+      august13Result?.laps.reduce(
+        (durationSeconds, lap) =>
+          durationSeconds + lap.distanceKm * (lap.paceSecondsPerKm ?? 0),
+        0,
+      ),
+    ).toBe(august13Result?.summary.durationSeconds);
     expect(
       august13Result?.laps
         .filter(({ kind }) => kind === "work")
