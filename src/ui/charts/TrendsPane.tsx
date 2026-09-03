@@ -246,7 +246,8 @@ function SleepChart({
           share: (entry.ratio as number) / total,
         }));
       };
-      const hoverPoint = hoverIndex === null ? null : projection.points[hoverIndex];
+      const hoverPoint =
+        hoverIndex === null ? null : projection.points[hoverIndex];
       const hoverParsed = hoverPoint ? parseChartDate(hoverPoint.date) : null;
       const tooltip: ChartTooltip | null =
         hoverPoint && hoverParsed
@@ -658,8 +659,7 @@ function VolumeLoadChart({
             rampRounded === 0
               ? "even with last week"
               : `${rampRounded > 0 ? "+" : "−"}${Math.abs(rampRounded)}% vs last week`,
-          glyph:
-            rampRounded > 0 ? "▲" : rampRounded < 0 ? "▼" : undefined,
+          glyph: rampRounded > 0 ? "▲" : rampRounded < 0 ? "▼" : undefined,
         };
   const hasWeeks =
     projection.weeks.length > 0 && projection.status !== "unavailable";

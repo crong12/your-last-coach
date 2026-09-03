@@ -572,7 +572,14 @@ describe("trends charts revamp derived series", () => {
   }
 
   it("computes a 7-day rolling average aligned to window dates", async () => {
-    const preWindow = ["2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29"];
+    const preWindow = [
+      "2026-07-24",
+      "2026-07-25",
+      "2026-07-26",
+      "2026-07-27",
+      "2026-07-28",
+      "2026-07-29",
+    ];
     const records = [
       ...preWindow.map((date) => readinessRecord(date, 50)),
       ...WINDOW_DATES.map((date) =>
@@ -653,20 +660,14 @@ describe("trends charts revamp derived series", () => {
 
   it("flags the latest value outside the personal band", async () => {
     const below = WINDOW_DATES.map((date, index) =>
-      readinessRecord(
-        date,
-        index < 27 ? (index % 2 === 0 ? 40 : 60) : 10,
-      ),
+      readinessRecord(date, index < 27 ? (index % 2 === 0 ? 40 : 60) : 10),
     );
     expect(
       projectReadinessSeries(await stateWithHistory(below), "hrv", "4w")
         .baselineStatus,
     ).toBe("below");
     const above = WINDOW_DATES.map((date, index) =>
-      readinessRecord(
-        date,
-        index < 27 ? (index % 2 === 0 ? 40 : 60) : 95,
-      ),
+      readinessRecord(date, index < 27 ? (index % 2 === 0 ? 40 : 60) : 95),
     );
     expect(
       projectReadinessSeries(await stateWithHistory(above), "hrv", "4w")
@@ -746,7 +747,9 @@ describe("trends charts revamp derived series", () => {
     expect(withPlan?.workoutType).toBeTruthy();
 
     const keep = new Set(
-      projection.points.slice(0, 5).map(({ workoutResultId }) => workoutResultId),
+      projection.points
+        .slice(0, 5)
+        .map(({ workoutResultId }) => workoutResultId),
     );
     state.workoutResults = state.workoutResults.filter(({ id }) =>
       keep.has(id),

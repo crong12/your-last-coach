@@ -390,9 +390,7 @@ export function projectReadinessSeries(
       ? (() => {
           const baselineMean = mean(baselineValues);
           const deviation = Math.sqrt(
-            mean(
-              baselineValues.map((value) => (value - baselineMean) ** 2),
-            ),
+            mean(baselineValues.map((value) => (value - baselineMean) ** 2)),
           );
           return {
             mean: baselineMean,
@@ -654,8 +652,7 @@ export function projectWeeklyVolumeLoad(
     week.distanceChangePercent =
       previous === null || previous.distanceKm === 0
         ? null
-        : ((week.distanceKm - previous.distanceKm) / previous.distanceKm) *
-          100;
+        : ((week.distanceKm - previous.distanceKm) / previous.distanceKm) * 100;
     const values = weeks
       .slice(Math.max(0, index - 3), index + 1)
       .map(({ trainingLoad }) => trainingLoad)
@@ -769,7 +766,8 @@ function fitPaceHeartRate(
   let covariance = 0;
   let variance = 0;
   for (const { paceSecondsPerKm, heartRateBpm } of points) {
-    covariance += (paceSecondsPerKm - paceMean) * (heartRateBpm - heartRateMean);
+    covariance +=
+      (paceSecondsPerKm - paceMean) * (heartRateBpm - heartRateMean);
     variance += (paceSecondsPerKm - paceMean) ** 2;
   }
   if (variance === 0) return null;

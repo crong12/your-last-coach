@@ -308,8 +308,9 @@ export function HrvChart({
         [READINESS_PLOT.bottom, READINESS_PLOT.top],
       );
       const hasRolling =
-        (rollingAverage ?? []).filter(({ value }) => finiteValue(value) !== null)
-          .length > 1;
+        (rollingAverage ?? []).filter(
+          ({ value }) => finiteValue(value) !== null,
+        ).length > 1;
       const dailyPath =
         !hasRolling && coverage.observed > 1
           ? createLinePath(points, xScale, yScale)
