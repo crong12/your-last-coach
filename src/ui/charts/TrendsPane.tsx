@@ -22,10 +22,24 @@ import {
   createLinearScale,
   createTimeScale,
   parseChartDate,
+  weeklyTickDates,
 } from "./chartMath";
+import { ChartHitColumns } from "./ChartHitColumns";
 import { HrvChart } from "./HrvChart";
-import { CHART_PLOT, CHART_VIEWBOX, type ChartAnnotation } from "./chartTypes";
-import { formatPacePerKm } from "../metricFormatters";
+import { sleepStageSegments } from "./sleepStages";
+import {
+  CHART_PLOT,
+  CHART_VIEWBOX,
+  READINESS_PLOT,
+  READINESS_VIEWBOX,
+  type ChartAnnotation,
+  type ChartTooltip,
+} from "./chartTypes";
+import {
+  formatMinutesClock,
+  formatPacePerKm,
+  formatPaceSeconds,
+} from "../metricFormatters";
 
 export const TRENDS_SOURCE =
   "Source: seeded synthetic COROS-shaped observations";
@@ -102,6 +116,7 @@ function SleepChart({
   const [selectedDate, setSelectedDate] = useState<string | null>(
     projection.latest?.date ?? projection.points[0]?.date ?? null,
   );
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   useEffect(() => {
     setSelectedDate((current) => {
       if (current && projection.points.some(({ date }) => date === current)) {
@@ -145,7 +160,12 @@ function SleepChart({
   const average = projection.average;
   const current = projection.latest?.value ?? null;
   const trend = trendFor(current, average);
-  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}. Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
+  const baseline = projection.baseline;
+  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}.${
+    baseline
+      ? ` 28-day average (recorded nights): ${formatDuration(baseline.mean)}.`
+      : ""
+  } Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
   const hasObserved = projection.coverage.observed > 0;
   const plot = hasObserved ? (
     (() => {
@@ -155,11 +175,14 @@ function SleepChart({
           ...projection.points.map(({ date }) => date),
           displayTo ?? projection.points.at(-1)?.date,
         ].filter((date): date is string => date !== undefined),
-        [CHART_PLOT.left, CHART_PLOT.right],
+        [READINESS_PLOT.left, READINESS_PLOT.right],
       );
       const yScale = createLinearScale(
-        projection.points.map(({ value }) => value),
-        [CHART_PLOT.bottom, CHART_PLOT.top],
+        [
+          ...projection.points.map(({ value }) => value),
+          baseline?.mean ?? null,
+        ],
+        [READINESS_PLOT.bottom, READINESS_PLOT.top],
       );
       const widthForBar = (index: number) => {
         const currentDate = parseChartDate(projection.points[index].date);
@@ -172,13 +195,55 @@ function SleepChart({
           !nextDate ||
           index === projection.points.length - 1
         ) {
-          return 14;
+          return 9;
         }
         return Math.max(
-          10,
-          Math.min(28, (xScale(nextDate) - xScale(currentDate)) * 0.58),
+          6,
+          Math.min(20, (xScale(nextDate) - xScale(currentDate)) * 0.62),
         );
       };
+      const stageStyles = {
+        deep: {
+          fill: "var(--series-1)",
+          fillOpacity: 1,
+          stroke: undefined as string | undefined,
+        },
+        light: {
+          fill: "var(--series-2)",
+          fillOpacity: 0.85,
+          stroke: undefined,
+        },
+        rem: { fill: "var(--series-2)", fillOpacity: 0.4, stroke: undefined },
+        awake: { fill: "var(--paper)", fillOpacity: 1, stroke: "var(--line)" },
+      } as const;
+      const stageSegments = (index: number) => {
+        const segments = sleepStageSegments(
+          projection.records[index]?.sleep?.stages,
+        );
+        if (!segments) return null;
+        return segments.map((segment) => ({
+          ...segment,
+          ...stageStyles[segment.key],
+        }));
+      };
+      const hoverPoint =
+        hoverIndex === null ? null : projection.points[hoverIndex];
+      const hoverParsed = hoverPoint ? parseChartDate(hoverPoint.date) : null;
+      const tooltip: ChartTooltip | null =
+        hoverPoint && hoverParsed
+          ? {
+              x: xScale(hoverParsed),
+              y:
+                hoverPoint.value === null
+                  ? READINESS_PLOT.bottom
+                  : yScale(hoverPoint.value),
+              text: `${formatShortDate(hoverPoint.date)} · ${
+                hoverPoint.value === null
+                  ? "No recording"
+                  : formatDuration(hoverPoint.value)
+              }`,
+            }
+          : null;
       return (
         <ChartPlot
           id="sleep"
@@ -188,72 +253,137 @@ function SleepChart({
           xScale={xScale}
           yScale={yScale}
           annotations={[]}
+          viewBox={READINESS_VIEWBOX}
+          plotBounds={READINESS_PLOT}
+          xTickDates={weeklyTickDates(
+            projection.points.map(({ date }) => date),
+          )}
+          yTickValues={(() => {
+            const [domainMin, domainMax] = yScale.domain();
+            const marks: number[] = [];
+            for (
+              let hour = Math.ceil(domainMin / 60);
+              hour <= Math.floor(domainMax / 60);
+              hour += 1
+            ) {
+              marks.push(hour * 60);
+            }
+            return marks.length > 0 ? marks : undefined;
+          })()}
+          yTickFormat={formatMinutesClock}
+          tooltip={tooltip}
           onSelectAnnotation={() => undefined}
         >
-          {projection.points.map((point, index) => {
-            const parsedDate = parseChartDate(point.date);
-            if (!parsedDate) return null;
-            const x = xScale(parsedDate);
-            const value = point.value;
-            const y = value === null ? CHART_PLOT.bottom : yScale(value);
-            const barWidth = widthForBar(index);
-            const label = `Inspect Sleep for ${formatDate(point.date)}, ${
-              value === null ? "no recording" : formatDuration(value)
-            }`;
-            return (
-              <g
-                key={point.date}
-                role="button"
-                tabIndex={0}
-                aria-label={label}
-                data-sleep-night
-                data-chart-date={point.date}
-                onClick={() => setSelectedDate(point.date)}
-                onKeyDown={(event: KeyboardEvent<SVGGElement>) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  setSelectedDate(point.date);
-                }}
-              >
-                <rect
-                  data-chart-hit-area
-                  x={x - 22}
-                  y={CHART_PLOT.top}
-                  width="44"
-                  height={CHART_PLOT.bottom - CHART_PLOT.top}
-                  fill="var(--paper)"
-                  fillOpacity="0.001"
-                  pointerEvents="all"
-                />
-                {value === null ? (
+          <g data-chart-marks aria-hidden="true" pointerEvents="none">
+            {projection.points.map((point, index) => {
+              const parsedDate = parseChartDate(point.date);
+              if (!parsedDate) return null;
+              const x = xScale(parsedDate);
+              const value = point.value;
+              if (value === null) {
+                return (
                   <line
+                    key={point.date}
                     data-sleep-missing
-                    x1={x - 8}
-                    x2={x + 8}
-                    y1={CHART_PLOT.bottom}
-                    y2={CHART_PLOT.bottom}
+                    x1={x - 6}
+                    x2={x + 6}
+                    y1={READINESS_PLOT.bottom}
+                    y2={READINESS_PLOT.bottom}
                     stroke="var(--line)"
                     strokeWidth="2"
                     strokeDasharray="4 3"
                   />
-                ) : (
-                  <rect
-                    data-sleep-bar
-                    x={x - barWidth / 2}
-                    y={y}
-                    width={barWidth}
-                    height={CHART_PLOT.bottom - y}
-                    fill="var(--series-2)"
-                    className={
-                      selectedDate === point.date
-                        ? "chart-bar--selected"
-                        : undefined
-                    }
-                  />
-                )}
+                );
+              }
+              const y = yScale(value);
+              const barWidth = widthForBar(index);
+              const barHeight = READINESS_PLOT.bottom - y;
+              const segments = stageSegments(index);
+              return (
+                <g
+                  key={point.date}
+                  data-sleep-bar
+                  className={
+                    selectedDate === point.date
+                      ? "chart-bar--selected"
+                      : undefined
+                  }
+                >
+                  {segments ? (
+                    (() => {
+                      let cursor = READINESS_PLOT.bottom;
+                      return segments.map((segment) => {
+                        const segmentHeight = barHeight * segment.share;
+                        cursor -= segmentHeight;
+                        return (
+                          <rect
+                            key={segment.key}
+                            data-sleep-stage={segment.key}
+                            x={x - barWidth / 2}
+                            y={cursor}
+                            width={barWidth}
+                            height={segmentHeight}
+                            fill={segment.fill}
+                            fillOpacity={segment.fillOpacity}
+                            stroke={segment.stroke}
+                            strokeWidth={segment.stroke ? 1 : undefined}
+                          />
+                        );
+                      });
+                    })()
+                  ) : (
+                    <rect
+                      x={x - barWidth / 2}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill="var(--series-2)"
+                    />
+                  )}
+                </g>
+              );
+            })}
+            {baseline && (
+              <g data-sleep-average-line>
+                <line
+                  x1={READINESS_PLOT.left}
+                  x2={READINESS_PLOT.right}
+                  y1={yScale(baseline.mean)}
+                  y2={yScale(baseline.mean)}
+                  stroke="var(--series-1)"
+                  strokeWidth="1.5"
+                  strokeDasharray="5 4"
+                  opacity="0.75"
+                />
+                <text
+                  className="chart-axis-label"
+                  x={READINESS_PLOT.right}
+                  y={yScale(baseline.mean) - 6}
+                  textAnchor="end"
+                >
+                  28d avg {formatMinutesClock(baseline.mean)}
+                </text>
               </g>
-            );
-          })}
+            )}
+          </g>
+          <ChartHitColumns
+            points={projection.points}
+            xScale={xScale}
+            plotBounds={READINESS_PLOT}
+            selectedDate={selectedDate}
+            dataAttribute="data-sleep-night"
+            label={(point) =>
+              `Inspect Sleep for ${formatDate(point.date)}, ${
+                point.value === null
+                  ? "no recording"
+                  : formatDuration(point.value)
+              }`
+            }
+            onActivate={(index) =>
+              setSelectedDate(projection.points[index].date)
+            }
+            onHover={setHoverIndex}
+          />
         </ChartPlot>
       );
     })()
@@ -278,6 +408,7 @@ function SleepChart({
           : `7-night avg ${formatDuration(average)}`
       }
       averageBasis="recorded nights"
+      directionHint="h:mm · deep · light · rem · awake"
       readout={readout}
       plot={plot}
       coverage={
@@ -349,7 +480,12 @@ function VolumeAnnotations({
                   points={`${x},23 ${x + 8},31 ${x},39 ${x - 8},31`}
                   fill="var(--track)"
                 />
-                <text data-chart-annotation-label x={x + 12} y={35}>
+                <text
+                  data-chart-annotation-label
+                  className="chart-annotation__label chart-annotation__label--phase"
+                  x={x + 12}
+                  y={35}
+                >
                   {annotation.label}
                 </text>
               </g>
@@ -388,6 +524,11 @@ function VolumeAnnotations({
               )}
               <text
                 data-chart-annotation-label
+                className={
+                  annotation.kind === "phase"
+                    ? "chart-annotation__label chart-annotation__label--phase"
+                    : "chart-annotation__label"
+                }
                 x={x + 5}
                 y={annotation.kind === "race" ? 56 : 40}
               >
@@ -441,6 +582,12 @@ function VolumeLoadChart({
       };
     });
   }, [annotations, projection.weeks]);
+  const formatRamp = (percent: number) => {
+    const rounded = Math.round(percent);
+    return rounded === 0
+      ? "even with prior week"
+      : `${rounded > 0 ? "+" : "−"}${Math.abs(rounded)}% vs prior week`;
+  };
   const selectedWeek = projection.weeks.find(
     ({ weekStart }) => weekStart === selection.value,
   );
@@ -464,7 +611,11 @@ function VolumeLoadChart({
                 : `Race day: ${selectedAnnotation.label}`
           }`
         : selectedWeek
-          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}`
+          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}${
+              selectedWeek.distanceChangePercent === null
+                ? ""
+                : ` · ${formatRamp(selectedWeek.distanceChangePercent)}`
+            }`
           : projection.status === "unavailable"
             ? "Training history unavailable"
             : "No Workout Results in this range";
@@ -474,6 +625,22 @@ function VolumeLoadChart({
     lastWeek?.trainingLoad === undefined || lastWeek?.trainingLoad === null
       ? "—"
       : String(lastWeek.trainingLoad);
+  const [hoverWeek, setHoverWeek] = useState<string | null>(null);
+  const rampRounded =
+    lastWeek?.distanceChangePercent === undefined ||
+    lastWeek?.distanceChangePercent === null
+      ? null
+      : Math.round(lastWeek.distanceChangePercent);
+  const rampTrend =
+    rampRounded === null
+      ? null
+      : {
+          label:
+            rampRounded === 0
+              ? "even with last week"
+              : `${rampRounded > 0 ? "+" : "−"}${Math.abs(rampRounded)}% vs last week`,
+          glyph: rampRounded > 0 ? "▲" : rampRounded < 0 ? "▼" : undefined,
+        };
   const hasWeeks =
     projection.weeks.length > 0 && projection.status !== "unavailable";
   const plot = hasWeeks ? (
@@ -522,7 +689,27 @@ function VolumeLoadChart({
             annotationIsInRange(annotation, rangeFrom, rangeTo),
         )
         .map(({ label }) => label);
-      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}.${
+        rampTrend ? ` Week-over-week distance: ${rampTrend.label}.` : ""
+      } Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const hoveredWeek = projection.weeks.find(
+        ({ weekStart }) => weekStart === hoverWeek,
+      );
+      const hoveredParsed = hoveredWeek
+        ? parseChartDate(hoveredWeek.weekStart)
+        : null;
+      const tooltip: ChartTooltip | null =
+        hoveredWeek && hoveredParsed
+          ? {
+              x: xScale(hoveredParsed),
+              y: distanceScale(hoveredWeek.distanceKm),
+              text: `${formatShortDate(hoveredWeek.weekStart)} week · ${hoveredWeek.distanceKm.toFixed(1)} km · Load ${
+                hoveredWeek.trainingLoad === null
+                  ? "unavailable"
+                  : hoveredWeek.trainingLoad
+              }`,
+            }
+          : null;
       return (
         <div className="chart-card__plot chart-card__plot--volume-load">
           <svg
@@ -538,10 +725,48 @@ function VolumeLoadChart({
             </title>
             <desc id="volume-load-description">{description}</desc>
             <g data-chart-grid aria-hidden="true">
-              {[42, 106, 170, 242, 307, 372].map((y) => (
+              {distanceScale
+                .ticks(3)
+                .filter((tick) => tick > 0)
+                .map((tick) => {
+                  const y = distanceScale(tick);
+                  if (y < 42) return null;
+                  return (
+                    <g key={`distance-${tick}`}>
+                      <text
+                        data-chart-y-label
+                        className="chart-axis-label"
+                        x={CHART_PLOT.left + 4}
+                        y={y - 5}
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+              {loadScale
+                .ticks(3)
+                .filter((tick) => tick > 0)
+                .map((tick) => {
+                  const y = loadScale(tick);
+                  if (y < 242) return null;
+                  return (
+                    <g key={`load-${tick}`}>
+                      <text
+                        data-chart-y-label
+                        className="chart-axis-label"
+                        x={CHART_PLOT.left + 4}
+                        y={y - 5}
+                      >
+                        {tick}
+                      </text>
+                    </g>
+                  );
+                })}
+              {[170, 372].map((y) => (
                 <line
-                  key={y}
-                  data-chart-gridline
+                  key={`baseline-${y}`}
+                  data-chart-baseline
                   x1={CHART_PLOT.left}
                   x2={CHART_PLOT.right}
                   y1={y}
@@ -551,10 +776,20 @@ function VolumeLoadChart({
                   shapeRendering="crispEdges"
                 />
               ))}
-              <text data-chart-y-label x="64" y="18">
+              <text
+                data-chart-y-label
+                className="chart-axis-label"
+                x="64"
+                y="18"
+              >
                 Distance km
               </text>
-              <text data-chart-y-label x="64" y="236">
+              <text
+                data-chart-y-label
+                className="chart-axis-label"
+                x="64"
+                y="236"
+              >
                 Training Load
               </text>
             </g>
@@ -597,6 +832,10 @@ function VolumeLoadChart({
                       event.preventDefault();
                       setSelection({ kind: "week", value: week.weekStart });
                     }}
+                    onPointerEnter={() => setHoverWeek(week.weekStart)}
+                    onPointerLeave={() => setHoverWeek(null)}
+                    onFocus={() => setHoverWeek(week.weekStart)}
+                    onBlur={() => setHoverWeek(null)}
                   >
                     <rect
                       data-chart-hit-area
@@ -616,6 +855,15 @@ function VolumeLoadChart({
                       height={170 - y}
                       fill="var(--series-1)"
                     />
+                    <text
+                      data-volume-bar-value
+                      className="chart-axis-label"
+                      x={x}
+                      y={y - 6}
+                      textAnchor="middle"
+                    >
+                      {week.distanceKm.toFixed(1)}
+                    </text>
                   </g>
                 );
               })}
@@ -663,38 +911,81 @@ function VolumeLoadChart({
                 );
               })}
               {averagePath && (
-                <path
-                  data-load-average-line
-                  d={averagePath}
-                  fill="none"
-                  stroke="var(--track)"
-                  strokeWidth="2"
-                />
+                <>
+                  <path
+                    data-load-average-line
+                    d={averagePath}
+                    fill="none"
+                    stroke="var(--series-1)"
+                    strokeWidth="2"
+                    strokeDasharray="6 4"
+                    opacity="0.85"
+                  />
+                  {(() => {
+                    const lastAverage = projection.weeks.at(-1);
+                    const lastParsed = lastAverage
+                      ? parseChartDate(lastAverage.weekStart)
+                      : null;
+                    if (
+                      !lastAverage ||
+                      !lastParsed ||
+                      lastAverage.fourWeekAverageLoad === null
+                    ) {
+                      return null;
+                    }
+                    return (
+                      <text
+                        data-load-average-label
+                        className="chart-axis-label"
+                        x={xScale(lastParsed) + 26}
+                        y={loadScale(lastAverage.fourWeekAverageLoad) + 4}
+                        textAnchor="start"
+                      >
+                        4-wk avg
+                      </text>
+                    );
+                  })()}
+                </>
               )}
             </g>
             <g data-chart-x-labels aria-hidden="true">
-              {projection.weeks
-                .filter(
-                  (_, index) =>
-                    index === 0 || index === projection.weeks.length - 1,
-                )
-                .map((week, index) => {
-                  const parsed = parseChartDate(week.weekStart);
-                  if (!parsed) return null;
-                  return (
-                    <text
-                      key={week.weekStart}
-                      data-chart-x-label
-                      x={xScale(parsed)}
-                      y="408"
-                      textAnchor={index === 0 ? "start" : "end"}
-                    >
-                      {formatShortDate(week.weekStart)}
-                    </text>
-                  );
-                })}
+              {projection.weeks.map((week, index) => {
+                const parsed = parseChartDate(week.weekStart);
+                if (!parsed) return null;
+                return (
+                  <text
+                    key={week.weekStart}
+                    data-chart-x-label
+                    className="chart-axis-label"
+                    x={xScale(parsed)}
+                    y="408"
+                    textAnchor={
+                      index === 0
+                        ? "start"
+                        : index === projection.weeks.length - 1
+                          ? "end"
+                          : "middle"
+                    }
+                  >
+                    {formatShortDate(week.weekStart)}
+                  </text>
+                );
+              })}
             </g>
           </svg>
+          {tooltip && (
+            <div
+              className="chart-plot__tooltip"
+              data-chart-tooltip
+              aria-hidden="true"
+              style={{
+                left: `clamp(56px, ${(tooltip.x / 720) * 100}%, calc(100% - 56px))`,
+                top: `${(tooltip.y / 420) * 100}%`,
+              }}
+            >
+              {tooltip.text}
+            </div>
+          )}
         </div>
       );
     })()
@@ -728,6 +1019,13 @@ function VolumeLoadChart({
       unit="km"
       averageLabel={`Load ${loadCurrent}`}
       averageBasis="latest week · sourced per Workout Result"
+      trendLabel={
+        projection.status === "unavailable" ? undefined : rampTrend?.label
+      }
+      trendGlyph={
+        projection.status === "unavailable" ? undefined : rampTrend?.glyph
+      }
+      directionHint="weekly km · training load · dashed = 4-wk avg load"
       readout={fixedReadout}
       plot={plot}
       coverage={
@@ -770,12 +1068,15 @@ function PaceHeartRateChart({
         : (projection.selected?.workoutResultId ?? null),
     );
   }, [projection.points, projection.selected?.workoutResultId]);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const selected =
     projection.points.find(
       ({ workoutResultId }) => workoutResultId === selectedId,
     ) ?? projection.selected;
   const readout = selected
-    ? `${formatShortDate(selected.date)} · ${selected.title} · ${formatPace(selected.paceSecondsPerKm)} · ${selected.heartRateBpm} bpm`
+    ? `${formatShortDate(selected.date)} · ${selected.title}${
+        selected.workoutType ? ` · ${selected.workoutType}` : ""
+      } · ${formatPace(selected.paceSecondsPerKm)} · ${selected.heartRateBpm} bpm`
     : projection.status === "unavailable"
       ? "Run comparison data unavailable"
       : "No comparable runs in this range";
@@ -801,10 +1102,52 @@ function PaceHeartRateChart({
         paceMax + Math.max(1, (paceMax - paceMin) * 0.05),
         paceMin - Math.max(1, (paceMax - paceMin) * 0.05),
       ]);
+      const fit = projection.fit;
+      const [fitPaceStart, fitPaceEnd] = [paceMax, paceMin];
+      const fitHeartRates = fit
+        ? [
+            fit.slope * fitPaceStart + fit.intercept,
+            fit.slope * fitPaceEnd + fit.intercept,
+          ]
+        : [];
       const yScale = createLinearScale(
-        projection.points.map(({ heartRateBpm }) => heartRateBpm),
+        [
+          ...projection.points.map(({ heartRateBpm }) => heartRateBpm),
+          ...fitHeartRates,
+        ],
         [CHART_PLOT.bottom, CHART_PLOT.top],
       );
+      const chronological = [...projection.points].sort((a, b) =>
+        a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+      );
+      const recencyRank = new Map(
+        chronological.map(({ workoutResultId }, index) => [
+          workoutResultId,
+          index,
+        ]),
+      );
+      const newestId = chronological.at(-1)?.workoutResultId ?? null;
+      const opacityFor = (workoutResultId: string) => {
+        if (chronological.length < 2) return 1;
+        const rank = recencyRank.get(workoutResultId) ?? 0;
+        return 0.35 + 0.65 * (rank / (chronological.length - 1));
+      };
+      const hovered =
+        projection.points.find(
+          ({ workoutResultId }) => workoutResultId === hoverId,
+        ) ?? null;
+      const tooltip: ChartTooltip | null = hovered
+        ? {
+            x: xScale(hovered.paceSecondsPerKm),
+            y: yScale(hovered.heartRateBpm),
+            text: `${formatShortDate(hovered.date)} · ${formatPace(hovered.paceSecondsPerKm)} · ${hovered.heartRateBpm} bpm`,
+          }
+        : null;
+      const fitSummary = fit
+        ? ` Dashed line: fit across ${fit.pointCount} runs — heart rate ${
+            fit.slope > 0 ? "rises" : "falls"
+          } about ${Math.abs(fit.slope * 10).toFixed(1)} bpm per 10 seconds-per-km slower pace.`
+        : "";
       return (
         <div className="chart-card__plot">
           <svg
@@ -819,7 +1162,8 @@ function PaceHeartRateChart({
             <desc id="pace-heart-rate-description">
               Derived from your runs. Current:{" "}
               {selected ? formatPace(selected.paceSecondsPerKm) : "—"}.
-              Direction: No fitted trend. Coverage: {projection.points.length}{" "}
+              {fitSummary || " Direction: No fitted trend."} Newer runs render
+              more solid than older runs. Coverage: {projection.points.length}{" "}
               eligible Outdoor Run pairs
               {projection.excludedOutdoorRuns
                 ? `, ${projection.excludedOutdoorRuns} missing a measure.`
@@ -831,23 +1175,60 @@ function PaceHeartRateChart({
                 const y = yScale(tick);
                 return (
                   <g key={tick}>
-                    <line
-                      data-chart-gridline
-                      x1={CHART_PLOT.left}
-                      x2={CHART_PLOT.right}
-                      y1={y}
-                      y2={y}
-                      stroke="var(--line)"
-                      strokeWidth="1"
-                      shapeRendering="crispEdges"
-                    />
-                    <text data-chart-y-label x={CHART_PLOT.left + 4} y={y - 5}>
+                    <text
+                      data-chart-y-label
+                      className="chart-axis-label"
+                      x={CHART_PLOT.left + 4}
+                      y={y - 5}
+                    >
                       {tick}
                     </text>
                   </g>
                 );
               })}
             </g>
+            <g data-chart-x-ticks aria-hidden="true">
+              {xScale.ticks(4).map((tick) => {
+                const x = xScale(tick);
+                if (x < CHART_PLOT.left || x > CHART_PLOT.right) return null;
+                return (
+                  <g key={tick}>
+                    <line
+                      data-chart-pace-tick
+                      x1={x}
+                      x2={x}
+                      y1={CHART_PLOT.bottom}
+                      y2={CHART_PLOT.bottom + 6}
+                      stroke="var(--line)"
+                      strokeWidth="1"
+                      shapeRendering="crispEdges"
+                    />
+                    <text
+                      data-chart-pace-tick-label
+                      className="chart-axis-label"
+                      x={x}
+                      y={CHART_PLOT.bottom + 20}
+                      textAnchor="middle"
+                    >
+                      {formatPaceSeconds(tick)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+            {fit && (
+              <line
+                data-pace-fit-line
+                aria-hidden="true"
+                x1={xScale(fitPaceStart)}
+                y1={yScale(fit.slope * fitPaceStart + fit.intercept)}
+                x2={xScale(fitPaceEnd)}
+                y2={yScale(fit.slope * fitPaceEnd + fit.intercept)}
+                stroke="var(--series-2)"
+                strokeWidth="2"
+                strokeDasharray="6 4"
+              />
+            )}
             <g data-chart-series data-chart-series-kind="pace-heart-rate">
               {projection.points.map((point) => {
                 const x = xScale(point.paceSecondsPerKm);
@@ -867,6 +1248,10 @@ function PaceHeartRateChart({
                       event.preventDefault();
                       setSelectedId(point.workoutResultId);
                     }}
+                    onPointerEnter={() => setHoverId(point.workoutResultId)}
+                    onPointerLeave={() => setHoverId(null)}
+                    onFocus={() => setHoverId(point.workoutResultId)}
+                    onBlur={() => setHoverId(null)}
                   >
                     <rect
                       data-chart-hit-area
@@ -888,22 +1273,42 @@ function PaceHeartRateChart({
                         strokeWidth="2"
                       />
                     )}
+                    {point.workoutResultId === newestId && !selectedPoint && (
+                      <circle
+                        data-pace-point-newest
+                        cx={x}
+                        cy={y}
+                        r="9"
+                        fill="none"
+                        stroke="var(--series-1)"
+                        strokeWidth="1.5"
+                        strokeDasharray="2 2"
+                      />
+                    )}
                     <circle
                       data-pace-point-visible
                       cx={x}
                       cy={y}
                       r="5"
                       fill="var(--series-1)"
+                      fillOpacity={opacityFor(point.workoutResultId)}
                     />
                   </g>
                 );
               })}
             </g>
-            <text data-pace-axis-label x="360" y="268" textAnchor="middle">
+            <text
+              data-pace-axis-label
+              className="chart-axis-label"
+              x="360"
+              y="272"
+              textAnchor="middle"
+            >
               Average pace (faster →)
             </text>
             <text
               data-hr-axis-label
+              className="chart-axis-label"
               x="14"
               y="130"
               transform="rotate(-90 14 130)"
@@ -912,6 +1317,19 @@ function PaceHeartRateChart({
               Average heart rate (bpm)
             </text>
           </svg>
+          {tooltip && (
+            <div
+              className="chart-plot__tooltip"
+              data-chart-tooltip
+              aria-hidden="true"
+              style={{
+                left: `clamp(56px, ${(tooltip.x / CHART_VIEWBOX.width) * 100}%, calc(100% - 56px))`,
+                top: `${(tooltip.y / CHART_VIEWBOX.height) * 100}%`,
+              }}
+            >
+              {tooltip.text}
+            </div>
+          )}
         </div>
       );
     })()
@@ -946,6 +1364,7 @@ function PaceHeartRateChart({
           : formatPace(selected.paceSecondsPerKm)
       }
       unit=""
+      directionHint="min/km · newer runs render solid · dashed = fit across runs"
       readout={
         <>
           {readout}
@@ -1056,6 +1475,11 @@ export function TrendsPane({
           chartId="hrv"
           seriesId="hrv"
           average={hrv.average}
+          rollingAverage={hrv.rollingAverage}
+          baseline={hrv.baseline}
+          baselineDelta={hrv.baselineDelta}
+          baselineStatus={hrv.baselineStatus}
+          polarity="higher"
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
@@ -1069,6 +1493,11 @@ export function TrendsPane({
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
           average={restingHeartRate.average}
+          rollingAverage={restingHeartRate.rollingAverage}
+          baseline={restingHeartRate.baseline}
+          baselineDelta={restingHeartRate.baselineDelta}
+          baselineStatus={restingHeartRate.baselineStatus}
+          polarity="lower"
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}

@@ -44,10 +44,11 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   await expect(svg).toHaveAttribute("width", "100%");
   await expect(svg.locator("title")).toHaveText("HRV trend");
   await expect(svg.locator("desc")).toContainText("55 ms");
-  const gridlineCount = await svg.locator("[data-chart-gridline]").count();
-  expect(gridlineCount).toBeGreaterThanOrEqual(2);
-  expect(gridlineCount).toBeLessThanOrEqual(4);
-  await expect(svg.locator("[data-chart-y-label]")).toHaveCount(gridlineCount);
+  // Gridlines were removed in the charts revamp; inline y labels remain.
+  await expect(svg.locator("[data-chart-gridline]")).toHaveCount(0);
+  const yLabelCount = await svg.locator("[data-chart-y-label]").count();
+  expect(yLabelCount).toBeGreaterThanOrEqual(2);
+  expect(yLabelCount).toBeLessThanOrEqual(4);
   await expect(svg.locator('[data-series="hrv"]')).toHaveCount(1);
   await expect(svg.locator("[data-missing-date]")).toHaveCount(7);
 
@@ -112,9 +113,25 @@ test("keeps the readout fixed while click and keyboard inspection change its con
       height: expect.any(Number),
     }),
   );
+  // Hit targets are contiguous full-height column bands (workout-chart
+  // pattern): every pointer x resolves to the nearest day, so the plot has
+  // no dead zones even though individual columns are narrower than 44px.
   const observedBox = await observed.boundingBox();
-  expect(observedBox!.width).toBeGreaterThanOrEqual(44);
   expect(observedBox!.height).toBeGreaterThanOrEqual(44);
+  const columnBoxes = await card
+    .locator("[data-chart-hit-columns] [data-chart-hit-area]")
+    .evaluateAll((rects) =>
+      rects
+        .map((rect) => rect.getBoundingClientRect())
+        .map(({ x, width }) => ({ x, width }))
+        .sort((a, b) => a.x - b.x),
+    );
+  expect(columnBoxes.length).toBeGreaterThan(0);
+  for (let index = 1; index < columnBoxes.length; index += 1) {
+    const previous = columnBoxes[index - 1];
+    const gap = columnBoxes[index].x - (previous.x + previous.width);
+    expect(Math.abs(gap)).toBeLessThanOrEqual(1);
+  }
 });
 
 test("contains the static chart on desktop and under reduced motion", async ({

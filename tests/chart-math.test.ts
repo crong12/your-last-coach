@@ -5,6 +5,7 @@ import {
   createLinearScale,
   createTimeScale,
   getCoverage,
+  weeklyTickDates,
 } from "../src/ui/charts/chartMath";
 import type { ChartPoint } from "../src/ui/charts/chartTypes";
 
@@ -107,5 +108,30 @@ describe("chart math", () => {
     ];
 
     expect(getCoverage(points)).toEqual({ observed: 2, expected: 4 });
+  });
+
+  it("picks weekly tick dates plus the final date", () => {
+    const windowDates = Array.from({ length: 28 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 6, 30 + index, 12));
+      return date.toISOString().slice(0, 10);
+    });
+
+    expect(weeklyTickDates(windowDates)).toEqual([
+      "2026-07-30",
+      "2026-08-06",
+      "2026-08-13",
+      "2026-08-20",
+      "2026-08-26",
+    ]);
+  });
+
+  it("never duplicates the final date and handles short windows", () => {
+    expect(weeklyTickDates(["2026-08-26"])).toEqual(["2026-08-26"]);
+    expect(weeklyTickDates([])).toEqual([]);
+    const eight = Array.from({ length: 8 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 7, 19 + index, 12));
+      return date.toISOString().slice(0, 10);
+    });
+    expect(weeklyTickDates(eight)).toEqual(["2026-08-19", "2026-08-26"]);
   });
 });

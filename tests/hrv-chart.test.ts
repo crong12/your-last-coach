@@ -177,4 +177,29 @@ describe("HRV chart render states", () => {
     ).toContain("7-night avg 50 ms");
     expect(container.querySelector(".chart-card__trend")).toBeNull();
   });
+
+  it("surfaces an explicitly unavailable personal baseline", () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        createElement(HrvChart, {
+          points: [
+            { date: "2026-08-25", value: 54 },
+            { date: "2026-08-26", value: 55 },
+          ],
+          annotations: [],
+          average: 54,
+          baseline: null,
+        }),
+      );
+    });
+
+    const averageText =
+      container.querySelector(".chart-card__average")?.textContent ?? "";
+    expect(averageText).toContain("28d baseline —");
+    expect(averageText).toContain("fewer than 7 recorded days");
+    expect(container.querySelector(".chart-card__trend")).toBeNull();
+  });
 });
