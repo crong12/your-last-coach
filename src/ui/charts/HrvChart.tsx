@@ -12,14 +12,12 @@ import {
   weeklyTickDates,
 } from "./chartMath";
 import {
-  chartPlotBounds,
+  READINESS_PLOT,
+  READINESS_VIEWBOX,
   type ChartAnnotation,
   type ChartPoint,
   type ChartTooltip,
 } from "./chartTypes";
-
-const READINESS_VIEWBOX = { width: 460, height: 300 } as const;
-const READINESS_PLOT = chartPlotBounds(READINESS_VIEWBOX);
 
 export interface ReadinessBandProps {
   mean: number;

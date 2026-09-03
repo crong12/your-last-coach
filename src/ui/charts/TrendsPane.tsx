@@ -22,10 +22,19 @@ import {
   createLinearScale,
   createTimeScale,
   parseChartDate,
+  weeklyTickDates,
 } from "./chartMath";
+import { ChartHitColumns } from "./ChartHitColumns";
 import { HrvChart } from "./HrvChart";
-import { CHART_PLOT, CHART_VIEWBOX, type ChartAnnotation } from "./chartTypes";
-import { formatPacePerKm } from "../metricFormatters";
+import {
+  CHART_PLOT,
+  CHART_VIEWBOX,
+  READINESS_PLOT,
+  READINESS_VIEWBOX,
+  type ChartAnnotation,
+  type ChartTooltip,
+} from "./chartTypes";
+import { formatMinutesClock, formatPacePerKm } from "../metricFormatters";
 
 export const TRENDS_SOURCE =
   "Source: seeded synthetic COROS-shaped observations";
@@ -102,6 +111,7 @@ function SleepChart({
   const [selectedDate, setSelectedDate] = useState<string | null>(
     projection.latest?.date ?? projection.points[0]?.date ?? null,
   );
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   useEffect(() => {
     setSelectedDate((current) => {
       if (current && projection.points.some(({ date }) => date === current)) {
@@ -145,7 +155,12 @@ function SleepChart({
   const average = projection.average;
   const current = projection.latest?.value ?? null;
   const trend = trendFor(current, average);
-  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}. Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
+  const baseline = projection.baseline;
+  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}.${
+    baseline
+      ? ` 28-day average (recorded nights): ${formatDuration(baseline.mean)}.`
+      : ""
+  } Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
   const hasObserved = projection.coverage.observed > 0;
   const plot = hasObserved ? (
     (() => {
@@ -155,11 +170,14 @@ function SleepChart({
           ...projection.points.map(({ date }) => date),
           displayTo ?? projection.points.at(-1)?.date,
         ].filter((date): date is string => date !== undefined),
-        [CHART_PLOT.left, CHART_PLOT.right],
+        [READINESS_PLOT.left, READINESS_PLOT.right],
       );
       const yScale = createLinearScale(
-        projection.points.map(({ value }) => value),
-        [CHART_PLOT.bottom, CHART_PLOT.top],
+        [
+          ...projection.points.map(({ value }) => value),
+          baseline?.mean ?? null,
+        ],
+        [READINESS_PLOT.bottom, READINESS_PLOT.top],
       );
       const widthForBar = (index: number) => {
         const currentDate = parseChartDate(projection.points[index].date);
@@ -172,13 +190,75 @@ function SleepChart({
           !nextDate ||
           index === projection.points.length - 1
         ) {
-          return 14;
+          return 9;
         }
         return Math.max(
-          10,
-          Math.min(28, (xScale(nextDate) - xScale(currentDate)) * 0.58),
+          6,
+          Math.min(20, (xScale(nextDate) - xScale(currentDate)) * 0.62),
         );
       };
+      const stageSegments = (index: number) => {
+        const stages = projection.records[index]?.sleep?.stages;
+        if (!stages) return null;
+        const entries = [
+          {
+            key: "deep",
+            ratio: stages.deepRatio,
+            fill: "var(--series-1)",
+            fillOpacity: 1,
+            stroke: undefined as string | undefined,
+          },
+          {
+            key: "light",
+            ratio: stages.lightRatio,
+            fill: "var(--series-2)",
+            fillOpacity: 0.85,
+            stroke: undefined,
+          },
+          {
+            key: "rem",
+            ratio: stages.remRatio,
+            fill: "var(--series-2)",
+            fillOpacity: 0.4,
+            stroke: undefined,
+          },
+          {
+            key: "awake",
+            ratio: stages.awakeRatio,
+            fill: "var(--paper)",
+            fillOpacity: 1,
+            stroke: "var(--line)",
+          },
+        ].filter(
+          (entry) =>
+            typeof entry.ratio === "number" &&
+            Number.isFinite(entry.ratio) &&
+            entry.ratio > 0,
+        );
+        const total = entries.reduce((sum, { ratio }) => sum + ratio!, 0);
+        if (total <= 0) return null;
+        return entries.map((entry) => ({
+          ...entry,
+          share: (entry.ratio as number) / total,
+        }));
+      };
+      const hoverPoint = hoverIndex === null ? null : projection.points[hoverIndex];
+      const hoverParsed = hoverPoint ? parseChartDate(hoverPoint.date) : null;
+      const tooltip: ChartTooltip | null =
+        hoverPoint && hoverParsed
+          ? {
+              x: xScale(hoverParsed),
+              y:
+                hoverPoint.value === null
+                  ? READINESS_PLOT.bottom
+                  : yScale(hoverPoint.value),
+              text: `${formatShortDate(hoverPoint.date)} · ${
+                hoverPoint.value === null
+                  ? "No recording"
+                  : formatDuration(hoverPoint.value)
+              }`,
+            }
+          : null;
       return (
         <ChartPlot
           id="sleep"
@@ -188,72 +268,137 @@ function SleepChart({
           xScale={xScale}
           yScale={yScale}
           annotations={[]}
+          viewBox={READINESS_VIEWBOX}
+          plotBounds={READINESS_PLOT}
+          xTickDates={weeklyTickDates(
+            projection.points.map(({ date }) => date),
+          )}
+          yTickValues={(() => {
+            const [domainMin, domainMax] = yScale.domain();
+            const marks: number[] = [];
+            for (
+              let hour = Math.ceil(domainMin / 60);
+              hour <= Math.floor(domainMax / 60);
+              hour += 1
+            ) {
+              marks.push(hour * 60);
+            }
+            return marks.length > 0 ? marks : undefined;
+          })()}
+          yTickFormat={formatMinutesClock}
+          tooltip={tooltip}
           onSelectAnnotation={() => undefined}
         >
-          {projection.points.map((point, index) => {
-            const parsedDate = parseChartDate(point.date);
-            if (!parsedDate) return null;
-            const x = xScale(parsedDate);
-            const value = point.value;
-            const y = value === null ? CHART_PLOT.bottom : yScale(value);
-            const barWidth = widthForBar(index);
-            const label = `Inspect Sleep for ${formatDate(point.date)}, ${
-              value === null ? "no recording" : formatDuration(value)
-            }`;
-            return (
-              <g
-                key={point.date}
-                role="button"
-                tabIndex={0}
-                aria-label={label}
-                data-sleep-night
-                data-chart-date={point.date}
-                onClick={() => setSelectedDate(point.date)}
-                onKeyDown={(event: KeyboardEvent<SVGGElement>) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  setSelectedDate(point.date);
-                }}
-              >
-                <rect
-                  data-chart-hit-area
-                  x={x - 22}
-                  y={CHART_PLOT.top}
-                  width="44"
-                  height={CHART_PLOT.bottom - CHART_PLOT.top}
-                  fill="var(--paper)"
-                  fillOpacity="0.001"
-                  pointerEvents="all"
-                />
-                {value === null ? (
+          <g data-chart-marks aria-hidden="true" pointerEvents="none">
+            {projection.points.map((point, index) => {
+              const parsedDate = parseChartDate(point.date);
+              if (!parsedDate) return null;
+              const x = xScale(parsedDate);
+              const value = point.value;
+              if (value === null) {
+                return (
                   <line
+                    key={point.date}
                     data-sleep-missing
-                    x1={x - 8}
-                    x2={x + 8}
-                    y1={CHART_PLOT.bottom}
-                    y2={CHART_PLOT.bottom}
+                    x1={x - 6}
+                    x2={x + 6}
+                    y1={READINESS_PLOT.bottom}
+                    y2={READINESS_PLOT.bottom}
                     stroke="var(--line)"
                     strokeWidth="2"
                     strokeDasharray="4 3"
                   />
-                ) : (
-                  <rect
-                    data-sleep-bar
-                    x={x - barWidth / 2}
-                    y={y}
-                    width={barWidth}
-                    height={CHART_PLOT.bottom - y}
-                    fill="var(--series-2)"
-                    className={
-                      selectedDate === point.date
-                        ? "chart-bar--selected"
-                        : undefined
-                    }
-                  />
-                )}
+                );
+              }
+              const y = yScale(value);
+              const barWidth = widthForBar(index);
+              const barHeight = READINESS_PLOT.bottom - y;
+              const segments = stageSegments(index);
+              return (
+                <g
+                  key={point.date}
+                  data-sleep-bar
+                  className={
+                    selectedDate === point.date
+                      ? "chart-bar--selected"
+                      : undefined
+                  }
+                >
+                  {segments ? (
+                    (() => {
+                      let cursor = READINESS_PLOT.bottom;
+                      return segments.map((segment) => {
+                        const segmentHeight = barHeight * segment.share;
+                        cursor -= segmentHeight;
+                        return (
+                          <rect
+                            key={segment.key}
+                            data-sleep-stage={segment.key}
+                            x={x - barWidth / 2}
+                            y={cursor}
+                            width={barWidth}
+                            height={segmentHeight}
+                            fill={segment.fill}
+                            fillOpacity={segment.fillOpacity}
+                            stroke={segment.stroke}
+                            strokeWidth={segment.stroke ? 1 : undefined}
+                          />
+                        );
+                      });
+                    })()
+                  ) : (
+                    <rect
+                      x={x - barWidth / 2}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      fill="var(--series-2)"
+                    />
+                  )}
+                </g>
+              );
+            })}
+            {baseline && (
+              <g data-sleep-average-line>
+                <line
+                  x1={READINESS_PLOT.left}
+                  x2={READINESS_PLOT.right}
+                  y1={yScale(baseline.mean)}
+                  y2={yScale(baseline.mean)}
+                  stroke="var(--series-1)"
+                  strokeWidth="1.5"
+                  strokeDasharray="5 4"
+                  opacity="0.75"
+                />
+                <text
+                  className="chart-axis-label"
+                  x={READINESS_PLOT.right}
+                  y={yScale(baseline.mean) - 6}
+                  textAnchor="end"
+                >
+                  28d avg {formatMinutesClock(baseline.mean)}
+                </text>
               </g>
-            );
-          })}
+            )}
+          </g>
+          <ChartHitColumns
+            points={projection.points}
+            xScale={xScale}
+            plotBounds={READINESS_PLOT}
+            selectedDate={selectedDate}
+            dataAttribute="data-sleep-night"
+            label={(point) =>
+              `Inspect Sleep for ${formatDate(point.date)}, ${
+                point.value === null
+                  ? "no recording"
+                  : formatDuration(point.value)
+              }`
+            }
+            onActivate={(index) =>
+              setSelectedDate(projection.points[index].date)
+            }
+            onHover={setHoverIndex}
+          />
         </ChartPlot>
       );
     })()
@@ -278,6 +423,7 @@ function SleepChart({
           : `7-night avg ${formatDuration(average)}`
       }
       averageBasis="recorded nights"
+      directionHint="h:mm · deep · light · rem · awake"
       readout={readout}
       plot={plot}
       coverage={

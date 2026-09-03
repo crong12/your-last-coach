@@ -55,6 +55,11 @@ export function chartPlotBounds(viewBox: ChartViewBox): ChartPlotBounds {
   };
 }
 
+/** Narrower viewBox for the three readiness cards so axis type stays legible. */
+export const READINESS_VIEWBOX: ChartViewBox = { width: 460, height: 300 };
+export const READINESS_PLOT: ChartPlotBounds =
+  chartPlotBounds(READINESS_VIEWBOX);
+
 export const CHART_VIEWBOX = {
   width: 720,
   height: 280,

@@ -24,6 +24,8 @@ export interface ChartPlotProps {
   viewBox?: ChartViewBox;
   plotBounds?: ChartPlotBounds;
   xTickDates?: readonly string[];
+  /** Explicit y tick values (e.g. hour marks); defaults to scale-derived ticks. */
+  yTickValues?: readonly number[];
   yTickFormat?: (value: number) => string;
   tooltip?: ChartTooltip | null;
   children?: ReactNode;
@@ -228,6 +230,7 @@ export function ChartPlot({
   viewBox = CHART_VIEWBOX,
   plotBounds = CHART_PLOT,
   xTickDates,
+  yTickValues,
   yTickFormat = formatTick,
   tooltip = null,
   children,
@@ -236,7 +239,7 @@ export function ChartPlot({
   const titleId = `${id}-${generatedId}-title`;
   const descriptionId = `${id}-${generatedId}-description`;
   const clipId = `${id}-${generatedId}-clip`;
-  const ticks = selectTicks(yScale.ticks(3));
+  const ticks = yTickValues ?? selectTicks(yScale.ticks(3));
   const firstDate = points[0]?.date;
   const lastDate = points.at(-1)?.date;
   const defaultLabels =

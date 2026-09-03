@@ -9,6 +9,8 @@ export interface ChartHitColumnsProps {
   xScale: ScaleTime<number, number>;
   plotBounds: ChartPlotBounds;
   selectedDate?: string | null;
+  /** Extra data attribute (e.g. "data-sleep-night") kept for e2e contracts. */
+  dataAttribute?: string;
   label: (point: ChartPoint, index: number) => string;
   onActivate: (index: number) => void;
   onHover?: (index: number | null) => void;
@@ -25,6 +27,7 @@ export function ChartHitColumns({
   xScale,
   plotBounds,
   selectedDate = null,
+  dataAttribute,
   label,
   onActivate,
   onHover,
@@ -64,6 +67,7 @@ export function ChartHitColumns({
             aria-label={label(point, index)}
             data-chart-point
             data-chart-date={point.date}
+            {...(dataAttribute ? { [dataAttribute]: "true" } : {})}
             data-chart-column-x={Math.round(x)}
             data-selected={point.date === selectedDate ? "true" : undefined}
             data-missing={point.value === null ? "true" : undefined}

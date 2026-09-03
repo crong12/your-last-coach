@@ -2802,6 +2802,10 @@ h1 {
 .chart-axis-label,
 .chart-annotation__label {
   fill: var(--muted);
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3px;
+  stroke-linejoin: round;
   font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   font-size: 12px;
