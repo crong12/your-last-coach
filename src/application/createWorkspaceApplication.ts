@@ -94,6 +94,7 @@ type RecordFeedbackResult =
   | {
       status: "ok";
       feedback: AthleteFeedback;
+      evidenceRef: string;
       durability: Durability;
     }
   | CommandError;
@@ -971,6 +972,7 @@ export function createWorkspaceApplication(
           return {
             status: "ok",
             feedback: existing,
+            evidenceRef: `athlete-feedback:${existing.id}`,
             durability: options.repository.durability ?? "persistent",
           };
         }
@@ -1034,12 +1036,17 @@ export function createWorkspaceApplication(
           markDurability("memory_only");
           durability = "memory_only";
         }
-        return { status: "ok", feedback, durability };
+        return {
+          status: "ok",
+          feedback,
+          evidenceRef: `athlete-feedback:${feedback.id}`,
+          durability,
+        };
       }
       reviewGeneration += 1;
       activePlanReview = null;
       clearPendingExpiryTimer();
-      const fallbackResultToPreserve = undeliveredFallbackResult;
+      undeliveredFallbackResult = undefined;
       let durability: Durability = "persistent";
       try {
         await clearPersisted();
@@ -1048,15 +1055,6 @@ export function createWorkspaceApplication(
         durability = "memory_only";
       }
       state = await options.fixtureSource.loadContext();
-      undeliveredFallbackResult = fallbackResultToPreserve;
-      if (fallbackResultToPreserve !== undefined) {
-        try {
-          durability = await persist(state, fallbackResultToPreserve);
-        } catch {
-          markDurability("memory_only");
-          durability = "memory_only";
-        }
-      }
       durability =
         options.repository.durability ?? currentDurability ?? durability;
       listeners.forEach((listener) => listener());

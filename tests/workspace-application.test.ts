@@ -514,6 +514,7 @@ describe("Workspace application", () => {
 
     expect(outcome).toEqual({
       status: "ok",
+      evidenceRef: "athlete-feedback:athlete-feedback:hero-feedback-request",
       feedback: {
         id: "athlete-feedback:hero-feedback-request",
         requestId: "hero-feedback-request",
