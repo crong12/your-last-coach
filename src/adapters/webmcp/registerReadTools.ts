@@ -26,13 +26,6 @@ function normalizeHostValue(value: unknown): unknown {
   return value;
 }
 
-export const WEBMCP_TOOL_NAMES = [
-  "get_coaching_briefing",
-  "get_training_plan",
-  "get_workout_context",
-  "record_athlete_feedback",
-] as const;
-
 const COACH_INTERACTION_CONTRACT = {
   version: "1.0",
   sequence: [

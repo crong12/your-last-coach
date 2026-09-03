@@ -37,7 +37,7 @@ const HRV_DEMO_DATES = [
 ] as const;
 
 /** Presentation-only foundation fixture used when the chart is rendered alone. */
-export function createDemoHrvPoints(currentValue = 55): readonly ChartPoint[] {
+function createDemoHrvPoints(currentValue = 55): readonly ChartPoint[] {
   return HRV_DEMO_DATES.map((date) => ({
     date,
     value: date === "2026-08-26" ? currentValue : null,

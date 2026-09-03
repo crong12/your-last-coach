@@ -25,8 +25,6 @@ export interface RaceAnnotation {
 export type ChartAnnotation =
   PhaseAnnotation | AdaptationAnnotation | RaceAnnotation;
 
-export type ChartRange = readonly [number, number];
-
 export interface ChartViewBox {
   width: number;
   height: number;
@@ -46,7 +44,7 @@ export interface ChartTooltip {
   text: string;
 }
 
-export function chartPlotBounds(viewBox: ChartViewBox): ChartPlotBounds {
+function chartPlotBounds(viewBox: ChartViewBox): ChartPlotBounds {
   return {
     left: 60,
     right: viewBox.width - 60,

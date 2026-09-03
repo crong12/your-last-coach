@@ -59,7 +59,7 @@ const completedResult = (
   laps: [],
 });
 
-export const DEMO_BACKFILLED_WORKOUT_RESULTS = [
+const DEMO_BACKFILLED_WORKOUT_RESULTS = [
   completedResult("2026-08-02", "planned-2026-08-02-long", 14, {
     durationSeconds: 5_040,
     trainingLoad: 62,
@@ -378,7 +378,7 @@ const READINESS_HISTORY = [
   }),
 ] as const;
 
-export const DEMO_WORKSPACE_STATE = {
+const DEMO_WORKSPACE_STATE = {
   seedVersion: "demo-athlete-v1",
   clock: {
     now: "2026-08-26T20:15:00+01:00",

@@ -421,20 +421,17 @@ summary:focus-visible {
   font-size: 10px;
   font-weight: 700;
 }
-.plan-versus-actual,
 .plan-actual-list {
   padding: clamp(18px, 3vw, 26px);
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(248, 250, 246, 0.72);
 }
-.plan-versus-actual__rows,
 .plan-actual-list {
   display: grid;
   gap: 14px;
   margin: 0;
 }
-.plan-versus-actual__row,
 .plan-actual-list > div {
   display: grid;
   grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
@@ -443,23 +440,19 @@ summary:focus-visible {
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
-.plan-versus-actual__row:last-child,
 .plan-actual-list > div:last-child {
   padding-bottom: 0;
   border-bottom: 0;
 }
-.plan-versus-actual__row dt,
 .plan-actual-list dt {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
-.plan-versus-actual__row dd,
 .plan-actual-list dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
-.plan-versus-actual__values,
 .plan-actual-list dd {
   display: flex;
   flex-wrap: wrap;
@@ -490,7 +483,6 @@ summary:focus-visible {
   margin: 0;
   overflow-wrap: anywhere;
 }
-.plan-versus-actual__delta,
 .plan-actual-list strong {
   display: block;
   margin-top: 5px;
@@ -890,9 +882,6 @@ button.previous-attempt:hover {
 }
 .workspace--single .context-rail > .trends-pane {
   grid-column: 1 / -1;
-}
-.plan-column {
-  min-width: 0;
 }
 .today-pane {
   display: grid;
@@ -1439,13 +1428,6 @@ button.previous-attempt:hover {
 .today-month-day--missed .today-month-day__workout {
   opacity: 0.65;
 }
-.plan-hero {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-}
 .eyebrow {
   color: var(--deep-sea);
   font-size: 10px;
@@ -1471,54 +1453,6 @@ h1 {
   font-size: clamp(38px, 6vw, 72px);
   line-height: 0.94;
 }
-.plan-hero p {
-  max-width: 630px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 15px;
-}
-.hero-meta {
-  flex: 0 0 auto;
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-  padding-bottom: 3px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.hero-meta span {
-  color: var(--deep-sea);
-  font-weight: 700;
-}
-.hero-meta strong {
-  color: var(--ink);
-}
-.view-switch {
-  display: inline-grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-bottom: 15px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(248, 250, 246, 0.62);
-}
-.view-switch button {
-  min-width: 82px;
-  border: 0;
-  border-radius: 999px;
-  padding: 8px 14px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-.view-switch button[aria-pressed="true"] {
-  color: white;
-  background: var(--deep-sea);
-  box-shadow: 0 4px 16px rgba(29, 75, 81, 0.2);
-}
-.plan-panel,
 .race-card,
 .evidence-card,
 .recent-training-card,
@@ -1527,10 +1461,6 @@ h1 {
   border: 1px solid rgba(23, 51, 48, 0.12);
   background: rgba(248, 250, 246, 0.82);
   box-shadow: var(--shadow);
-}
-.plan-panel {
-  overflow: hidden;
-  border-radius: 24px;
 }
 .section-heading {
   display: flex;
@@ -1550,166 +1480,6 @@ h1 {
   color: var(--muted);
   font-size: 12px;
   text-align: right;
-}
-
-.week-route {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(100px, 1fr));
-  overflow-x: auto;
-}
-.week-route::before {
-  position: absolute;
-  top: 63px;
-  left: 7%;
-  right: 7%;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    var(--sea),
-    var(--sun) 42%,
-    var(--track) 43%,
-    var(--sea) 72%
-  );
-  content: "";
-}
-.week-day {
-  position: relative;
-  min-width: 116px;
-  min-height: 300px;
-  padding: 14px 8px 12px;
-  border-right: 1px solid var(--line);
-}
-.week-day:last-child {
-  border-right: 0;
-}
-.week-day header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0 4px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.week-day header strong {
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 23px;
-  font-weight: 500;
-}
-.week-day--today {
-  background: linear-gradient(
-    180deg,
-    rgba(232, 120, 81, 0.09),
-    transparent 44%
-  );
-}
-.route-node {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 11px;
-  height: 11px;
-  margin: 13px auto 15px;
-  border: 3px solid var(--paper);
-  border-radius: 50%;
-  background: var(--sea);
-  box-shadow: 0 0 0 1px var(--sea);
-}
-.week-day--today .route-node {
-  background: var(--track);
-  box-shadow:
-    0 0 0 1px var(--track),
-    0 0 0 6px rgba(232, 120, 81, 0.13);
-}
-.workout-card {
-  width: 100%;
-  min-height: 126px;
-  border: 1px solid transparent;
-  border-radius: 14px;
-  padding: 12px;
-  color: var(--ink);
-  background: var(--foam);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease;
-}
-.workout-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 9px 24px rgba(27, 62, 57, 0.12);
-}
-
-.workout-card--adapted {
-  box-shadow: inset 3px 0 0 var(--sea);
-}
-
-.adapted-marker {
-  color: var(--deep-sea);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.workout-card__type {
-  display: block;
-  margin-bottom: 18px;
-  color: var(--deep-sea);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.workout-card strong,
-.workout-card > span:last-child {
-  display: block;
-}
-.workout-card strong {
-  margin-bottom: 5px;
-  font-size: 12px;
-  line-height: 1.35;
-}
-.workout-card > span:last-child {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
-}
-.workout-card--recovery {
-  background: #e4ebd3;
-}
-.workout-card--long_run {
-  background: #cfe4e3;
-}
-.workout-card--threshold,
-.workout-card--steady {
-  background: #eadfbc;
-}
-.workout-card--incomplete {
-  border-color: #e4ad98;
-  background: var(--track-soft);
-  box-shadow: inset 3px 0 0 var(--track);
-}
-.workout-card--incomplete .workout-card__type {
-  color: #a54528;
-}
-.rest-day {
-  display: grid;
-  gap: 5px;
-  place-items: center;
-  min-height: 104px;
-  padding: 18px 8px;
-  border: 1px dashed #c6d2cd;
-  border-radius: 14px;
-  color: #75827e;
-  text-align: center;
-}
-.rest-day span {
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 18px;
-}
-.rest-day small {
-  font-size: 9px;
 }
 
 .context-rail {
@@ -2138,14 +1908,6 @@ h1 {
   padding: 0;
 }
 
-/* Pairs Monitoring with Recent training wherever there is room for two, and
-   collapses to one when Monitoring has nothing open. */
-.coaching-context {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
-  align-items: start;
-  gap: 20px;
-}
 .coaching-review-card {
   position: relative;
   overflow: hidden;
@@ -2216,30 +1978,12 @@ h1 {
 .coaching-review-card .button {
   margin-top: 18px;
 }
-.coaching-timeline,
 .coaching-pane .profile-card {
   overflow: hidden;
   border: 1px solid rgba(23, 51, 48, 0.12);
   border-radius: 22px;
   background: rgba(248, 250, 246, 0.82);
   box-shadow: var(--shadow);
-}
-.coaching-timeline-list {
-  position: relative;
-  display: grid;
-  gap: 14px;
-  margin: 0;
-  padding: 22px 22px 24px 46px;
-  list-style: none;
-}
-.coaching-timeline-list::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 25px;
-  width: 1px;
-  background: var(--line);
-  content: "";
 }
 .coaching-entry {
   position: relative;
@@ -2363,23 +2107,6 @@ h1 {
 .coaching-entry__threads a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-.coaching-timeline__empty {
-  padding: 28px 22px 32px;
-}
-.coaching-timeline__empty h3 {
-  margin: 0 0 6px;
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 24px;
-  font-weight: 500;
-}
-.coaching-timeline__empty p {
-  max-width: 560px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
 }
 .profile-name {
   color: var(--deep-sea);
@@ -2964,59 +2691,6 @@ h1 {
 
 .chart-card__readout-action {
   min-height: 44px;
-}
-
-.month-scroll {
-  overflow-x: auto;
-}
-.month-calendar {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(104px, 1fr));
-  min-width: 728px;
-}
-.month-weekday {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-.month-cell {
-  position: relative;
-  min-height: 124px;
-  padding: 27px 5px 5px;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-.month-cell:nth-child(7n) {
-  border-right: 0;
-}
-.month-cell--empty {
-  min-height: 32px;
-  background: rgba(220, 233, 228, 0.35);
-}
-.month-cell--today {
-  background: rgba(232, 120, 81, 0.07);
-}
-.month-date {
-  position: absolute;
-  top: 7px;
-  left: 9px;
-  color: var(--muted);
-  font-size: 10px;
-}
-.workout-card--compact {
-  min-height: 82px;
-  padding: 8px;
-}
-.workout-card--compact .workout-card__type {
-  margin-bottom: 7px;
-  font-size: 7px;
-}
-.workout-card--compact strong {
-  font-size: 9px;
 }
 
 .dialog-backdrop {
@@ -3610,9 +3284,6 @@ h1 {
     grid-template-columns: 1fr 1fr;
     padding-top: 0;
   }
-  .week-route {
-    grid-template-columns: repeat(7, minmax(112px, 1fr));
-  }
 }
 
 @media (max-width: 760px) {
@@ -3779,7 +3450,6 @@ h1 {
     margin-top: 14px;
     font-size: 17px;
   }
-  .plan-versus-actual__row,
   .plan-actual-list > div {
     grid-template-columns: 1fr;
     gap: 7px;
@@ -3902,13 +3572,6 @@ h1 {
   .workspace--single .context-rail {
     grid-template-columns: 1fr;
   }
-  .plan-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .hero-meta {
-    justify-items: start;
-  }
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -3974,13 +3637,6 @@ h1 {
     flex-direction: column;
     gap: 5px;
   }
-  .coaching-timeline-list {
-    padding-right: 14px;
-    padding-left: 38px;
-  }
-  .coaching-timeline-list::before {
-    left: 19px;
-  }
   .coaching-entry::before {
     left: -26px;
   }
@@ -4005,63 +3661,6 @@ h1 {
   }
   .app-menu__list {
     width: min(200px, calc(100vw - 32px));
-  }
-  .week-route {
-    display: grid;
-    grid-template-columns: 1fr;
-    overflow: visible;
-    padding: 8px 12px;
-  }
-  .week-route::before {
-    top: 24px;
-    bottom: 24px;
-    left: 40px;
-    width: 2px;
-    height: auto;
-    background: linear-gradient(
-      180deg,
-      var(--sea),
-      var(--track) 37%,
-      var(--sea)
-    );
-  }
-  .week-day {
-    display: grid;
-    grid-template-columns: 42px 1fr;
-    gap: 10px;
-    min-width: 0;
-    min-height: 0;
-    padding: 8px 0;
-    border-right: 0;
-  }
-  .week-day header {
-    display: grid;
-    justify-items: center;
-    align-content: center;
-    padding: 0;
-  }
-  .week-day header strong {
-    font-size: 19px;
-  }
-  .route-node {
-    position: absolute;
-    top: 33px;
-    left: 23px;
-    margin: 0;
-  }
-  .workout-card,
-  .rest-day {
-    grid-column: 2;
-    min-height: 86px;
-  }
-  .workout-card__type {
-    margin-bottom: 8px;
-  }
-  .rest-day {
-    justify-items: start;
-    place-items: center start;
-    padding: 14px;
-    text-align: left;
   }
 
   .today-hero {
