@@ -4,6 +4,7 @@
 - Route: `#trends`
 - Inputs: data-viz language (#47, binding), COROS granularity note (#45, binding prerequisites), ADR 0002 (rendering)
 - Status: draft accepted for implementation; marked iteration points expected to move during build
+- Amended by: [trends-charts-revamp.md](trends-charts-revamp.md) (chart craft, baseline context, sleep stages, iteration-point resolutions)
 
 ## Purpose
 
@@ -19,7 +20,7 @@ The visible pane is fixed to **4w**, shown by a single 4w control at the top of 
 
 1. **HRV** — line chart. Top slot: it is the leading readiness signal and the Coach Agent's primary overnight evidence.
 2. **Resting heart rate** — line chart.
-3. **Sleep** — bar chart (duration), with stage ratios shown only in the inspect readout (not stacked bars — too dense at 4w on a phone). ⚠️ _Iteration point: stacked stage bars may return at 4w range if legible._
+3. **Sleep** — bar chart (duration), with stage ratios shown only in the inspect readout (not stacked bars — too dense at 4w on a phone). ~~⚠️ _Iteration point: stacked stage bars may return at 4w range if legible._~~ **Resolved:** stacked stage segments adopted now that desktop is the primary surface — see [trends-charts-revamp.md](trends-charts-revamp.md) §3.
 
 **Performance group:**
 
@@ -30,7 +31,8 @@ The visible pane is fixed to **4w**, shown by a single 4w control at the top of 
 
 Header row per #47 scannability requirement, so the pane reads without studying any chart:
 
-- Metric name in the shared Newsreader heading treatment · **current value** (large, tabular) · a rolling average where it provides useful context. Visible trend labels are omitted because labels such as "flat versus recorded nights" and "neutral direction" were not clear enough to earn header space; trend direction remains in the accessible chart summary.
+- Metric name in the shared Newsreader heading treatment · **current value** (large, tabular) · a rolling average where it provides useful context. Visible trend labels are omitted because labels such as "flat versus recorded nights" and "neutral direction" were not clear enough to earn header space; trend direction remains in the accessible chart summary. **Amended** ([trends-charts-revamp.md](trends-charts-revamp.md)): numeric deltas with a declared basis (HRV/RHR baseline delta, volume ramp %) are allowed in the average slot — the original ruling rejected vague adjectives, not numbers.
+- Hover/focus additionally shows a tooltip + highlight as a progressive enhancement on the tap/readout baseline, matching [screen-workout-detail.md](screen-workout-detail.md).
 - Chart body per #47 anatomy (hairline gridlines, inline y-labels, sparse x-ticks).
 - Coverage caption when gaps exist in range ("21 of 28 nights recorded").
 - Tap-to-inspect fixed readout row above the chart; on a missing day it reads "No recording".
@@ -63,6 +65,6 @@ Time-axis annotations per #47 on HRV, RHR, volume/load: phase-boundary hairlines
 
 ## Open iteration points
 
-1. Sleep stage presentation (readout-only vs stacked bars at 4w).
-2. Whether volume and load merge into one combined chart after visual testing.
-3. Trend-arrow semantic thresholds per metric (what counts as "climbing RHR").
+1. ~~Sleep stage presentation (readout-only vs stacked bars at 4w).~~ **Resolved:** stacked stage segments ([trends-charts-revamp.md](trends-charts-revamp.md) §3).
+2. ~~Whether volume and load merge into one combined chart after visual testing.~~ **Resolved:** keep two aligned facets; merge rejected ([trends-charts-revamp.md](trends-charts-revamp.md) §4).
+3. Trend-arrow semantic thresholds per metric (what counts as "climbing RHR"). **Partially resolved:** HRV/RHR threshold = outside the personal 28-day baseline band (ochre warn); sleep and volume thresholds remain open ([trends-charts-revamp.md](trends-charts-revamp.md) §1–2).
