@@ -535,3 +535,224 @@ describe("issue 64 fixture evidence", () => {
     expect(projectRepeatedSessions(state, "build").status).toBe("empty");
   });
 });
+
+describe("trends charts revamp derived series", () => {
+  const WINDOW_DATES = (() => {
+    const dates: string[] = [];
+    for (let offset = 0; offset < 28; offset += 1) {
+      const date = new Date(Date.UTC(2026, 6, 30 + offset, 12));
+      dates.push(date.toISOString().slice(0, 10));
+    }
+    return dates;
+  })();
+
+  function readinessRecord(date: string, hrvMs: number | undefined) {
+    return {
+      date,
+      ...(hrvMs === undefined ? {} : { hrvMs }),
+      restingHeartRateBpm: 48,
+      sleep: { durationMinutes: 440 },
+      source: {
+        adapter: "synthetic-coros-shaped",
+        readAt: `${date}T20:00:00+01:00`,
+        label: "seeded synthetic COROS-shaped observations",
+      },
+    };
+  }
+
+  async function stateWithHistory(
+    records: readonly ReturnType<typeof readinessRecord>[],
+  ) {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    (state.observations as { readinessHistory: unknown }).readinessHistory =
+      records;
+    return state;
+  }
+
+  it("computes a 7-day rolling average aligned to window dates", async () => {
+    const preWindow = ["2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29"];
+    const records = [
+      ...preWindow.map((date) => readinessRecord(date, 50)),
+      ...WINDOW_DATES.map((date) =>
+        readinessRecord(date, date === "2026-08-26" ? 57 : 50),
+      ),
+    ];
+    const projection = projectReadinessSeries(
+      await stateWithHistory(records),
+      "hrv",
+      "4w",
+    );
+    expect(projection.rollingAverage).toHaveLength(28);
+    expect(projection.rollingAverage.map(({ date }) => date)).toEqual(
+      WINDOW_DATES,
+    );
+    // first window day pulls trailing pre-window history
+    expect(projection.rollingAverage[0].value).toBeCloseTo(50);
+    expect(projection.rollingAverage.at(-2)?.value).toBeCloseTo(50);
+    expect(projection.rollingAverage.at(-1)?.value).toBeCloseTo(357 / 7);
+  });
+
+  it("breaks the rolling average when fewer than 4 of the trailing 7 days are recorded", async () => {
+    const gapDates = new Set([
+      "2026-08-20",
+      "2026-08-21",
+      "2026-08-22",
+      "2026-08-23",
+    ]);
+    const records = WINDOW_DATES.filter((date) => !gapDates.has(date)).map(
+      (date) => readinessRecord(date, 50),
+    );
+    const projection = projectReadinessSeries(
+      await stateWithHistory(records),
+      "hrv",
+      "4w",
+    );
+    const byDate = new Map(
+      projection.rollingAverage.map(({ date, value }) => [date, value]),
+    );
+    // trailing 7 at 08-24 = 08-18..08-24 with 4 gaps -> 3 recorded -> null
+    expect(byDate.get("2026-08-24")).toBeNull();
+    // trailing 7 at 08-26 = 08-20..08-26 -> 3 recorded -> null
+    expect(byDate.get("2026-08-26")).toBeNull();
+    expect(byDate.get("2026-08-19")).toBeCloseTo(50);
+  });
+
+  it("computes a 28-day baseline band with mean ± 1 SD over recorded values", async () => {
+    const records = WINDOW_DATES.map((date, index) =>
+      readinessRecord(date, index < 14 ? 40 : 60),
+    );
+    const projection = projectReadinessSeries(
+      await stateWithHistory(records),
+      "hrv",
+      "4w",
+    );
+    expect(projection.baseline).not.toBeNull();
+    expect(projection.baseline?.mean).toBeCloseTo(50);
+    expect(projection.baseline?.low).toBeCloseTo(40);
+    expect(projection.baseline?.high).toBeCloseTo(60);
+    expect(projection.baseline?.sampleCount).toBe(28);
+    expect(projection.baselineDelta).toBeCloseTo(10);
+    expect(projection.baselineStatus).toBe("within");
+  });
+
+  it("omits the baseline with fewer than 7 recorded values", async () => {
+    const records = WINDOW_DATES.slice(-6).map((date) =>
+      readinessRecord(date, 50),
+    );
+    const projection = projectReadinessSeries(
+      await stateWithHistory(records),
+      "hrv",
+      "4w",
+    );
+    expect(projection.baseline).toBeNull();
+    expect(projection.baselineDelta).toBeNull();
+    expect(projection.baselineStatus).toBeNull();
+  });
+
+  it("flags the latest value outside the personal band", async () => {
+    const below = WINDOW_DATES.map((date, index) =>
+      readinessRecord(
+        date,
+        index < 27 ? (index % 2 === 0 ? 40 : 60) : 10,
+      ),
+    );
+    expect(
+      projectReadinessSeries(await stateWithHistory(below), "hrv", "4w")
+        .baselineStatus,
+    ).toBe("below");
+    const above = WINDOW_DATES.map((date, index) =>
+      readinessRecord(
+        date,
+        index < 27 ? (index % 2 === 0 ? 40 : 60) : 95,
+      ),
+    );
+    expect(
+      projectReadinessSeries(await stateWithHistory(above), "hrv", "4w")
+        .baselineStatus,
+    ).toBe("above");
+  });
+
+  it("exposes week-over-week distance change percentages", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    const { weeks } = projectWeeklyVolumeLoad(state, "4w");
+    expect(weeks[0].distanceChangePercent).toBeNull();
+    for (let index = 1; index < weeks.length; index += 1) {
+      const previous = weeks[index - 1].distanceKm;
+      const current = weeks[index].distanceKm;
+      if (previous === 0) {
+        expect(weeks[index].distanceChangePercent).toBeNull();
+      } else {
+        expect(weeks[index].distanceChangePercent).toBeCloseTo(
+          ((current - previous) / previous) * 100,
+        );
+      }
+    }
+  });
+
+  it("returns a null change percentage after a zero-distance week", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    state.workoutResults = state.workoutResults.filter(
+      (result) =>
+        result.startedAt.slice(0, 10) < "2026-08-10" ||
+        result.startedAt.slice(0, 10) > "2026-08-16",
+    );
+    const { weeks } = projectWeeklyVolumeLoad(state, "4w");
+    const zeroWeek = weeks.find(({ weekStart }) => weekStart === "2026-08-10");
+    const followingWeek = weeks.find(
+      ({ weekStart }) => weekStart === "2026-08-17",
+    );
+    expect(zeroWeek?.distanceKm).toBe(0);
+    expect(followingWeek?.distanceChangePercent).toBeNull();
+  });
+
+  it("fits an OLS line across pace/heart-rate points", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    const projection = projectPaceHeartRate(state, "4w");
+    expect(projection.points.length).toBeGreaterThanOrEqual(6);
+    // force points onto an exact line: hr = 300 - 0.5 * pace
+    const resultIds = new Set(
+      projection.points.map(({ workoutResultId }) => workoutResultId),
+    );
+    let pace = 300;
+    for (const result of state.workoutResults) {
+      if (!resultIds.has(result.id)) continue;
+      pace += 10;
+      result.summary.averagePaceSecondsPerKm = pace;
+      result.summary.averageHeartRateBpm = 300 - 0.5 * pace;
+    }
+    const fitted = projectPaceHeartRate(state, "4w");
+    expect(fitted.fit).not.toBeNull();
+    expect(fitted.fit?.slope).toBeCloseTo(-0.5);
+    expect(fitted.fit?.intercept).toBeCloseTo(300);
+    expect(fitted.fit?.pointCount).toBe(fitted.points.length);
+  });
+
+  it("omits the fit below 6 points and exposes workout types", async () => {
+    const state = structuredClone(
+      await createDemoCoachingContextSource().loadContext(),
+    ) as WorkspaceState;
+    const projection = projectPaceHeartRate(state, "4w");
+    const withPlan = projection.points.find(
+      ({ plannedWorkoutId }) => plannedWorkoutId,
+    );
+    expect(withPlan?.workoutType).toBeTruthy();
+
+    const keep = new Set(
+      projection.points.slice(0, 5).map(({ workoutResultId }) => workoutResultId),
+    );
+    state.workoutResults = state.workoutResults.filter(({ id }) =>
+      keep.has(id),
+    );
+    const sparse = projectPaceHeartRate(state, "4w");
+    expect(sparse.points.length).toBeLessThan(6);
+    expect(sparse.fit).toBeNull();
+  });
+});

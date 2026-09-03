@@ -31,6 +31,15 @@ export interface TrendsDateRange {
 export type TrendsProjectionStatus =
   "ready" | "partial" | "degraded" | "empty" | "unavailable";
 
+export interface ReadinessBaseline {
+  mean: number;
+  low: number;
+  high: number;
+  sampleCount: number;
+}
+
+export type ReadinessBaselineStatus = "within" | "above" | "below";
+
 export interface ReadinessProjection {
   status: "ready" | "partial" | "empty" | "unavailable";
   metric: ReadinessMetric;
@@ -39,6 +48,12 @@ export interface ReadinessProjection {
   latest: ChartPoint | null;
   average: number | null;
   records: readonly (ReadinessHistoryRecord | undefined)[];
+  /** 7-day trailing average per window date; null where <4 of 7 days recorded. */
+  rollingAverage: readonly ChartPoint[];
+  /** Personal band over the trailing 28 days; null when <7 recorded values. */
+  baseline: ReadinessBaseline | null;
+  baselineDelta: number | null;
+  baselineStatus: ReadinessBaselineStatus | null;
 }
 
 export interface WeeklyVolumeLoadWeek {
@@ -46,6 +61,8 @@ export interface WeeklyVolumeLoadWeek {
   weekEnd: string;
   distanceKm: number;
   trainingLoad: number | null;
+  /** Week-over-week distance change in percent; null for the first week or after a zero-distance week. */
+  distanceChangePercent: number | null;
   resultCount: number;
   availableLoadCount: number;
   fourWeekAverageLoad: number | null;
@@ -60,10 +77,17 @@ export interface WeeklyVolumeLoadProjection {
 export interface PaceHeartRatePoint {
   workoutResultId: string;
   plannedWorkoutId?: string;
+  workoutType?: string;
   date: string;
   title: string;
   paceSecondsPerKm: number;
   heartRateBpm: number;
+}
+
+export interface PaceHeartRateFit {
+  slope: number;
+  intercept: number;
+  pointCount: number;
 }
 
 export interface PaceHeartRateProjection {
@@ -71,6 +95,8 @@ export interface PaceHeartRateProjection {
   points: readonly PaceHeartRatePoint[];
   excludedOutdoorRuns: number;
   selected: PaceHeartRatePoint | null;
+  /** OLS fit of heart rate on pace; null below 6 points or without pace variance. */
+  fit: PaceHeartRateFit | null;
 }
 
 export interface RepeatedSessionSummary {
@@ -212,6 +238,10 @@ export function resolveTrendsRange(
   };
 }
 
+function mean(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
 function finite(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -316,6 +346,10 @@ export function projectReadinessSeries(
       latest: null,
       average: null,
       records: [],
+      rollingAverage: [],
+      baseline: null,
+      baselineDelta: null,
+      baselineStatus: null,
     };
   }
   const byDate = new Map<string, ReadinessHistoryRecord>(
@@ -339,6 +373,48 @@ export function projectReadinessSeries(
             0,
           ) / trailingObserved.length,
         );
+  const trailingValues = (date: string, days: number): number[] =>
+    Array.from({ length: days }, (_, offset) =>
+      readinessValue(byDate.get(addDays(date, offset - (days - 1))), metric),
+    ).filter(finite);
+  const rollingAverage: ChartPoint[] = window.dates.map((date) => {
+    const values = trailingValues(date, 7);
+    return {
+      date,
+      value: values.length >= 4 ? mean(values) : null,
+    };
+  });
+  const baselineValues = trailingValues(window.to, 28);
+  const baseline: ReadinessBaseline | null =
+    baselineValues.length >= 7
+      ? (() => {
+          const baselineMean = mean(baselineValues);
+          const deviation = Math.sqrt(
+            mean(
+              baselineValues.map((value) => (value - baselineMean) ** 2),
+            ),
+          );
+          return {
+            mean: baselineMean,
+            low: baselineMean - deviation,
+            high: baselineMean + deviation,
+            sampleCount: baselineValues.length,
+          };
+        })()
+      : null;
+  const latest = latestPoint(points);
+  const baselineDelta =
+    baseline !== null && latest !== null && finite(latest.value)
+      ? latest.value - baseline.mean
+      : null;
+  const baselineStatus: ReadinessBaselineStatus | null =
+    baseline !== null && latest !== null && finite(latest.value)
+      ? latest.value < baseline.low
+        ? "below"
+        : latest.value > baseline.high
+          ? "above"
+          : "within"
+      : null;
   return {
     status:
       observed.length === 0
@@ -349,9 +425,13 @@ export function projectReadinessSeries(
     metric,
     points,
     coverage: { observed: observed.length, expected: points.length },
-    latest: latestPoint(points),
+    latest,
     average,
     records,
+    rollingAverage,
+    baseline,
+    baselineDelta,
+    baselineStatus,
   };
 }
 
@@ -563,12 +643,19 @@ export function projectWeeklyVolumeLoad(
           : availableLoadValues.length === weekResults.length
             ? availableLoadValues.reduce((total, value) => total + value, 0)
             : null,
+      distanceChangePercent: null,
       resultCount: weekResults.length,
       availableLoadCount: availableLoadValues.length,
       fourWeekAverageLoad: null,
     } satisfies WeeklyVolumeLoadWeek;
   });
   for (const [index, week] of weeks.entries()) {
+    const previous = index > 0 ? weeks[index - 1] : null;
+    week.distanceChangePercent =
+      previous === null || previous.distanceKm === 0
+        ? null
+        : ((week.distanceKm - previous.distanceKm) / previous.distanceKm) *
+          100;
     const values = weeks
       .slice(Math.max(0, index - 3), index + 1)
       .map(({ trainingLoad }) => trainingLoad)
@@ -622,6 +709,7 @@ export function projectPaceHeartRate(
       points: [],
       excludedOutdoorRuns: 0,
       selected: null,
+      fit: null,
     };
   }
   const outdoorRuns = rawResults.filter(
@@ -635,6 +723,9 @@ export function projectPaceHeartRate(
       const pace = metrics.averagePaceSecondsPerKm;
       const heartRate = metrics.averageHeartRateBpm;
       if (pace === null || heartRate === null) return null;
+      const plannedWorkout = state.trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === result.plannedWorkoutId,
+      );
       const point = {
         workoutResultId: result.id,
         date: resultDate(result, state.clock.timeZone),
@@ -644,9 +735,13 @@ export function projectPaceHeartRate(
         ),
         paceSecondsPerKm: pace,
         heartRateBpm: heartRate,
-      } satisfies Omit<PaceHeartRatePoint, "plannedWorkoutId">;
-      return result.plannedWorkoutId
-        ? { ...point, plannedWorkoutId: result.plannedWorkoutId }
+      } satisfies Omit<PaceHeartRatePoint, "plannedWorkoutId" | "workoutType">;
+      return plannedWorkout
+        ? {
+            ...point,
+            plannedWorkoutId: plannedWorkout.id,
+            workoutType: plannedWorkout.type,
+          }
         : point;
     })
     .filter((point): point is PaceHeartRatePoint => point !== null)
@@ -661,6 +756,28 @@ export function projectPaceHeartRate(
     points,
     excludedOutdoorRuns: outdoorRuns.length - points.length,
     selected: points.at(-1) ?? null,
+    fit: fitPaceHeartRate(points),
+  };
+}
+
+function fitPaceHeartRate(
+  points: readonly PaceHeartRatePoint[],
+): PaceHeartRateFit | null {
+  if (points.length < 6) return null;
+  const paceMean = mean(points.map(({ paceSecondsPerKm }) => paceSecondsPerKm));
+  const heartRateMean = mean(points.map(({ heartRateBpm }) => heartRateBpm));
+  let covariance = 0;
+  let variance = 0;
+  for (const { paceSecondsPerKm, heartRateBpm } of points) {
+    covariance += (paceSecondsPerKm - paceMean) * (heartRateBpm - heartRateMean);
+    variance += (paceSecondsPerKm - paceMean) ** 2;
+  }
+  if (variance === 0) return null;
+  const slope = covariance / variance;
+  return {
+    slope,
+    intercept: heartRateMean - slope * paceMean,
+    pointCount: points.length,
   };
 }
 
