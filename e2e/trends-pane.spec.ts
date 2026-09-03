@@ -331,15 +331,9 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
     )
     .toBeLessThanOrEqual(150);
 
-  await page.getByRole("button", { name: "12w" }).click();
   await expect(page.locator(".trends-pane")).toHaveAttribute(
     "data-trends-range",
-    "12w",
-  );
-  await page.getByRole("button", { name: "Build" }).click();
-  await expect(page.locator(".trends-pane")).toHaveAttribute(
-    "data-trends-range",
-    "build",
+    "4w",
   );
 
   const evidenceDates = await page
@@ -371,22 +365,10 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
     await expect(description).toContainText("Coverage:");
   }
   await expect(hrv.locator("desc")).toContainText("Base building");
-  await expect(hrv.locator("desc")).toContainText("Target race");
-  await expect(
-    page.locator('[data-chart-card="volume-load"] desc'),
-  ).toContainText("Target race");
   await expect(
     page.locator('[data-chart-card="volume-load"] desc'),
   ).toContainText("Base building");
 
-  const raceLine = hrv.locator('[data-chart-race-line="true"]');
-  await expect(raceLine).toHaveCount(1);
-  expect(Number(await raceLine.getAttribute("x1"))).toBeCloseTo(660, 0);
-  const volumeRaceLine = page.locator(
-    '[data-chart-card="volume-load"] [data-chart-race-line="true"]',
-  );
-  await expect(volumeRaceLine).toHaveCount(1);
-  expect(Number(await volumeRaceLine.getAttribute("x1"))).toBeCloseTo(660, 0);
   await expect(
     navigation.getByRole("button", { name: "Show Trends pane" }),
   ).toHaveAttribute("aria-current", "page");

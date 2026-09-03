@@ -63,11 +63,11 @@ The pane shell is governed by two boundaries only: `760` (mobile vs desktop) and
 
 `DESIGN.md`'s `breakpoints: [620, 760, 1050]` frontmatter must gain `1180` as part of the implementation, so the declared tokens match the built layout.
 
-| Range | Behaviour |
-| --- | --- |
-| `≤760px` | Mobile, unchanged: horizontal scroll-snap panes, pagination dots, single column. |
-| `761–1179px` | **Primary target.** Switched view, two-column evidence grid. |
-| `≥1180px` | Switched view, three-column evidence grid. |
+| Range        | Behaviour                                                                        |
+| ------------ | -------------------------------------------------------------------------------- |
+| `≤760px`     | Mobile, unchanged: horizontal scroll-snap panes, pagination dots, single column. |
+| `761–1179px` | **Primary target.** Switched view, two-column evidence grid.                     |
+| `≥1180px`    | Switched view, three-column evidence grid.                                       |
 
 The `761px` boundary is deliberately the existing mobile boundary, so exactly one media query governs which shell is active and there is no range where both apply.
 
@@ -95,11 +95,11 @@ Tabs are `role="tab"`-equivalent in behaviour but keep the current `button` + `a
 One row, ~64px, directly under the app bar:
 
 - **Left:** the pane title in Newsreader at `section` (28px) — down from `hero` (`clamp(32px, 5vw, 48px)`) — with the pane subtitle beneath it as 12px `muted` Manrope.
-- **Right:** pane-level controls. For Trends this is the `4w / 12w / Build` segmented toggle.
+- **Right:** pane-level controls. Trends shows a single `4w` control for its fixed visible range.
 
 `.pane-heading`'s `clamp(48px, 7vw, 88px)` top padding drops to a fixed `28px`. Together with the smaller title this recovers ~120px of a ~900px viewport.
 
-`.trends-range-control` loses `position: sticky` and `top: 12px` and becomes a static child of this row. This is the fix for the two overlapping floaters: both had no home, so both were pinned to the viewport. Giving each a home removes the collision rather than repositioning it.
+`.trends-range-control` loses `position: sticky` and `top: 12px` and becomes a static child of this row. This is the fix for the two overlapping floaters: both had no home, so both were pinned to the viewport. Giving each a home removes the collision rather than repositioning it. The control now contains only the visible four-week range.
 
 Because the toggle is no longer sticky, it scrolls out of view on a long pane. That is acceptable at the primary target — post-change Trends is roughly two screens — and the alternative (a sticky toolbar) reintroduces the overlap class of bug. Revisit only if the pane grows.
 
@@ -111,7 +111,7 @@ Consequences:
 
 - The desktop `scrollIntoView` path in `WorkspaceApp` (the `matchMedia("(max-width: 760px)")` false branch) is removed.
 - The desktop scrollspy `IntersectionObserver` is removed. On mobile it stays.
-- `PaneOriginReceipt.windowScrollY` keeps its meaning for pushed-screen return, but now records scroll *within* the selected pane. `paneScrollLeft` stays mobile-only. The receipt shape does not change, so persisted history state stays valid.
+- `PaneOriginReceipt.windowScrollY` keeps its meaning for pushed-screen return, but now records scroll _within_ the selected pane. `paneScrollLeft` stays mobile-only. The receipt shape does not change, so persisted history state stays valid.
 - Hash routing, `replaceState`/`pushState` semantics, deep-link restore, and the bare-URL → Today default are all unchanged. WebMCP navigation tools are unaffected.
 
 Panes must stay mounted-but-hidden rather than unmounted, so that chart inspect state and scroll position survive a tab switch, and so `hidden` panes remain queryable by the WebMCP read tools.
@@ -123,7 +123,7 @@ Reordered to read as a coach would ask it: **how am I arriving → why → what 
 ### Two columns (761–1179px)
 
 ```
-Trends                        [4w] [12w] [Build]
+Trends                                      [4w]
 ────────────────────────────────────────────────
  46%    1.33    7h22    55ms   52bpm   Unremark.
 RECOV   LOAD    SLEEP   HRV    RHR     STRESS
@@ -139,35 +139,35 @@ PERFORMANCE
 ┌────────────────────────────────────────┐
 │ Weekly volume + Training Load  13.5 km │
 └────────────────────────────────────────┘
-┌──────────────────┐┌──────────────────┐
-│ Pace vs HR       ││ Repeated sessions│
-└──────────────────┘└──────────────────┘
+┌────────────────────────────────────────┐
+│ Pace vs HR                             │
+└────────────────────────────────────────┘
 ```
 
 ### Three columns (≥1180px)
 
-Readiness runs `HRV | Resting HR | Sleep` in one row. Weekly volume + Training Load spans two columns with Pace vs HR beside it. Repeated sessions takes the final row across the full measure.
+Readiness runs `HRV | Resting HR | Sleep` in one row. Weekly volume + Training Load and Pace vs HR form the performance grid. The previous Repeated sessions card is omitted.
 
 ### Composition rules
 
-1. **Arrival strip.** The six "How you're arriving" stats become one hairline-divided row spanning the full measure: Recovery, Load ratio, Sleep, HRV, Resting heart rate, Daily stress. At `761–1179px` it wraps to 3 × 2. The caution sentence ("Load and recovery support caution…") sits directly beneath it. The bottom "How you're arriving" card is **removed**, not duplicated.
-2. **Group headers stop being cards.** "Readiness / 28 wake-up days" and "Performance / Workout Result aggregates" are currently full cards whose only content is a label. They become hairline section rules: small-caps Manrope eyebrow left, coverage caption right. This removes two card-sized blocks and reads as the journal's marginalia rather than dashboard chrome.
+1. **Health metrics strip.** The six stats sit beneath the `Your health metrics` heading in one divided row spanning the full measure: Recovery, Load ratio, Sleep, HRV, Resting heart rate, Daily stress. At `761–1179px` it wraps to 3 × 2. Labels and values are centered; qualifiers and the caution sentence are omitted.
+2. **Group headers stay open.** `Readiness` and `Training Performance` use the same Newsreader treatment as `Your health metrics`, without eyebrows, coverage captions, or horizontal rules.
 3. **Sleep spans both columns at narrow.** Three readiness charts do not divide into two columns. The bar chart gains most from width, so it takes the full row rather than leaving an orphan cell.
 4. **Weekly volume + Training Load spans the full measure at narrow.** It is a two-panel chart (distance bars above, load line below); at ~410px the load line reads as decoration.
 5. **Plot height rises from ~120px to 180–200px** in a ~410px-wide card, so a 28-point series stops being flattened. Cards in a row are equal height by grid default.
 6. **Longitudinal context leaves Trends.** Monitoring (open coaching topics) and Recent training (the observation history) are not chart evidence — they are the coaching account. Both move to the Coaching pane, paired in a two-up row beneath the Coaching timeline and above the Athlete Profile summary. Trends keeps only the arrival strip and the charts. This supersedes pane-3's "Monitoring card → dies" clause and the IA spec's rail-dissolution line.
-7. **Chart cards carry no eyebrow.** "Readiness evidence" / "Performance evidence" repeated above every card heading while the group header directly above already said Readiness or Performance. The group-level eyebrows stay as the journal's marginalia; the per-card ones are removed.
-8. **Provenance consolidates.** The identical sentence "Source: seeded synthetic COROS-shaped observations" currently repeats on six cards, all visible at once in a grid. It becomes **one pane-level line in the Trends footer**. Cards whose provenance genuinely differs keep their own line: "Derived from your runs" (Pace vs HR) and "Aggregate-only comparison" (Repeated sessions). **Per-chart coverage captions are unchanged and stay verbatim** — "21 of 28 nights recorded", "26 of 28 nights recorded", "9 of 11 Workout Results with available load", "10 eligible Outdoor Run pairs · 1 missing a measure" — because those are per-series facts, not a shared source label. PRODUCT.md principle 3 (evidence with provenance) and DESIGN.md's coverage-caption requirement are both satisfied: nothing becomes less traceable, one duplicated sentence stops repeating.
+7. **Chart cards carry no eyebrow or visible direction label.** Repeated evidence labels and unclear phrases such as "neutral direction" are omitted. Chart titles use Newsreader; accessible summaries retain direction semantics.
+8. **Provenance consolidates.** The identical sentence "Source: seeded synthetic COROS-shaped observations" becomes **one pane-level line in the Trends footer**. **Per-chart coverage captions are unchanged and stay verbatim** because those are per-series facts, not a shared source label. PRODUCT.md principle 3 (evidence with provenance) and DESIGN.md's coverage-caption requirement remain satisfied.
 
 ## States and ranges
 
 - **Data ranges** are fixed by the immutable `demo-athlete-v1` fixture: 28 wake-up days, 21–28 nights recorded per metric, 11 Workout Results of which 9 carry load, 10 eligible Outdoor Run pairs. The grid must hold at these counts and must not assume density that the fixture cannot supply.
 - **Missing data** renders per the existing gap convention (broken lines, baseline dashes, "No recording" readouts). Wider charts must not interpolate.
-- **Range toggle** states `4w / 12w / Build` all render in every layout; `Build` is the longest series and sets the widest x-domain.
+- **Visible range** is fixed to `4w` in every layout. Longer projection ranges are retained internally but have no control on this surface.
 - **Coach Agent connection** unavailable is the default state in a plain browser and must not disturb the frame.
 - **Pushed screens** (`#workout/<id>`, `#adaptation/<id>`) stay full-viewport on both form factors and return to the origin pane with scroll restored.
 - **Reduced motion** — nothing to disable, since the switch adds no transition.
-- **Focus** — the 3px `#3f7e8a` / 3px offset outline applies to the tabs and the range toggle, non-negotiable. Hidden panes must not be focus-reachable.
+- **Focus** — the 3px `#3f7e8a` / 3px offset outline applies to the tabs and the 4w control, non-negotiable. Hidden panes must not be focus-reachable.
 
 ## Verification
 

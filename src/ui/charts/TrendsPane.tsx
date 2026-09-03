@@ -79,6 +79,15 @@ function formatShortDate(date: string) {
   }).format(parsed);
 }
 
+function trendFor(current: number | null, average: number | null) {
+  if (current === null || average === null) {
+    return { label: "No trend available" };
+  }
+  if (current > average) return { label: "Up versus recorded nights" };
+  if (current < average) return { label: "Down versus recorded nights" };
+  return { label: "Flat versus recorded nights" };
+}
+
 function SleepChart({
   projection,
   source,
@@ -135,7 +144,8 @@ function SleepChart({
     : "No recorded nights in this range";
   const average = projection.average;
   const current = projection.latest?.value ?? null;
-  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
+  const trend = trendFor(current, average);
+  const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}. Coverage: ${projection.coverage.observed} of ${projection.coverage.expected} nights recorded.`;
   const hasObserved = projection.coverage.observed > 0;
   const plot = hasObserved ? (
     (() => {
@@ -512,7 +522,7 @@ function VolumeLoadChart({
             annotationIsInRange(annotation, rangeFrom, rangeTo),
         )
         .map(({ label }) => label);
-      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
       return (
         <div className="chart-card__plot chart-card__plot--volume-load">
           <svg
@@ -809,7 +819,8 @@ function PaceHeartRateChart({
             <desc id="pace-heart-rate-description">
               Derived from your runs. Current:{" "}
               {selected ? formatPace(selected.paceSecondsPerKm) : "—"}.
-              Coverage: {projection.points.length} eligible Outdoor Run pairs
+              Direction: No fitted trend. Coverage: {projection.points.length}{" "}
+              eligible Outdoor Run pairs
               {projection.excludedOutdoorRuns
                 ? `, ${projection.excludedOutdoorRuns} missing a measure.`
                 : "."}{" "}
