@@ -1,15 +1,167 @@
-import { DEMO_BACKFILLED_WORKOUT_RESULTS } from "./demoFixture";
+import {
+  createDemoWorkspaceState,
+  DEMO_BACKFILLED_WORKOUT_RESULTS,
+} from "./demoFixture";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+const RELEASED_FIVE_BY_ONE_PRESCRIPTION = {
+  blocks: [
+    { kind: "warmup", distanceKm: 2 },
+    {
+      kind: "repeat",
+      repetitions: 5,
+      workDistanceKm: 1,
+      targetPaceSecondsPerKm: { min: 275, max: 280 },
+      recoverySeconds: 90,
+    },
+    { kind: "cooldown", distanceKm: 1.5 },
+  ],
+};
+
+function hasReleasedFiveByOneShape(
+  workout: Record<string, unknown>,
+  id: string,
+): boolean {
+  const expectedDate =
+    id === "planned-2026-08-13-threshold" ? "2026-08-13" : "2026-08-26";
+  return (
+    workout.id === id &&
+    workout.date === expectedDate &&
+    workout.type === "threshold" &&
+    workout.title === "5 × 1 km threshold" &&
+    workout.purpose === "Develop threshold pace under control" &&
+    workout.distanceKm === 13 &&
+    JSON.stringify(workout.prescription) ===
+      JSON.stringify(RELEASED_FIVE_BY_ONE_PRESCRIPTION)
+  );
+}
+
+function hasLegacyAugust6Shape(workout: Record<string, unknown>): boolean {
+  return (
+    workout.id === "planned-2026-08-06-threshold" &&
+    workout.date === "2026-08-06" &&
+    workout.type === "threshold" &&
+    workout.title === "Threshold intervals" &&
+    workout.purpose === "Develop sustainable speed" &&
+    workout.distanceKm === 11 &&
+    JSON.stringify(workout.prescription) ===
+      JSON.stringify(RELEASED_FIVE_BY_ONE_PRESCRIPTION)
+  );
+}
+
+function hasLegacyAugust13PlanShape(workout: Record<string, unknown>): boolean {
+  return (
+    workout.id === "planned-2026-08-13-easy" &&
+    workout.date === "2026-08-13" &&
+    workout.type === "easy" &&
+    workout.title === "8 km easy" &&
+    workout.purpose === "Comfortable aerobic running" &&
+    workout.distanceKm === 8 &&
+    JSON.stringify(workout.prescription) ===
+      JSON.stringify({ blocks: [{ kind: "easy", distanceKm: 8 }] })
+  );
+}
+
+function hasLegacyAugust13ResultShape(
+  result: Record<string, unknown>,
+): boolean {
+  return (
+    result.id === "result-2026-08-13" &&
+    result.plannedWorkoutId === "planned-2026-08-13-easy" &&
+    result.startedAt === "2026-08-13T07:00:00+01:00" &&
+    result.status === "completed" &&
+    isRecord(result.summary) &&
+    result.summary.distanceKm === 8 &&
+    result.summary.durationSeconds === 2_800 &&
+    result.summary.trainingLoad === 34 &&
+    result.summary.averagePaceSecondsPerKm === 350 &&
+    result.summary.averageHeartRateBpm === 138 &&
+    result.summary.activityKind === "outdoor_run" &&
+    Array.isArray(result.laps) &&
+    result.laps.length === 0
+  );
+}
+
+function hasReleasedAugust13ResultShape(
+  result: Record<string, unknown>,
+): boolean {
+  return (
+    result.id === "result-2026-08-13-threshold" &&
+    isRecord(result.summary) &&
+    result.summary.distanceKm === 13 &&
+    result.summary.durationSeconds === 3_900 &&
+    result.summary.averagePaceSecondsPerKm === 300 &&
+    Array.isArray(result.laps) &&
+    !result.laps.some((lap) => isRecord(lap) && lap.kind === "recovery")
+  );
+}
+
 export function migrateDemoWorkspace(value: unknown): unknown {
   if (!isRecord(value) || !isRecord(value.state)) return value;
+  const currentFixture = createDemoWorkspaceState();
+  const canonicalAugust6Plan = currentFixture.trainingPlan.plannedWorkouts.find(
+    ({ id }) => id === "planned-2026-08-06-threshold",
+  );
+  const canonicalAugust13Plan =
+    currentFixture.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-13-threshold",
+    );
+  const canonicalAugust26Plan =
+    currentFixture.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-26-threshold",
+    );
+  const canonicalAugust13Result = currentFixture.workoutResults.find(
+    ({ id }) => id === "result-2026-08-13-threshold",
+  );
+  const existingTrainingPlan = value.state.trainingPlan;
+  const existingPlannedWorkouts = isRecord(existingTrainingPlan)
+    ? existingTrainingPlan.plannedWorkouts
+    : undefined;
+  const migrateLegacyAugust13 =
+    Array.isArray(existingPlannedWorkouts) &&
+    existingPlannedWorkouts.some(
+      (workout) => isRecord(workout) && hasLegacyAugust13PlanShape(workout),
+    );
+  const plannedWorkouts = Array.isArray(existingPlannedWorkouts)
+    ? existingPlannedWorkouts.map((workout: unknown) => {
+        if (!isRecord(workout)) return workout;
+        if (hasLegacyAugust6Shape(workout) && canonicalAugust6Plan) {
+          return structuredClone(canonicalAugust6Plan);
+        }
+        if (
+          (hasLegacyAugust13PlanShape(workout) ||
+            hasReleasedFiveByOneShape(
+              workout,
+              "planned-2026-08-13-threshold",
+            )) &&
+          canonicalAugust13Plan
+        ) {
+          return structuredClone(canonicalAugust13Plan);
+        }
+        if (
+          hasReleasedFiveByOneShape(workout, "planned-2026-08-26-threshold") &&
+          canonicalAugust26Plan
+        ) {
+          return structuredClone(canonicalAugust26Plan);
+        }
+        return workout;
+      })
+    : existingPlannedWorkouts;
   const existingWorkoutResults = value.state.workoutResults;
   const workoutResults = Array.isArray(existingWorkoutResults)
     ? [
         ...existingWorkoutResults.map((result: unknown) => {
+          if (
+            isRecord(result) &&
+            ((migrateLegacyAugust13 && hasLegacyAugust13ResultShape(result)) ||
+              hasReleasedAugust13ResultShape(result)) &&
+            canonicalAugust13Result
+          ) {
+            return structuredClone(canonicalAugust13Result);
+          }
           if (
             !isRecord(result) ||
             result.id !== "result-2026-08-26-threshold" ||
@@ -89,5 +241,37 @@ export function migrateDemoWorkspace(value: unknown): unknown {
         })),
       ]
     : existingWorkoutResults;
-  return { ...value, state: { ...value.state, workoutResults } };
+  const existingAthleteFeedback = value.state.athleteFeedback;
+  const athleteFeedback = Array.isArray(existingAthleteFeedback)
+    ? existingAthleteFeedback.map((feedback: unknown) => {
+        if (!isRecord(feedback)) return feedback;
+        const relatedWorkoutId =
+          migrateLegacyAugust13 &&
+          feedback.relatedWorkoutId === "planned-2026-08-13-easy"
+            ? "planned-2026-08-13-threshold"
+            : feedback.relatedWorkoutId;
+        const relatedWorkoutResultId =
+          migrateLegacyAugust13 &&
+          feedback.relatedWorkoutResultId === "result-2026-08-13"
+            ? "result-2026-08-13-threshold"
+            : feedback.relatedWorkoutResultId;
+        return { ...feedback, relatedWorkoutId, relatedWorkoutResultId };
+      })
+    : existingAthleteFeedback;
+  return {
+    ...value,
+    state: {
+      ...value.state,
+      ...(isRecord(existingTrainingPlan)
+        ? {
+            trainingPlan: {
+              ...existingTrainingPlan,
+              plannedWorkouts,
+            },
+          }
+        : {}),
+      workoutResults,
+      athleteFeedback,
+    },
+  };
 }

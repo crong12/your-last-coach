@@ -384,7 +384,7 @@ export const DEMO_WORKSPACE_STATE = {
         "threshold",
         "5 × 1 km threshold",
         "Develop threshold pace under control",
-        13,
+        9.5,
         [
           { kind: "warmup", distanceKm: 2 },
           {
@@ -467,7 +467,7 @@ export const DEMO_WORKSPACE_STATE = {
         "threshold",
         "5 × 1 km threshold",
         "Develop threshold pace under control",
-        13,
+        9.5,
         [
           { kind: "warmup", distanceKm: 2 },
           {
@@ -580,13 +580,13 @@ export const DEMO_WORKSPACE_STATE = {
       provenance: "seeded synthetic COROS-shaped Workout Result",
       source: DEMO_SOURCE,
       summary: {
-        distanceKm: 13,
-        durationSeconds: 3_900,
+        distanceKm: 9.5,
+        durationSeconds: 3_033,
         completedWorkRepetitions: 5,
         plannedWorkRepetitions: 5,
         trainingLoad: 58,
-        averagePaceSecondsPerKm: 300,
-        averageHeartRateBpm: 151,
+        averagePaceSecondsPerKm: 3_033 / 9.5,
+        averageHeartRateBpm: 150,
         activityKind: "outdoor_run",
       },
       laps: [
@@ -604,18 +604,32 @@ export const DEMO_WORKSPACE_STATE = {
           [278, 163, 170],
           [278, 165, 172],
           [279, 166, 173],
-        ].map(
+        ].flatMap(
           (
             [paceSecondsPerKm, averageHeartRateBpm, maximumHeartRateBpm],
             index,
-          ) => ({
-            id: `lap-threshold-aug13-work-${index + 1}`,
-            kind: "work" as const,
-            distanceKm: 1,
-            paceSecondsPerKm,
-            averageHeartRateBpm,
-            maximumHeartRateBpm,
-          }),
+          ) => [
+            {
+              id: `lap-threshold-aug13-work-${index + 1}`,
+              kind: "work" as const,
+              distanceKm: 1,
+              paceSecondsPerKm,
+              averageHeartRateBpm,
+              maximumHeartRateBpm,
+            },
+            ...(index < 4
+              ? [
+                  {
+                    id: `lap-threshold-aug13-recovery-${index + 1}`,
+                    kind: "recovery" as const,
+                    distanceKm: 0.25,
+                    paceSecondsPerKm: 360,
+                    averageHeartRateBpm: 142 + index * 2,
+                    maximumHeartRateBpm: 148 + index * 2,
+                  },
+                ]
+              : []),
+          ],
         ),
         {
           id: "lap-threshold-aug13-cooldown",

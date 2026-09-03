@@ -155,7 +155,7 @@ test("renders the selector-backed partial result composition and suspends the ap
     previousAttempts.getByText("5:27/km", { exact: true }),
   ).toBeVisible();
   await expect(
-    previousAttempts.getByText("5:00/km", { exact: true }),
+    previousAttempts.getByText("5:19/km", { exact: true }),
   ).toBeVisible();
   await expect(
     previousAttempts.getByText("Not recorded", { exact: true }),
@@ -344,14 +344,12 @@ test("walks pane to current to previous and restores each origin, focus, and for
   await expect(
     currentScreen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
-  await expect(
-    currentScreen.getByText("Delta vs current +3.5 km"),
-  ).toBeVisible();
+  await expect(currentScreen.getByText("Delta vs current +2 km")).toBeVisible();
   await currentScreen.evaluate((screen) => {
     screen.scrollTop = 0;
   });
   const previousRow = currentScreen.getByRole("button", {
-    name: /previous attempt 13 August 2026.*13 km/i,
+    name: /previous attempt 13 August 2026.*9.5 km/i,
   });
   await previousRow.scrollIntoViewIfNeeded();
   const workoutOriginScrollTop = await currentScreen.evaluate(
@@ -380,7 +378,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe("#workout/planned-2026-08-26-threshold");
   await expect(
     currentScreen.getByRole("button", {
-      name: /previous attempt 13 August 2026.*13 km/i,
+      name: /previous attempt 13 August 2026.*9.5 km/i,
     }),
   ).toBeFocused();
   await expect
@@ -433,7 +431,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe("#workout/planned-2026-08-26-threshold");
   await expect(
     page.getByRole("button", {
-      name: /previous attempt 13 August 2026.*13 km/i,
+      name: /previous attempt 13 August 2026.*9.5 km/i,
     }),
   ).toBeFocused();
   await expect

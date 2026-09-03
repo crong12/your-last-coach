@@ -607,6 +607,243 @@ describe("workspace initialization", () => {
     ).toMatchObject({ maximumHeartRateBpm: 175 });
   });
 
+  it("migrates the legacy August threshold records without resetting saved state", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope(3);
+    const august6 = saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-06-threshold",
+    )!;
+    august6.title = "Threshold intervals";
+    august6.prescription.blocks = [
+      { kind: "warmup", distanceKm: 2 },
+      {
+        kind: "repeat",
+        repetitions: 5,
+        workDistanceKm: 1,
+        targetPaceSecondsPerKm: { min: 275, max: 280 },
+        recoverySeconds: 90,
+      },
+      { kind: "cooldown", distanceKm: 1.5 },
+    ];
+    const august13 = saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-13-threshold",
+    )!;
+    august13.id = "planned-2026-08-13-easy";
+    august13.type = "easy";
+    august13.title = "8 km easy";
+    august13.purpose = "Comfortable aerobic running";
+    august13.distanceKm = 8;
+    august13.prescription.blocks = [{ kind: "easy", distanceKm: 8 }];
+    const august13Result = saved.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-13-threshold",
+    )!;
+    august13Result.id = "result-2026-08-13";
+    august13Result.plannedWorkoutId = "planned-2026-08-13-easy";
+    august13Result.startedAt = "2026-08-13T07:00:00+01:00";
+    august13Result.summary = {
+      distanceKm: 8,
+      durationSeconds: 2_800,
+      trainingLoad: 34,
+      averagePaceSecondsPerKm: 350,
+      averageHeartRateBpm: 138,
+      activityKind: "outdoor_run",
+    };
+    august13Result.laps = [];
+    saved.state.athleteFeedback.push({
+      id: "athlete-feedback:saved-before-threshold-migration",
+      requestId: "saved-before-threshold-migration",
+      relatedWorkoutId: "planned-2026-08-13-easy",
+      relatedWorkoutResultId: "result-2026-08-13",
+      rawText: "Keep this saved feedback.",
+      recordedAt: "2026-08-26T20:15:00+01:00",
+    });
+    saved.state.processedRequestIds.push("saved-before-threshold-migration");
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+      migrateSaved: migrateDemoWorkspace,
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(initialized.state.trainingPlan.planVersion).toBe(3);
+    expect(initialized.state.trainingPlan.plannedWorkouts).toContainEqual(
+      expect.objectContaining({
+        id: "planned-2026-08-06-threshold",
+        title: "3 × 2 km threshold",
+      }),
+    );
+    expect(initialized.state.trainingPlan.plannedWorkouts).toContainEqual(
+      expect.objectContaining({
+        id: "planned-2026-08-13-threshold",
+        type: "threshold",
+        distanceKm: 9.5,
+      }),
+    );
+    expect(initialized.state.workoutResults).toContainEqual(
+      expect.objectContaining({
+        id: "result-2026-08-13-threshold",
+        plannedWorkoutId: "planned-2026-08-13-threshold",
+        summary: expect.objectContaining({ distanceKm: 9.5 }),
+      }),
+    );
+    expect(initialized.state.athleteFeedback).toContainEqual(
+      expect.objectContaining({
+        id: "athlete-feedback:saved-before-threshold-migration",
+        relatedWorkoutId: "planned-2026-08-13-threshold",
+        relatedWorkoutResultId: "result-2026-08-13-threshold",
+      }),
+    );
+  });
+
+  it("reconciles the previously released threshold aggregate in saved state", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope(2);
+    const august13Plan = saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-13-threshold",
+    )!;
+    august13Plan.distanceKm = 13;
+    saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-26-threshold",
+    )!.distanceKm = 13;
+    const august13Result = saved.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-13-threshold",
+    )!;
+    august13Result.summary.distanceKm = 13;
+    august13Result.summary.durationSeconds = 3_900;
+    august13Result.summary.averagePaceSecondsPerKm = 300;
+    august13Result.laps = august13Result.laps.filter(
+      ({ kind }) => kind !== "recovery",
+    );
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+      migrateSaved: migrateDemoWorkspace,
+    });
+
+    expect(
+      initialized.state.trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === "planned-2026-08-13-threshold",
+      )?.distanceKm,
+    ).toBe(9.5);
+    expect(
+      initialized.state.trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === "planned-2026-08-26-threshold",
+      )?.distanceKm,
+    ).toBe(9.5);
+    expect(
+      initialized.state.workoutResults.find(
+        ({ id }) => id === "result-2026-08-13-threshold",
+      ),
+    ).toMatchObject({
+      summary: {
+        distanceKm: 9.5,
+        durationSeconds: 3_033,
+        averagePaceSecondsPerKm: 3_033 / 9.5,
+      },
+      laps: expect.arrayContaining([
+        expect.objectContaining({
+          id: "lap-threshold-aug13-recovery-1",
+          kind: "recovery",
+        }),
+      ]),
+    });
+  });
+
+  it("preserves a non-legacy threshold workout instead of matching by ID alone", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope(4);
+    const adapted = saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-26-threshold",
+    )!;
+    adapted.date = "2026-08-25";
+    adapted.distanceKm = 13;
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+      migrateSaved: migrateDemoWorkspace,
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(
+      initialized.state.trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === adapted.id,
+      ),
+    ).toEqual(adapted);
+    expect(initialized.state.trainingPlan.planVersion).toBe(4);
+  });
+
+  it("preserves coordinated legacy-ID records after a date-only adaptation", async () => {
+    const storage = new ControlledStorage();
+    const saved = await fixtureEnvelope(4);
+    const august13 = saved.state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-13-threshold",
+    )!;
+    august13.id = "planned-2026-08-13-easy";
+    august13.date = "2026-08-14";
+    august13.type = "easy";
+    august13.title = "8 km easy";
+    august13.purpose = "Comfortable aerobic running";
+    august13.distanceKm = 8;
+    august13.prescription.blocks = [{ kind: "easy", distanceKm: 8 }];
+    const august13Result = saved.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-13-threshold",
+    )!;
+    august13Result.id = "result-2026-08-13";
+    august13Result.plannedWorkoutId = "planned-2026-08-13-easy";
+    august13Result.startedAt = "2026-08-13T07:00:00+01:00";
+    august13Result.summary = {
+      distanceKm: 8,
+      durationSeconds: 2_800,
+      trainingLoad: 34,
+      averagePaceSecondsPerKm: 350,
+      averageHeartRateBpm: 138,
+      activityKind: "outdoor_run",
+    };
+    august13Result.laps = [];
+    saved.state.athleteFeedback.push({
+      id: "athlete-feedback:adapted-legacy-workout",
+      requestId: "adapted-legacy-workout",
+      relatedWorkoutId: "planned-2026-08-13-easy",
+      relatedWorkoutResultId: "result-2026-08-13",
+      rawText: "Preserve these adapted references.",
+      recordedAt: "2026-08-13T08:00:00+01:00",
+    });
+    saved.state.processedRequestIds.push("adapted-legacy-workout");
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+      migrateSaved: migrateDemoWorkspace,
+    });
+
+    expect(initialized.notice).toBeNull();
+    expect(
+      initialized.state.trainingPlan.plannedWorkouts.find(
+        ({ id }) => id === "planned-2026-08-13-easy",
+      )?.date,
+    ).toBe("2026-08-14");
+    expect(initialized.state.workoutResults).toContainEqual(
+      expect.objectContaining({
+        id: "result-2026-08-13",
+        plannedWorkoutId: "planned-2026-08-13-easy",
+      }),
+    );
+    expect(initialized.state.athleteFeedback).toContainEqual(
+      expect.objectContaining({
+        id: "athlete-feedback:adapted-legacy-workout",
+        relatedWorkoutId: "planned-2026-08-13-easy",
+        relatedWorkoutResultId: "result-2026-08-13",
+      }),
+    );
+  });
+
   it.each(INVALID_SAVED_CASES)(
     "replaces %s with the exact fixture and a restrained notice",
     async (savedCase) => {
