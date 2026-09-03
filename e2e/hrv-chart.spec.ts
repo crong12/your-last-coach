@@ -112,9 +112,25 @@ test("keeps the readout fixed while click and keyboard inspection change its con
       height: expect.any(Number),
     }),
   );
+  // Hit targets are contiguous full-height column bands (workout-chart
+  // pattern): every pointer x resolves to the nearest day, so the plot has
+  // no dead zones even though individual columns are narrower than 44px.
   const observedBox = await observed.boundingBox();
-  expect(observedBox!.width).toBeGreaterThanOrEqual(44);
   expect(observedBox!.height).toBeGreaterThanOrEqual(44);
+  const columnBoxes = await card
+    .locator("[data-chart-hit-columns] [data-chart-hit-area]")
+    .evaluateAll((rects) =>
+      rects
+        .map((rect) => rect.getBoundingClientRect())
+        .map(({ x, width }) => ({ x, width }))
+        .sort((a, b) => a.x - b.x),
+    );
+  expect(columnBoxes.length).toBeGreaterThan(0);
+  for (let index = 1; index < columnBoxes.length; index += 1) {
+    const previous = columnBoxes[index - 1];
+    const gap = columnBoxes[index].x - (previous.x + previous.width);
+    expect(Math.abs(gap)).toBeLessThanOrEqual(1);
+  }
 });
 
 test("contains the static chart on desktop and under reduced motion", async ({
