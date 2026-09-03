@@ -34,7 +34,11 @@ import {
   type ChartAnnotation,
   type ChartTooltip,
 } from "./chartTypes";
-import { formatMinutesClock, formatPacePerKm } from "../metricFormatters";
+import {
+  formatMinutesClock,
+  formatPacePerKm,
+  formatPaceSeconds,
+} from "../metricFormatters";
 
 export const TRENDS_SOURCE =
   "Source: seeded synthetic COROS-shaped observations";
@@ -539,6 +543,11 @@ function VolumeAnnotations({
               )}
               <text
                 data-chart-annotation-label
+                className={
+                  annotation.kind === "phase"
+                    ? "chart-annotation__label chart-annotation__label--phase"
+                    : "chart-annotation__label"
+                }
                 x={x + 5}
                 y={annotation.kind === "race" ? 56 : 40}
               >
@@ -1099,12 +1108,15 @@ function PaceHeartRateChart({
         : (projection.selected?.workoutResultId ?? null),
     );
   }, [projection.points, projection.selected?.workoutResultId]);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const selected =
     projection.points.find(
       ({ workoutResultId }) => workoutResultId === selectedId,
     ) ?? projection.selected;
   const readout = selected
-    ? `${formatShortDate(selected.date)} · ${selected.title} · ${formatPace(selected.paceSecondsPerKm)} · ${selected.heartRateBpm} bpm`
+    ? `${formatShortDate(selected.date)} · ${selected.title}${
+        selected.workoutType ? ` · ${selected.workoutType}` : ""
+      } · ${formatPace(selected.paceSecondsPerKm)} · ${selected.heartRateBpm} bpm`
     : projection.status === "unavailable"
       ? "Run comparison data unavailable"
       : "No comparable runs in this range";
@@ -1130,10 +1142,52 @@ function PaceHeartRateChart({
         paceMax + Math.max(1, (paceMax - paceMin) * 0.05),
         paceMin - Math.max(1, (paceMax - paceMin) * 0.05),
       ]);
+      const fit = projection.fit;
+      const [fitPaceStart, fitPaceEnd] = [paceMax, paceMin];
+      const fitHeartRates = fit
+        ? [
+            fit.slope * fitPaceStart + fit.intercept,
+            fit.slope * fitPaceEnd + fit.intercept,
+          ]
+        : [];
       const yScale = createLinearScale(
-        projection.points.map(({ heartRateBpm }) => heartRateBpm),
+        [
+          ...projection.points.map(({ heartRateBpm }) => heartRateBpm),
+          ...fitHeartRates,
+        ],
         [CHART_PLOT.bottom, CHART_PLOT.top],
       );
+      const chronological = [...projection.points].sort((a, b) =>
+        a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+      );
+      const recencyRank = new Map(
+        chronological.map(({ workoutResultId }, index) => [
+          workoutResultId,
+          index,
+        ]),
+      );
+      const newestId = chronological.at(-1)?.workoutResultId ?? null;
+      const opacityFor = (workoutResultId: string) => {
+        if (chronological.length < 2) return 1;
+        const rank = recencyRank.get(workoutResultId) ?? 0;
+        return 0.35 + 0.65 * (rank / (chronological.length - 1));
+      };
+      const hovered =
+        projection.points.find(
+          ({ workoutResultId }) => workoutResultId === hoverId,
+        ) ?? null;
+      const tooltip: ChartTooltip | null = hovered
+        ? {
+            x: xScale(hovered.paceSecondsPerKm),
+            y: yScale(hovered.heartRateBpm),
+            text: `${formatShortDate(hovered.date)} · ${formatPace(hovered.paceSecondsPerKm)} · ${hovered.heartRateBpm} bpm`,
+          }
+        : null;
+      const fitSummary = fit
+        ? ` Dashed line: fit across ${fit.pointCount} runs — heart rate ${
+            fit.slope > 0 ? "rises" : "falls"
+          } about ${Math.abs(fit.slope * 10).toFixed(1)} bpm per 10 seconds-per-km slower pace.`
+        : "";
       return (
         <div className="chart-card__plot">
           <svg
@@ -1148,7 +1202,8 @@ function PaceHeartRateChart({
             <desc id="pace-heart-rate-description">
               Derived from your runs. Current:{" "}
               {selected ? formatPace(selected.paceSecondsPerKm) : "—"}.
-              Direction: No fitted trend. Coverage: {projection.points.length}{" "}
+              {fitSummary || " Direction: No fitted trend."} Newer runs render
+              more solid than older runs. Coverage: {projection.points.length}{" "}
               eligible Outdoor Run pairs
               {projection.excludedOutdoorRuns
                 ? `, ${projection.excludedOutdoorRuns} missing a measure.`
@@ -1170,13 +1225,60 @@ function PaceHeartRateChart({
                       strokeWidth="1"
                       shapeRendering="crispEdges"
                     />
-                    <text data-chart-y-label x={CHART_PLOT.left + 4} y={y - 5}>
+                    <text
+                      data-chart-y-label
+                      className="chart-axis-label"
+                      x={CHART_PLOT.left + 4}
+                      y={y - 5}
+                    >
                       {tick}
                     </text>
                   </g>
                 );
               })}
             </g>
+            <g data-chart-x-ticks aria-hidden="true">
+              {xScale.ticks(4).map((tick) => {
+                const x = xScale(tick);
+                if (x < CHART_PLOT.left || x > CHART_PLOT.right) return null;
+                return (
+                  <g key={tick}>
+                    <line
+                      data-chart-pace-tick
+                      x1={x}
+                      x2={x}
+                      y1={CHART_PLOT.bottom}
+                      y2={CHART_PLOT.bottom + 6}
+                      stroke="var(--line)"
+                      strokeWidth="1"
+                      shapeRendering="crispEdges"
+                    />
+                    <text
+                      data-chart-pace-tick-label
+                      className="chart-axis-label"
+                      x={x}
+                      y={CHART_PLOT.bottom + 20}
+                      textAnchor="middle"
+                    >
+                      {formatPaceSeconds(tick)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+            {fit && (
+              <line
+                data-pace-fit-line
+                aria-hidden="true"
+                x1={xScale(fitPaceStart)}
+                y1={yScale(fit.slope * fitPaceStart + fit.intercept)}
+                x2={xScale(fitPaceEnd)}
+                y2={yScale(fit.slope * fitPaceEnd + fit.intercept)}
+                stroke="var(--series-2)"
+                strokeWidth="2"
+                strokeDasharray="6 4"
+              />
+            )}
             <g data-chart-series data-chart-series-kind="pace-heart-rate">
               {projection.points.map((point) => {
                 const x = xScale(point.paceSecondsPerKm);
@@ -1196,6 +1298,10 @@ function PaceHeartRateChart({
                       event.preventDefault();
                       setSelectedId(point.workoutResultId);
                     }}
+                    onPointerEnter={() => setHoverId(point.workoutResultId)}
+                    onPointerLeave={() => setHoverId(null)}
+                    onFocus={() => setHoverId(point.workoutResultId)}
+                    onBlur={() => setHoverId(null)}
                   >
                     <rect
                       data-chart-hit-area
@@ -1217,22 +1323,42 @@ function PaceHeartRateChart({
                         strokeWidth="2"
                       />
                     )}
+                    {point.workoutResultId === newestId && !selectedPoint && (
+                      <circle
+                        data-pace-point-newest
+                        cx={x}
+                        cy={y}
+                        r="9"
+                        fill="none"
+                        stroke="var(--series-1)"
+                        strokeWidth="1.5"
+                        strokeDasharray="2 2"
+                      />
+                    )}
                     <circle
                       data-pace-point-visible
                       cx={x}
                       cy={y}
                       r="5"
                       fill="var(--series-1)"
+                      fillOpacity={opacityFor(point.workoutResultId)}
                     />
                   </g>
                 );
               })}
             </g>
-            <text data-pace-axis-label x="360" y="268" textAnchor="middle">
+            <text
+              data-pace-axis-label
+              className="chart-axis-label"
+              x="360"
+              y="272"
+              textAnchor="middle"
+            >
               Average pace (faster →)
             </text>
             <text
               data-hr-axis-label
+              className="chart-axis-label"
               x="14"
               y="130"
               transform="rotate(-90 14 130)"
@@ -1241,6 +1367,19 @@ function PaceHeartRateChart({
               Average heart rate (bpm)
             </text>
           </svg>
+          {tooltip && (
+            <div
+              className="chart-plot__tooltip"
+              data-chart-tooltip
+              aria-hidden="true"
+              style={{
+                left: `clamp(56px, ${(tooltip.x / CHART_VIEWBOX.width) * 100}%, calc(100% - 56px))`,
+                top: `${(tooltip.y / CHART_VIEWBOX.height) * 100}%`,
+              }}
+            >
+              {tooltip.text}
+            </div>
+          )}
         </div>
       );
     })()
@@ -1275,6 +1414,7 @@ function PaceHeartRateChart({
           : formatPace(selected.paceSecondsPerKm)
       }
       unit=""
+      directionHint="min/km · newer runs render solid · dashed = fit across runs"
       readout={
         <>
           {readout}
