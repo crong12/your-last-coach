@@ -2250,57 +2250,35 @@ function ContextRail({
         <section className="evidence-card">
           <div className="section-heading section-heading--small">
             <div>
-              <span className="eyebrow">Shared evidence</span>
-              <h2>How you’re arriving</h2>
+              <h2>Your health metrics</h2>
             </div>
           </div>
           <dl className="metrics-list">
             <div>
               <dt>Recovery</dt>
               <dd>{observations.recovery.percent}%</dd>
-              <small>
-                {formatClassification(observations.recovery.classification)}
-              </small>
             </div>
             <div>
               <dt>Load ratio</dt>
               <dd>{observations.trainingLoad.ratio.toFixed(2)}</dd>
-              <small>
-                {observations.trainingLoad.shortTerm} short /{" "}
-                {observations.trainingLoad.longTerm} long
-              </small>
             </div>
             <div>
               <dt>Sleep</dt>
               <dd>{formatSleep(observations.sleep.durationMinutes)}</dd>
-              <small>Score {observations.sleep.score}</small>
             </div>
             <div>
               <dt>HRV</dt>
               <dd>{observations.sleepHrvMs.value} ms</dd>
-              <small>
-                Usual {observations.sleepHrvMs.syntheticNormalRange[0]}–
-                {observations.sleepHrvMs.syntheticNormalRange[1]} ms
-              </small>
             </div>
             <div>
               <dt>Resting heart rate</dt>
               <dd>{observations.restingHeartRateBpm} bpm</dd>
-              <small>Within the seeded normal context</small>
             </div>
             <div>
               <dt>Daily stress</dt>
               <dd>{formatClassification(observations.dailyStress)}</dd>
-              <small>No broad stress signal</small>
             </div>
           </dl>
-          <p className="evidence-balance">
-            Load and recovery support caution. Sleep, HRV, resting heart rate,
-            and stress remain within the seeded normal context.
-          </p>
-          <small className="provenance-label">
-            Seeded synthetic observations
-          </small>
         </section>
       )}
     </div>
@@ -3744,12 +3722,8 @@ export function WorkspaceApp({
               hidden={!compactLayout && selectedPane !== "trends"}
             >
               <div className="pane-heading">
-                <div className="pane-heading__title">
-                  <span className="eyebrow">Shared Coaching Workspace</span>
+                <div className="pane-heading__title pane-heading__title--trends">
                   <h2>Trends</h2>
-                  <p>
-                    Recent Coaching Evidence from the current training build.
-                  </p>
                 </div>
                 {!compactLayout && (
                   <div className="pane-heading__controls">

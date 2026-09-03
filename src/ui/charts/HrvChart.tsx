@@ -94,17 +94,6 @@ function readoutForPoint(point: ChartPoint | null, unit: string): ReactNode {
   }`;
 }
 
-function trendFor(current: number | null, average: number | null) {
-  if (current === null || average === null) {
-    return { glyph: "—", label: "No trend available" };
-  }
-  if (current > average)
-    return { glyph: "↑", label: "Up versus recorded nights" };
-  if (current < average)
-    return { glyph: "↓", label: "Down versus recorded nights" };
-  return { glyph: "→", label: "Flat versus recorded nights" };
-}
-
 function annotationReadout(annotation: ChartAnnotation) {
   if (annotation.kind === "adaptation") {
     return `${formatShortDate(annotation.date)} · Approved adaptation: ${annotation.label}`;
@@ -176,7 +165,6 @@ export function HrvChart({
       : null;
   const average =
     suppliedAverage === undefined ? calculatedAverage : suppliedAverage;
-  const trend = trendFor(latestObserved?.value ?? null, average);
   const [selection, setSelection] = useState<Selection>(() =>
     latestObserved
       ? { kind: "point", date: latestObserved.date }
@@ -223,8 +211,8 @@ export function HrvChart({
   const averageLabel =
     average === null ? "7-night avg —" : `7-night avg ${average} ${unit}`;
   const summary = latestObserved
-    ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
-    : `${metric}. Current: —. Direction: No trend available. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
+    ? `${metric}. Current: ${latestObserved.value} ${unit}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
+    : `${metric}. Current: —. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
   const passiveLabels = passiveAnnotationLabels(
     annotations,
     displayFrom ?? points[0]?.date,
@@ -354,8 +342,6 @@ export function HrvChart({
       unit={unit}
       averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
       averageBasis="recorded nights"
-      trendGlyph={status === "unavailable" ? "—" : trend.glyph}
-      trendLabel={status === "unavailable" ? "No trend available" : trend.label}
       readout={fixedReadout}
       plot={plot}
       coverage={

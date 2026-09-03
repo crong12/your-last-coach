@@ -6,13 +6,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("offers one linked Trends range control", async ({ page }) => {
+test("offers a fixed four-week Trends range control", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/#trends");
 
   const control = page.getByRole("group", { name: "Trends range" });
   await expect(control).toBeVisible();
-  await expect(control.getByRole("button")).toHaveText(["4w", "12w", "Build"]);
+  await expect(control.getByRole("button")).toHaveText(["4w"]);
   await expect(control.getByRole("button", { name: "4w" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -29,7 +29,7 @@ test("offers one linked Trends range control", async ({ page }) => {
   });
 });
 
-test("links every Trends chart and card to the selected range on mobile @contract", async ({
+test("links every Trends chart and card to the four-week range on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -51,71 +51,13 @@ test("links every Trends chart and card to the selected range on mobile @contrac
     page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
   ).toHaveCount(4);
 
-  const twelveWeekOption = page.getByRole("button", { name: "12w" });
-  await twelveWeekOption.focus();
-  await twelveWeekOption.press("Enter");
-  await expect(pane).toHaveAttribute("data-trends-range", "12w");
-  await expect(
-    page.locator('[data-chart-card="hrv"] [data-chart-point]'),
-  ).toHaveCount(84);
-  await expect(
-    page.locator('[data-chart-card="resting-heart-rate"] [data-chart-point]'),
-  ).toHaveCount(84);
-  await expect(
-    page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
-  ).toHaveCount(84);
-  await expect(
-    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
-  ).toHaveCount(12);
-
-  const oldPoint = page.getByRole("button", {
-    name: "Inspect HRV for 4 June, no recording",
-  });
-  await oldPoint.focus();
-  await oldPoint.press("Enter");
-  await expect(page.locator('[data-chart-readout="hrv"]')).toHaveText(
-    "4 Jun · No recording",
-  );
-
-  await page.getByRole("button", { name: "4w" }).click();
-  await expect(pane).toHaveAttribute("data-trends-range", "4w");
-  await expect(page.locator('[data-chart-readout="hrv"]')).toHaveText(
-    "26 Aug · 55 ms",
-  );
-
-  const buildOption = page.getByRole("button", { name: "Build" });
-  await buildOption.focus();
-  await buildOption.press(" ");
-  await expect(pane).toHaveAttribute("data-trends-range", "build");
-  await expect(
-    page.locator('[data-chart-card="hrv"] [data-chart-point]'),
-  ).toHaveCount(26);
-  await expect(
-    page.locator('[data-chart-card="resting-heart-rate"] [data-chart-point]'),
-  ).toHaveCount(26);
-  await expect(
-    page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
-  ).toHaveCount(26);
-  await expect(
-    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
-  ).toHaveCount(5);
-  await expect(
-    page.locator('[data-chart-card="hrv"] [data-chart-annotation-kind="race"]'),
-  ).toHaveCount(1);
-  await expect(
-    page.locator(
-      '[data-chart-card="volume-load"] [data-chart-annotation-kind="race"]',
-    ),
-  ).toHaveCount(1);
   await expect(
     page.locator(
       '[data-chart-card="pace-heart-rate"] [data-pace-heart-rate-point]',
     ),
   ).toHaveCount(15);
-  await expect(page.locator("[data-repeated-session-option]")).toHaveCount(1);
-
   const cardWidths = await page
-    .locator(".trends-pane .chart-card, .trends-pane [data-repeated-sessions]")
+    .locator(".trends-pane .chart-card")
     .evaluateAll((cards) =>
       cards.map((card) => ({
         scrollWidth: card.scrollWidth,
@@ -134,7 +76,7 @@ test("links every Trends chart and card to the selected range on mobile @contrac
   ).toContain("x");
 });
 
-test("inspects missing evidence and restores both Workout Result pushes on mobile @contract", async ({
+test("inspects missing evidence and restores the Workout Result push on mobile @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
@@ -172,20 +114,6 @@ test("inspects missing evidence and restores both Workout Result pushes on mobil
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect(page.locator(`#${paceActionId}`)).toBeFocused();
-
-  const repeated = page.locator("[data-repeated-sessions]");
-  const repeatedAction = repeated.locator("[data-repeated-view-workout]");
-  const repeatedActionId = await repeatedAction.getAttribute("id");
-  await repeatedAction.click();
-  await expect(
-    page.getByRole("main", { name: "Workout Result" }),
-  ).toBeVisible();
-  await expect
-    .poll(() => page.evaluate(() => location.hash))
-    .toBe("#workout/planned-2026-08-26-threshold");
-  await page.getByRole("button", { name: "Back to Trends" }).click();
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
-  await expect(page.locator(`#${repeatedActionId}`)).toBeFocused();
 });
 
 test("keeps a valid empty Workout Result range as an honest zero series", async ({
@@ -328,7 +256,7 @@ async function seedAdaptationReceipt(page: Page) {
     .toBe(1);
 }
 
-test("keeps passive phase and race markers non-focusable while adaptations are interactive @contract", async ({
+test("keeps passive phase markers non-focusable while adaptations are interactive @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -367,24 +295,16 @@ test("keeps passive phase and race markers non-focusable while adaptations are i
   ).toBeFocused();
 
   await page.goto("/#trends");
-  await page.getByRole("button", { name: "Build" }).click();
-  const buildHrv = page.locator('[data-chart-card="hrv"]');
-  const phase = buildHrv
-    .locator('[data-chart-annotation-kind="phase"]')
-    .first();
-  const race = buildHrv.locator('[data-chart-annotation-kind="race"]');
+  const phase = hrv.locator('[data-chart-annotation-kind="phase"]').first();
   await expect(phase).toHaveCount(1);
-  await expect(race).toHaveCount(1);
   expect(await phase.getAttribute("tabindex")).toBeNull();
   expect(await phase.getAttribute("role")).toBeNull();
-  expect(await race.getAttribute("tabindex")).toBeNull();
-  expect(await race.getAttribute("role")).toBeNull();
-  const latestPoint = buildHrv.getByRole("button", {
+  const latestPoint = hrv.getByRole("button", {
     name: "Inspect HRV for 26 August, 55 ms",
   });
   await latestPoint.focus();
   await latestPoint.press("Enter");
-  await expect(buildHrv.locator('[data-chart-readout="hrv"]')).toContainText(
+  await expect(hrv.locator('[data-chart-readout="hrv"]')).toContainText(
     "26 Aug · 55 ms",
   );
   await page.screenshot({
@@ -484,18 +404,6 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
   await page.getByRole("button", { name: "Back to Trends" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
   await expect(page.locator(`#${paceActionId}`)).toBeFocused();
-
-  const repeatedAction = page.locator(
-    "[data-repeated-sessions] [data-repeated-view-workout]",
-  );
-  const repeatedActionId = await repeatedAction.getAttribute("id");
-  await repeatedAction.click();
-  await expect(
-    page.getByRole("main", { name: "Workout Result" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Back to Trends" }).click();
-  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#trends");
-  await expect(page.locator(`#${repeatedActionId}`)).toBeFocused();
 });
 
 test("lays Trends out on a grid at the judging width without overlapping controls", async ({
@@ -517,13 +425,13 @@ test("lays Trends out on a grid at the judging width without overlapping control
 
   // The arrival strip leads the pane, ahead of the first evidence card.
   const arriving = await page
-    .getByRole("heading", { name: "How you’re arriving" })
+    .getByRole("heading", { name: "Your health metrics" })
     .boundingBox();
   expect(arriving!.y).toBeLessThan(hrv!.y);
 
   // It is rendered once, not duplicated by the promotion.
   await expect(
-    page.getByRole("heading", { name: "How you’re arriving" }),
+    page.getByRole("heading", { name: "Your health metrics" }),
   ).toHaveCount(1);
 
   // The chart card header stops overlapping once the card is paired: the
@@ -557,7 +465,7 @@ test("keeps the scroll-snap layout and card order on mobile", async ({
   const [hrv, restingHeartRate, arriving] = await Promise.all([
     page.locator('[data-chart-card="hrv"]').boundingBox(),
     page.locator('[data-chart-card="resting-heart-rate"]').boundingBox(),
-    page.getByRole("heading", { name: "How you’re arriving" }).boundingBox(),
+    page.getByRole("heading", { name: "Your health metrics" }).boundingBox(),
   ]);
   expect(restingHeartRate!.y).toBeGreaterThan(hrv!.y + hrv!.height - 1);
   expect(arriving!.y).toBeGreaterThan(hrv!.y);
