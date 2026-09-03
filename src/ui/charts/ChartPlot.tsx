@@ -6,7 +6,10 @@ import {
   CHART_PLOT,
   CHART_VIEWBOX,
   type ChartAnnotation,
+  type ChartPlotBounds,
   type ChartPoint,
+  type ChartTooltip,
+  type ChartViewBox,
 } from "./chartTypes";
 
 export interface ChartPlotProps {
@@ -18,6 +21,11 @@ export interface ChartPlotProps {
   yScale: ScaleLinear<number, number>;
   annotations: readonly ChartAnnotation[];
   onSelectAnnotation: (annotation: ChartAnnotation) => void;
+  viewBox?: ChartViewBox;
+  plotBounds?: ChartPlotBounds;
+  xTickDates?: readonly string[];
+  yTickFormat?: (value: number) => string;
+  tooltip?: ChartTooltip | null;
   children?: ReactNode;
 }
 
@@ -32,6 +40,16 @@ function formatAxisDate(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function formatShortAxisDate(value: string) {
+  const parsed = parseChartDate(value);
+  if (!parsed) return value;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
     timeZone: "UTC",
   }).format(parsed);
 }
@@ -74,10 +92,12 @@ function annotationKey(annotation: ChartAnnotation) {
 function AnnotationMark({
   annotation,
   x,
+  plot,
   onSelect,
 }: {
   annotation: ChartAnnotation;
   x: number;
+  plot: ChartPlotBounds;
   onSelect: () => void;
 }) {
   if (annotation.kind === "phase") {
@@ -91,8 +111,8 @@ function AnnotationMark({
           data-chart-phase-line
           x1={x}
           x2={x}
-          y1={CHART_PLOT.top}
-          y2={CHART_PLOT.bottom}
+          y1={plot.top}
+          y2={plot.bottom}
           stroke="var(--line)"
           strokeDasharray="3 4"
         />
@@ -100,7 +120,7 @@ function AnnotationMark({
           data-chart-annotation-label
           data-chart-phase-label
           x={x + 5}
-          y={CHART_PLOT.top + 12}
+          y={plot.top + 12}
           className="chart-annotation__label chart-annotation__label--phase"
         >
           {annotation.label}
@@ -120,20 +140,20 @@ function AnnotationMark({
           data-chart-race-line
           x1={x}
           x2={x}
-          y1={CHART_PLOT.top}
-          y2={CHART_PLOT.bottom}
+          y1={plot.top}
+          y2={plot.bottom}
           stroke="var(--ochre)"
           strokeDasharray="2 3"
         />
         <path
           data-chart-race-flag
-          d={`M ${x} ${CHART_PLOT.top} h 22 l -5 6 l 5 6 h -22 z`}
+          d={`M ${x} ${plot.top} h 22 l -5 6 l 5 6 h -22 z`}
           fill="var(--ochre)"
         />
         <text
           data-chart-annotation-label
           x={x + 5}
-          y={CHART_PLOT.top + 28}
+          y={plot.top + 28}
           className="chart-annotation__label"
         >
           {annotation.label}
@@ -147,7 +167,7 @@ function AnnotationMark({
     event.preventDefault();
     onSelect();
   };
-  const diamondY = CHART_PLOT.top + 23;
+  const diamondY = plot.top + 23;
   return (
     <g
       role="button"
@@ -205,6 +225,11 @@ export function ChartPlot({
   yScale,
   annotations,
   onSelectAnnotation,
+  viewBox = CHART_VIEWBOX,
+  plotBounds = CHART_PLOT,
+  xTickDates,
+  yTickFormat = formatTick,
+  tooltip = null,
   children,
 }: ChartPlotProps) {
   const generatedId = useId().replaceAll(":", "");
@@ -214,12 +239,14 @@ export function ChartPlot({
   const ticks = selectTicks(yScale.ticks(3));
   const firstDate = points[0]?.date;
   const lastDate = points.at(-1)?.date;
-  const xLabels =
+  const defaultLabels =
     firstDate && lastDate && firstDate !== lastDate
       ? [firstDate, lastDate]
       : firstDate
         ? [firstDate]
         : [];
+  const xLabels = xTickDates ?? defaultLabels;
+  const formatXLabel = xTickDates ? formatShortAxisDate : formatAxisDate;
   const renderableAnnotations = annotations.filter((annotation) => {
     if (!isAnnotation(annotation)) return false;
     const date = parseChartDate(annotation.date);
@@ -239,6 +266,7 @@ export function ChartPlot({
         key={annotationKey(annotation)}
         annotation={annotation}
         x={xScale(parsedDate)}
+        plot={plotBounds}
         onSelect={() => onSelectAnnotation(annotation)}
       />
     );
@@ -249,7 +277,7 @@ export function ChartPlot({
       <svg
         className="chart-plot"
         data-chart={id}
-        viewBox={`0 0 ${CHART_VIEWBOX.width} ${CHART_VIEWBOX.height}`}
+        viewBox={`0 0 ${viewBox.width} ${viewBox.height}`}
         width="100%"
         role="img"
         aria-labelledby={`${titleId} ${descriptionId}`}
@@ -258,12 +286,7 @@ export function ChartPlot({
         <desc id={descriptionId}>{description}</desc>
         <defs>
           <clipPath id={clipId}>
-            <rect
-              x="0"
-              y="0"
-              width={CHART_VIEWBOX.width}
-              height={CHART_VIEWBOX.height}
-            />
+            <rect x="0" y="0" width={viewBox.width} height={viewBox.height} />
           </clipPath>
         </defs>
         <g data-chart-grid aria-hidden="true">
@@ -273,8 +296,8 @@ export function ChartPlot({
               <g key={tick}>
                 <line
                   data-chart-gridline
-                  x1={CHART_PLOT.left}
-                  x2={CHART_PLOT.right}
+                  x1={plotBounds.left}
+                  x2={plotBounds.right}
                   y1={y}
                   y2={y}
                   stroke="var(--line)"
@@ -283,11 +306,11 @@ export function ChartPlot({
                 />
                 <text
                   data-chart-y-label
-                  x={CHART_PLOT.left + 4}
+                  x={plotBounds.left + 4}
                   y={y - 5}
                   className="chart-axis-label"
                 >
-                  {formatTick(tick)}
+                  {yTickFormat(tick)}
                 </text>
               </g>
             );
@@ -320,16 +343,37 @@ export function ChartPlot({
                 data-chart-x-label
                 key={date}
                 x={xScale(parsedDate)}
-                y={CHART_VIEWBOX.height - 10}
-                textAnchor={index === 0 && xLabels.length > 1 ? "start" : "end"}
+                y={viewBox.height - 10}
+                textAnchor={
+                  xLabels.length === 1
+                    ? "end"
+                    : index === 0
+                      ? "start"
+                      : index === xLabels.length - 1
+                        ? "end"
+                        : "middle"
+                }
                 className="chart-axis-label"
               >
-                {formatAxisDate(date)}
+                {formatXLabel(date)}
               </text>
             );
           })}
         </g>
       </svg>
+      {tooltip && (
+        <div
+          className="chart-plot__tooltip"
+          data-chart-tooltip
+          aria-hidden="true"
+          style={{
+            left: `clamp(56px, ${(tooltip.x / viewBox.width) * 100}%, calc(100% - 56px))`,
+            top: `${(tooltip.y / viewBox.height) * 100}%`,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 }

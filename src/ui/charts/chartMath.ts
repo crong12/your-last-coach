@@ -4,6 +4,14 @@ import { curveLinear, line } from "d3-shape";
 
 import type { ChartPoint } from "./chartTypes";
 
+export function weeklyTickDates(dates: readonly string[]): readonly string[] {
+  if (dates.length === 0) return [];
+  const ticks = dates.filter((_, index) => index % 7 === 0);
+  const last = dates[dates.length - 1];
+  if (ticks[ticks.length - 1] !== last) ticks.push(last);
+  return ticks;
+}
+
 export function parseChartDate(value: string): Date | null {
   const parsed = new Date(`${value}T12:00:00.000Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;

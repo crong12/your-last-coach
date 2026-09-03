@@ -17,6 +17,13 @@ export function formatDurationSeconds(seconds: number): string {
     : `${minutes}:${String(remainder).padStart(2, "0")}`;
 }
 
+export function formatMinutesClock(minutes: number): string {
+  const total = Math.round(minutes);
+  const hours = Math.floor(total / 60);
+  const remainder = total % 60;
+  return `${hours}:${String(remainder).padStart(2, "0")}`;
+}
+
 export function formatDistanceKm(distanceKm: number, decimals = 1): string {
   return `${Number.isInteger(distanceKm) ? distanceKm : distanceKm.toFixed(decimals)} km`;
 }

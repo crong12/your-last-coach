@@ -9,6 +9,9 @@ export interface ChartCardProps {
   averageBasis?: string;
   trendLabel?: string;
   trendGlyph?: string;
+  trendTone?: "neutral" | "warn";
+  /** Muted metric · unit · polarity caption above the plot, e.g. "HRV · ms · higher ↑". */
+  directionHint?: string;
   readout: ReactNode;
   plot: ReactNode;
   coverage: string;
@@ -25,6 +28,8 @@ export function ChartCard({
   averageBasis,
   trendLabel,
   trendGlyph,
+  trendTone = "neutral",
+  directionHint,
   readout,
   plot,
   coverage,
@@ -68,7 +73,7 @@ export function ChartCard({
           </div>
         )}
         {trendLabel && (
-          <div className="chart-card__trend">
+          <div className="chart-card__trend" data-trend-tone={trendTone}>
             {trendGlyph && (
               <span className="chart-card__trend-glyph" aria-hidden="true">
                 {trendGlyph}
@@ -86,6 +91,11 @@ export function ChartCard({
       >
         {readout}
       </div>
+      {directionHint && (
+        <div className="chart-card__direction-hint" data-chart-direction-hint>
+          {directionHint}
+        </div>
+      )}
       {plot}
       {children}
       <footer className="chart-card__footer">

@@ -2717,6 +2717,15 @@ h1 {
   line-height: 1;
 }
 
+.chart-card__trend[data-trend-tone="warn"] {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.chart-card__trend[data-trend-tone="warn"] .chart-card__trend-glyph {
+  color: var(--warn);
+}
+
 .chart-card__readout {
   display: flex;
   align-items: center;
@@ -2738,8 +2747,45 @@ h1 {
 }
 
 .chart-card__plot {
+  position: relative;
   overflow: hidden;
   padding: 8px 12px 2px;
+}
+
+.chart-plot__tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(24, 44, 38, 0.16);
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
+}
+
+.chart-card__direction-hint {
+  padding: 10px 20px 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+[data-chart-hit-columns] [data-chart-point] {
+  cursor: pointer;
+  outline: none;
+}
+
+[data-chart-hit-columns] [data-chart-point]:focus-visible rect {
+  stroke: #3f7e8a;
+  stroke-width: 2;
+  fill-opacity: 0.08;
 }
 
 .chart-plot {
@@ -2757,7 +2803,8 @@ h1 {
 .chart-annotation__label {
   fill: var(--muted);
   font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
