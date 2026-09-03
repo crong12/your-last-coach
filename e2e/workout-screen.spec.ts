@@ -124,6 +124,27 @@ test("renders the selector-backed partial result composition and suspends the ap
   await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
   await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
   await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
+  const structureHeading = screen.getByRole("heading", {
+    name: "Workout structure",
+  });
+  const structure = screen.getByRole("region", { name: "Workout structure" });
+  await expect(structureHeading).toBeVisible();
+  await expect(structure.getByText("2 km", { exact: true })).toBeVisible();
+  await expect(
+    structure.getByText("5 × 1 km at 4:35–4:40/km · 90 seconds easy jog", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(structure.getByText("1.5 km", { exact: true })).toBeVisible();
+  const resultHeading = screen.getByRole("heading", {
+    name: "Workout Result",
+    exact: true,
+  });
+  await expect(resultHeading).toBeVisible();
+  const sectionHeadings = await screen.locator("h2").allTextContents();
+  expect(sectionHeadings.indexOf("Workout structure")).toBeLessThan(
+    sectionHeadings.indexOf("Workout Result"),
+  );
   await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
     0,
   );
@@ -132,6 +153,9 @@ test("renders the selector-backed partial result composition and suspends the ap
   });
   await expect(
     previousAttempts.getByText("5:27/km", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    previousAttempts.getByText("5:00/km", { exact: true }),
   ).toBeVisible();
   await expect(
     previousAttempts.getByText("Not recorded", { exact: true }),
@@ -181,6 +205,17 @@ test("renders the provenance-labelled completed result with recorded chart and e
     screen.getByText("6 August 2026", { exact: true }),
   ).toBeVisible();
   await expect(screen.getByText("COMPLETED", { exact: true })).toBeVisible();
+  const structureHeading = screen.getByRole("heading", {
+    name: "Workout structure",
+  });
+  const structure = screen.getByRole("region", { name: "Workout structure" });
+  await expect(structureHeading).toBeVisible();
+  await expect(
+    structure.getByText("3 × 2 km at 4:38–4:46/km · 120 seconds easy jog", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(structure.getByText("3 km", { exact: true })).toBeVisible();
   await expect(
     screen.getByText("Source: seeded synthetic COROS-shaped Workout Result"),
   ).toBeVisible();
@@ -243,10 +278,13 @@ test("captures the completed Workout Result at the desktop review size", async (
 test("renders a completed empty-lap result without fabricating chart or table @contract", async ({
   page,
 }) => {
-  await page.goto("/#workout/planned-2026-08-13-easy");
+  await page.goto("/#workout/planned-2026-08-11-easy");
 
   const screen = page.getByRole("main", { name: "Workout Result" });
   await expect(screen.getByText("COMPLETED", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByRole("heading", { name: "Workout structure" }),
+  ).toBeVisible();
   await expect(
     screen.getByText("No lap data recorded", { exact: true }),
   ).toBeVisible();
@@ -313,7 +351,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     screen.scrollTop = 0;
   });
   const previousRow = currentScreen.getByRole("button", {
-    name: /previous attempt 6 August 2026.*11 km/i,
+    name: /previous attempt 13 August 2026.*13 km/i,
   });
   await previousRow.scrollIntoViewIfNeeded();
   const workoutOriginScrollTop = await currentScreen.evaluate(
@@ -325,10 +363,10 @@ test("walks pane to current to previous and restores each origin, focus, and for
   await previousRow.click();
   await expect
     .poll(() => page.evaluate(() => location.hash))
-    .toBe("#workout/planned-2026-08-06-threshold");
+    .toBe("#workout/planned-2026-08-13-threshold");
   await expect(page.getByText("COMPLETED", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Threshold intervals" }),
+    page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   await expect(
     page.getByRole("button", { name: "Back to 5 × 1 km threshold" }),
@@ -342,7 +380,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe("#workout/planned-2026-08-26-threshold");
   await expect(
     currentScreen.getByRole("button", {
-      name: /previous attempt 6 August 2026.*11 km/i,
+      name: /previous attempt 13 August 2026.*13 km/i,
     }),
   ).toBeFocused();
   await expect
@@ -379,9 +417,9 @@ test("walks pane to current to previous and restores each origin, focus, and for
   await page.goForward();
   await expect
     .poll(() => page.evaluate(() => location.hash))
-    .toBe("#workout/planned-2026-08-06-threshold");
+    .toBe("#workout/planned-2026-08-13-threshold");
   await expect(
-    page.getByRole("heading", { name: "Threshold intervals" }),
+    page.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   await expect(
     page.getByRole("button", { name: "Back to 5 × 1 km threshold" }),
@@ -395,7 +433,7 @@ test("walks pane to current to previous and restores each origin, focus, and for
     .toBe("#workout/planned-2026-08-26-threshold");
   await expect(
     page.getByRole("button", {
-      name: /previous attempt 6 August 2026.*11 km/i,
+      name: /previous attempt 13 August 2026.*13 km/i,
     }),
   ).toBeFocused();
   await expect

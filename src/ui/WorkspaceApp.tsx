@@ -620,6 +620,34 @@ export function WorkoutFeedback({
   );
 }
 
+function WorkoutStructure({ workout }: { workout: PlannedWorkout }) {
+  return (
+    <section aria-labelledby="structure-title">
+      <h2 id="structure-title">Workout structure</h2>
+      <ol className="workout-structure">
+        {workout.prescription.blocks.map((block, index) => {
+          const label =
+            block.kind === "warmup"
+              ? "Warm-up"
+              : block.kind === "cooldown"
+                ? "Cool-down"
+                : "Main set";
+          const value =
+            block.kind === "repeat"
+              ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPaceSeconds(block.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
+              : `${block.distanceKm} km`;
+          return (
+            <li key={`${block.kind}-${index}`}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
   const repeatBlock = workout.prescription.blocks.find(
     (block) => block.kind === "repeat",
@@ -634,29 +662,7 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
         <p>{workout.purpose}</p>
       </section>
 
-      <section aria-labelledby="structure-title">
-        <h2 id="structure-title">Workout structure</h2>
-        <ol className="workout-structure">
-          {workout.prescription.blocks.map((block, index) => {
-            const label =
-              block.kind === "warmup"
-                ? "Warm-up"
-                : block.kind === "cooldown"
-                  ? "Cool-down"
-                  : "Main set";
-            const value =
-              block.kind === "repeat"
-                ? `${block.repetitions} × ${block.workDistanceKm} km at ${formatPaceSeconds(block.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(block.targetPaceSecondsPerKm.max)}/km · ${block.recoverySeconds} seconds easy jog`
-                : `${block.distanceKm} km`;
-            return (
-              <li key={`${block.kind}-${index}`}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+      <WorkoutStructure workout={workout} />
 
       <section aria-labelledby="targets-title">
         <h2 id="targets-title">Targets</h2>
@@ -713,6 +719,7 @@ function ResultBackedWorkoutComposition({
   const laps = normalizeResultLaps(result.laps);
   return (
     <>
+      <WorkoutStructure workout={context.plannedWorkout} />
       <WorkoutStats result={result} />
       <PlanVersusActual workout={context.plannedWorkout} result={result} />
       <section

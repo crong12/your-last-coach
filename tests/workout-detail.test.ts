@@ -14,7 +14,7 @@ import {
 } from "../src/ui/charts/resultDetailMath";
 
 describe("Workout Result detail context", () => {
-  it("seeds one provenance-labelled completed result with recorded laps without replacing the partial threshold result", () => {
+  it("seeds a provenance-labelled completed result with recorded laps without replacing the partial threshold result", () => {
     const state = createDemoWorkspaceState();
     const completed = state.workoutResults.find(
       (result) => result.status === "completed" && result.laps.length > 0,
@@ -60,6 +60,16 @@ describe("Workout Result detail context", () => {
     expect(context.data.previousAttempts).toEqual([
       expect.objectContaining({
         matchBasis: "planned_workout_type",
+        plannedWorkout: expect.objectContaining({
+          id: "planned-2026-08-13-threshold",
+        }),
+        workoutResult: expect.objectContaining({
+          id: "result-2026-08-13-threshold",
+          status: "completed",
+        }),
+      }),
+      expect.objectContaining({
+        matchBasis: "planned_workout_type",
         workoutResult: expect.objectContaining({
           id: "result-2026-08-06-threshold",
           status: "completed",
@@ -75,6 +85,8 @@ describe("Workout Result detail context", () => {
       expect.arrayContaining([
         "planned-workout:planned-2026-08-26-threshold",
         "workout-result:result-2026-08-26-threshold",
+        "planned-workout:planned-2026-08-13-threshold",
+        "workout-result:result-2026-08-13-threshold",
         "planned-workout:planned-2026-08-06-threshold",
         "workout-result:result-2026-08-06-threshold",
       ]),
@@ -118,13 +130,13 @@ describe("Workout Result detail context", () => {
   it("keeps a completed empty-lap result available as an honest degraded result", () => {
     const state = createDemoWorkspaceState();
     const result = selectWorkoutContext(state, {
-      workoutId: "planned-2026-08-13-easy",
+      workoutId: "planned-2026-08-11-easy",
     });
 
     expect(result.status).toBe("ok");
     if (result.status !== "ok") throw new Error("Expected workout context");
     expect(result.data.workoutResult).toMatchObject({
-      id: "result-2026-08-13",
+      id: "result-2026-08-11",
       status: "completed",
       laps: [],
     });

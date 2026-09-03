@@ -109,6 +109,7 @@ The workspace should also make the Coaching Briefing and restrained, mixed evide
 - previous week: 56 km against a usual 42–48 km;
 - partial `5 × 1 km threshold`: three completed repetitions at 4:36, 4:39, and 4:48 per kilometre;
 - average repetition heart rates: 165, 171, and 176 bpm;
+- most recent completed `5 × 1 km threshold` on 13 August: five controlled repetitions at 4:36–4:39 per kilometre, with average repetition heart rate rising from 158 to 166 bpm;
 - load ratio: 1.33 and recovery: 46%;
 - normal-range sleep, HRV, resting heart rate, and stress.
 
@@ -223,7 +224,7 @@ A future scheduled COROS MCP extraction and workspace hydration process remains 
 2. Reset to `demo-athlete-v1`.
 3. Confirm the WebMCP/status control reports that the tools are available.
 4. Confirm the original Thursday, Saturday, and Sunday workouts and the visible Coaching Briefing.
-5. Copy and paste **Analyse**. Confirm the comparison uses the current and previous threshold results and does not change the plan.
+5. Copy and paste **Analyse**. Confirm the primary comparison uses the like-for-like completed threshold session from 13 August and does not change the plan.
 6. Copy and paste **Record and adapt**. If the host requests consent to record the report, approve that feedback write; this does not authorize a Training Plan change.
 7. Confirm that the Agent records the report, retains the stronger mixed fatigue evidence, and avoids injury or overtraining diagnosis.
 8. Confirm that the Agent opens the adaptation review as the first user-facing presentation of its recommendation and alternative.

@@ -368,6 +368,8 @@ describe("shared coaching read selectors", () => {
     expect(result.evidenceRefs).toEqual([
       "planned-workout:planned-2026-08-26-threshold",
       "workout-result:result-2026-08-26-threshold",
+      "planned-workout:planned-2026-08-13-threshold",
+      "workout-result:result-2026-08-13-threshold",
       "planned-workout:planned-2026-08-06-threshold",
       "workout-result:result-2026-08-06-threshold",
       "athlete-feedback:feedback-threshold",
