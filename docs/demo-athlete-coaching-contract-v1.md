@@ -117,10 +117,12 @@ Recorded work repetitions:
 | Rep |          Pace | Average heart rate |
 | --: | ------------: | -----------------: |
 |   1 |       4:36/km |            165 bpm |
-|   2 |       4:39/km |            171 bpm |
-|   3 |       4:48/km |            176 bpm |
+|   2 |       5:08/km |            171 bpm |
+|   3 |       5:27/km |            176 bpm |
 |   4 | Not completed |                  — |
 |   5 | Not completed |                  — |
+
+Recorded jog recoveries after the first two repetitions slow from 7:52/km to 8:16/km.
 
 The Athlete completes approximately 1 km of easy cooldown after stopping. The Workout Result status is `partial`.
 

@@ -75,8 +75,8 @@ describe("TodayPane", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("5 × 1 km threshold");
     expect(container.textContent).not.toContain("PARTIAL");
-    expect(container.textContent).toContain("39:18");
-    expect(container.textContent).toContain("5:37/km");
+    expect(container.textContent).toContain("41:28");
+    expect(container.textContent).toContain("5:55/km");
     expect(container.textContent).toContain("152 bpm");
     expect(container.textContent).not.toContain("TRAINING LOAD");
     expect(container.textContent).toContain("Workout recorded.");

@@ -107,7 +107,7 @@ The workspace should also make the Coaching Briefing and restrained, mixed evide
 - preferred long-run day: Sunday; maximum weekday duration: 60 minutes;
 - shin discomfort: active monitoring topic, last reported after Sunday's long run;
 - previous week: 56 km against a usual 42–48 km;
-- partial `5 × 1 km threshold`: three completed repetitions at 4:36, 4:39, and 4:48 per kilometre;
+- partial `5 × 1 km threshold`: three completed repetitions at 4:36, 5:08, and 5:27 per kilometre, with jog recoveries slowing from 7:52 to 8:16 per kilometre;
 - average repetition heart rates: 165, 171, and 176 bpm;
 - most recent completed `5 × 1 km threshold` on 13 August: five controlled repetitions at 4:36–4:39 per kilometre, with average repetition heart rate rising from 158 to 166 bpm;
 - load ratio: 1.33 and recovery: 46%;

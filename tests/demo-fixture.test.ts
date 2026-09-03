@@ -123,7 +123,7 @@ describe("demo-athlete-v1", () => {
         id: "lap-threshold-rep-2",
         kind: "work",
         distanceKm: 1,
-        paceSecondsPerKm: 279,
+        paceSecondsPerKm: 308,
         averageHeartRateBpm: 171,
         maximumHeartRateBpm: 178,
       },
@@ -131,7 +131,7 @@ describe("demo-athlete-v1", () => {
         id: "lap-threshold-rep-3",
         kind: "work",
         distanceKm: 1,
-        paceSecondsPerKm: 288,
+        paceSecondsPerKm: 327,
         averageHeartRateBpm: 176,
         maximumHeartRateBpm: 183,
       },
@@ -141,7 +141,7 @@ describe("demo-athlete-v1", () => {
         id: "lap-threshold-recovery-1",
         kind: "recovery",
         distanceKm: 0.25,
-        paceSecondsPerKm: 360,
+        paceSecondsPerKm: 472,
         averageHeartRateBpm: 152,
         maximumHeartRateBpm: 160,
       },
@@ -149,7 +149,7 @@ describe("demo-athlete-v1", () => {
         id: "lap-threshold-recovery-2",
         kind: "recovery",
         distanceKm: 0.25,
-        paceSecondsPerKm: 360,
+        paceSecondsPerKm: 496,
         averageHeartRateBpm: 158,
         maximumHeartRateBpm: 166,
       },
@@ -169,8 +169,8 @@ describe("demo-athlete-v1", () => {
     });
     expect(result?.summary).toMatchObject({
       distanceKm: 7,
-      durationSeconds: 2_358,
-      averagePaceSecondsPerKm: 2_358 / 7,
+      durationSeconds: 2_488,
+      averagePaceSecondsPerKm: 2_488 / 7,
       averageHeartRateBpm: 152,
     });
     expect(

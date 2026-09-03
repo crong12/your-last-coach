@@ -400,7 +400,7 @@ describe("issue 64 fixture evidence", () => {
 
     expect(projection.points.at(-1)).toMatchObject({
       workoutResultId: result!.id,
-      paceSecondsPerKm: 2_358 / 7,
+      paceSecondsPerKm: 2_488 / 7,
       heartRateBpm: 152,
     });
   });

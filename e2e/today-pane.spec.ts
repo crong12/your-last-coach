@@ -144,8 +144,8 @@ test("renders the normal Today pane on mobile with seven honest day tiles", asyn
 
   const resultCard = today.locator(".today-workout-card");
   await expect(resultCard.getByText("PARTIAL", { exact: true })).toHaveCount(0);
-  await expect(resultCard.getByText("39:18", { exact: true })).toBeVisible();
-  await expect(resultCard.getByText("5:37/km", { exact: true })).toBeVisible();
+  await expect(resultCard.getByText("41:28", { exact: true })).toBeVisible();
+  await expect(resultCard.getByText("5:55/km", { exact: true })).toBeVisible();
   await expect(resultCard.getByText("152 bpm", { exact: true })).toBeVisible();
   await expect(
     resultCard.getByText("Training Load", { exact: true }),
@@ -291,8 +291,8 @@ test("pushes a result-bearing tile and restores its focus on Back", async ({
     screen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
   await expect(screen.getByText("PARTIAL", { exact: true })).toHaveCount(0);
-  await expect(screen.getByText("39:18", { exact: true })).toBeVisible();
-  await expect(screen.getByText("5:37/km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("41:28", { exact: true })).toBeVisible();
+  await expect(screen.getByText("5:55/km", { exact: true })).toBeVisible();
   await expect(screen.getByText("152 bpm", { exact: true })).toBeVisible();
   await expect(screen.getByText("Training Load", { exact: true })).toHaveCount(
     0,

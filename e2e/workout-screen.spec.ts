@@ -121,8 +121,8 @@ test("renders the selector-backed partial result composition and suspends the ap
   await expect(
     screen.locator(".workout-stats").getByText("7 km", { exact: true }),
   ).toBeVisible();
-  await expect(screen.getByText("39:18", { exact: true })).toBeVisible();
-  await expect(screen.getByText("5:37/km", { exact: true })).toBeVisible();
+  await expect(screen.getByText("41:28", { exact: true })).toBeVisible();
+  await expect(screen.getByText("5:55/km", { exact: true })).toBeVisible();
   await expect(
     screen.locator(".workout-stats").getByText("152 bpm", { exact: true }),
   ).toBeVisible();
@@ -186,6 +186,12 @@ test("renders the selector-backed partial result composition and suspends the ap
   await expect(
     screen.getByRole("heading", { name: "5 × 1 km threshold" }),
   ).toBeFocused();
+  await screen.locator("summary", { hasText: "Splits" }).click();
+  const splits = screen.locator(".workout-splits");
+  await expect(splits).toHaveAttribute("open", "");
+  for (const pace of ["5:08/km", "5:27/km", "7:52/km", "8:16/km"]) {
+    await expect(splits.getByText(pace, { exact: true })).toBeVisible();
+  }
 
   await page.reload();
   await expect(
