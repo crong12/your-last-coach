@@ -31,7 +31,7 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 
 - Runs in an ordinary browser as a client-only React/TypeScript/Vite app; fully usable by a human without any agent attached.
 - The Coach Agent connects through a WebMCP host (e.g. ChatGPT with the site attached); when WebMCP is unavailable the workspace degrades gracefully to human-only use.
-- Mobile-first daily use is the roadmap reality (checking the dashboard around workouts); desktop adapts the same panes. Dashboard structure decisions are tracked on Wayfinder map #43.
+- Mobile-first daily use is the roadmap reality (checking the workspace around workouts); desktop adapts the same panes.
 - Persistence is a versioned browser `localStorage` envelope with page-memory fallback; no accounts, server, or cross-device sync.
 - All current Athlete, workout, recovery, and COROS-shaped observations are deterministic synthetic data with a fixed clock; **Reset demo** restores the seeded state.
 
@@ -41,7 +41,6 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 - Domain invariants live in `src/domain/`; one application-owned state serves both React and WebMCP (`src/application/`); adapters own persistence and WebMCP mechanics without coaching judgment.
 - The ubiquitous language in [CONTEXT.md](CONTEXT.md) is binding for UI copy and specifications (e.g. "Shared Coaching Workspace", never "dashboard" in product copy; "Athlete", never "user").
 - The product does not connect to COROS yet, does not diagnose injury, does not generate a complete training season, and has no multi-user or authenticated persistence. Real COROS sync is a roadmap Stage 2 concern.
-- Explicitly undecided: everything tracked as open decision tickets under Wayfinder map #43 (pane navigation, chart language, per-pane specs).
 
 ## Brand Commitments
 
@@ -54,7 +53,6 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 - Immutable demo fixture `demo-athlete-v1` with fixed clock (`src/demo/`), including COROS-shaped observations — the only athlete data that exists today.
 - Incumbent visual implementation: `src/ui/styles.css` (design tokens as CSS custom properties), `src/ui/WorkspaceApp.tsx`.
 - Design explorations (local only, gitignored): `design-explorations/concept-a-countdown-topbar.png`, `design-explorations/concept-b-countdown-card.png`.
-- Product documents: `docs/post-hackathon-product-roadmap.md`, `docs/three-minute-judging-story.md`, `docs/demo-athlete-coaching-contract-v1.md`, `docs/implementation-and-verification-architecture.md`.
 - No real users, testimonials, case studies, or benchmarks exist; future work must not fabricate them.
 
 ## Product Principles

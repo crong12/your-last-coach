@@ -46,8 +46,6 @@ The application keeps one authoritative, application-owned workspace state. Reac
 - `src/ui/` renders the Training Plan, evidence, Demo Guide, adaptation review, and reset flow.
 - `src/main.tsx` initializes the fixture, repository, application, fallback WebMCP tools, and UI.
 
-The detailed boundaries are recorded in [Implementation and verification architecture](docs/implementation-and-verification-architecture.md). The fixture and tool schemas are recorded in [Demo Athlete and coaching tool contract](docs/demo-athlete-coaching-contract-v1.md).
-
 ## Judge flow
 
 1. Open the workspace and use **Reset demo** to restore the fixed state.
@@ -69,8 +67,6 @@ The detailed boundaries are recorded in [Implementation and verification archite
    > What changed in my latest approved adaptation, and what context from this workspace should influence my next workout?
 
 10. Confirm that the new Agent reads the approved receipt and current Coaching Briefing through WebMCP. It should not rely on the previous conversation or scrape the page DOM, and it should not claim to recover the previous Agent's full prose rationale.
-
-The approved three-minute presentation contract is in [Three-minute judging story](docs/three-minute-judging-story.md).
 
 ## Reset and persistence
 
@@ -96,7 +92,7 @@ npm run format:check && \
 
 `npm run test:e2e` exercises the application and both review semantics through a controlled WebMCP harness. `npm run test:static` serves the existing production build from `dist/` and verifies that the public fallback workspace loads without WebMCP or external runtime requests. Neither test substitutes for manual verification in an enabled WebMCP host.
 
-GitHub Actions runs the same stages for pull requests targeting `main` and pushes to `main`. See the [verification workflow](.github/workflows/ci.yml) and the [release-candidate evidence template](docs/release-candidate-evidence.md).
+GitHub Actions runs the same stages for pull requests targeting `main` and pushes to `main`. See the [verification workflow](.github/workflows/ci.yml).
 
 ## Vercel deployment
 
@@ -107,8 +103,7 @@ For an authorized release candidate:
 1. Select the exact commit whose GitHub Actions verification succeeded.
 2. Import or deploy the repository root as a Vite project without adding application credentials.
 3. Keep the committed install, build, output, Node `22.x`, and header configuration.
-4. Record the immutable commit, deployment identifier, public HTTPS URL, CI run, resolved Vercel Node version from the build log, and UTC deployment time in the evidence template.
-5. Verify the public URL signed out, inspect the response header, and complete the separate enabled-host WebMCP checks before accepting the candidate.
+4. Verify the public URL signed out, inspect the response header, and complete the separate enabled-host WebMCP checks before accepting the candidate.
 
 No deployment URL or manual-host result is claimed by this repository documentation.
 

@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:extended": "playwright test --config=playwright.extended.config.ts",
     "test:static": "playwright test --config=playwright.static.config.ts",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"e2e/**/*.ts\" \".github/workflows/*.yml\" \"docs/release-candidate-evidence.md\" \"README.md\" \"*.{json,ts,html}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\" \"e2e/**/*.ts\" \".github/workflows/*.yml\" \"README.md\" \"*.{json,ts,html}\"",
     "build": "npm run typecheck && vite build"
   },
   "dependencies": {
