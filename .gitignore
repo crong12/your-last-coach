@@ -11,3 +11,7 @@ design-explorations/
 
 # Playwright MCP scratch output (screenshots, snapshots, console logs)
 .playwright-mcp/
+
+# Local agent configuration and reports
+.impeccable/
+.superpowers/
