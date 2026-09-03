@@ -256,7 +256,7 @@ test("keeps distance visible while an unavailable Workout Result load is marked 
 
   const volume = page.locator('[data-chart-card="volume-load"]');
   await expect(volume.locator("[data-missing-load]")).toHaveCount(2);
-  await expect(volume.locator("[data-volume-current]")).toHaveText("13.5 km");
+  await expect(volume.locator("[data-volume-current]")).toHaveText("13.0 km");
   await expect(volume.locator("[data-load-current]")).toHaveText("—");
   await expect(volume).toContainText(
     "13 of 16 Workout Results with available load",

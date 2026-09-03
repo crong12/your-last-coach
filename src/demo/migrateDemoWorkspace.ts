@@ -128,6 +128,28 @@ function hasReleasedAugust13ResultShape(
   );
 }
 
+function hasLegacyAugust26LapShape(result: Record<string, unknown>): boolean {
+  if (
+    result.id !== "result-2026-08-26-threshold" ||
+    result.plannedWorkoutId !== "planned-2026-08-26-threshold" ||
+    result.startedAt !== "2026-08-26T17:30:00+01:00" ||
+    result.status !== "partial" ||
+    !Array.isArray(result.laps)
+  ) {
+    return false;
+  }
+  return (
+    result.laps.map((lap) => (isRecord(lap) ? lap.id : null)).join(",") ===
+    [
+      "lap-threshold-warmup",
+      "lap-threshold-rep-1",
+      "lap-threshold-rep-2",
+      "lap-threshold-rep-3",
+      "lap-threshold-cooldown",
+    ].join(",")
+  );
+}
+
 export function migrateDemoWorkspace(value: unknown): unknown {
   if (!isRecord(value) || !isRecord(value.state)) return value;
   const currentFixture = createDemoWorkspaceState();
@@ -144,6 +166,9 @@ export function migrateDemoWorkspace(value: unknown): unknown {
     );
   const canonicalAugust13Result = currentFixture.workoutResults.find(
     ({ id }) => id === "result-2026-08-13-threshold",
+  );
+  const canonicalAugust26Result = currentFixture.workoutResults.find(
+    ({ id }) => id === "result-2026-08-26-threshold",
   );
   const existingTrainingPlan = value.state.trainingPlan;
   const existingPlannedWorkouts = isRecord(existingTrainingPlan)
@@ -200,59 +225,86 @@ export function migrateDemoWorkspace(value: unknown): unknown {
           }
           const { trainingLoad: _trainingLoad, ...summaryWithoutTrainingLoad } =
             result.summary;
+          const migrateLegacyLaps = hasLegacyAugust26LapShape(result);
+          const migratedLaps = Array.isArray(result.laps)
+            ? result.laps.map((lap) => {
+                if (!isRecord(lap) || typeof lap.id !== "string") return lap;
+                const metrics = {
+                  "lap-threshold-warmup": {
+                    paceSecondsPerKm: 375,
+                    averageHeartRateBpm: 130,
+                    maximumHeartRateBpm: 134,
+                  },
+                  "lap-threshold-rep-1": { maximumHeartRateBpm: 172 },
+                  "lap-threshold-rep-2": { maximumHeartRateBpm: 178 },
+                  "lap-threshold-rep-3": { maximumHeartRateBpm: 183 },
+                  "lap-threshold-cooldown": {
+                    paceSecondsPerKm: 390,
+                    averageHeartRateBpm: 142,
+                    maximumHeartRateBpm: 150,
+                  },
+                }[lap.id];
+                if (!metrics) return lap;
+                return {
+                  ...lap,
+                  ...(migrateLegacyLaps && lap.id === "lap-threshold-cooldown"
+                    ? { distanceKm: 1.5 }
+                    : {}),
+                  ...(lap.paceSecondsPerKm === undefined &&
+                  "paceSecondsPerKm" in metrics
+                    ? { paceSecondsPerKm: metrics.paceSecondsPerKm }
+                    : {}),
+                  ...(lap.averageHeartRateBpm === undefined &&
+                  "averageHeartRateBpm" in metrics
+                    ? { averageHeartRateBpm: metrics.averageHeartRateBpm }
+                    : {}),
+                  ...(lap.maximumHeartRateBpm === undefined
+                    ? { maximumHeartRateBpm: metrics.maximumHeartRateBpm }
+                    : {}),
+                };
+              })
+            : result.laps;
+          const recoveryAfter = new Map(
+            canonicalAugust26Result?.laps
+              .filter(({ kind }) => kind === "recovery")
+              .map((lap, index) => [`lap-threshold-rep-${index + 1}`, lap]) ??
+              [],
+          );
           return {
             ...result,
-            laps: Array.isArray(result.laps)
-              ? result.laps.map((lap) => {
-                  if (!isRecord(lap) || typeof lap.id !== "string") return lap;
-                  const metrics = {
-                    "lap-threshold-warmup": {
-                      paceSecondsPerKm: 375,
-                      averageHeartRateBpm: 130,
-                      maximumHeartRateBpm: 134,
-                    },
-                    "lap-threshold-rep-1": { maximumHeartRateBpm: 172 },
-                    "lap-threshold-rep-2": { maximumHeartRateBpm: 178 },
-                    "lap-threshold-rep-3": { maximumHeartRateBpm: 183 },
-                    "lap-threshold-cooldown": {
-                      paceSecondsPerKm: 390,
-                      averageHeartRateBpm: 142,
-                      maximumHeartRateBpm: 150,
-                    },
-                  }[lap.id];
-                  if (!metrics) return lap;
-                  return {
-                    ...lap,
-                    ...(lap.paceSecondsPerKm === undefined &&
-                    "paceSecondsPerKm" in metrics
-                      ? { paceSecondsPerKm: metrics.paceSecondsPerKm }
-                      : {}),
-                    ...(lap.averageHeartRateBpm === undefined &&
-                    "averageHeartRateBpm" in metrics
-                      ? { averageHeartRateBpm: metrics.averageHeartRateBpm }
-                      : {}),
-                    ...(lap.maximumHeartRateBpm === undefined
-                      ? { maximumHeartRateBpm: metrics.maximumHeartRateBpm }
-                      : {}),
-                  };
-                })
-              : result.laps,
+            laps:
+              migrateLegacyLaps && Array.isArray(migratedLaps)
+                ? migratedLaps.flatMap((lap) => {
+                    if (!isRecord(lap) || typeof lap.id !== "string") {
+                      return [lap];
+                    }
+                    const recovery = recoveryAfter.get(lap.id);
+                    return recovery ? [lap, structuredClone(recovery)] : [lap];
+                  })
+                : migratedLaps,
             summary: {
               ...summaryWithoutTrainingLoad,
+              distanceKm:
+                migrateLegacyLaps && result.summary.distanceKm === 7.5
+                  ? 7
+                  : result.summary.distanceKm,
               durationSeconds:
                 result.summary.durationSeconds === undefined ||
-                result.summary.durationSeconds === 2_700
-                  ? 2_747
+                result.summary.durationSeconds === 2_700 ||
+                result.summary.durationSeconds === 2_747
+                  ? 2_358
                   : result.summary.durationSeconds,
               averagePaceSecondsPerKm:
                 result.summary.averagePaceSecondsPerKm === undefined ||
-                result.summary.averagePaceSecondsPerKm === 360
-                  ? 366
+                result.summary.averagePaceSecondsPerKm === 360 ||
+                result.summary.averagePaceSecondsPerKm === 366
+                  ? 2_358 / 7
                   : result.summary.averagePaceSecondsPerKm,
               averageHeartRateBpm:
                 result.summary.averageHeartRateBpm === undefined ||
-                result.summary.averageHeartRateBpm === 158
-                  ? 169
+                result.summary.averageHeartRateBpm === 158 ||
+                result.summary.averageHeartRateBpm === 169
+                  ? 152
                   : result.summary.averageHeartRateBpm,
             },
           };

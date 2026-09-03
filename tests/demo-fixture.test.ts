@@ -136,6 +136,24 @@ describe("demo-athlete-v1", () => {
         maximumHeartRateBpm: 183,
       },
     ]);
+    expect(result?.laps.filter((lap) => lap.kind === "recovery")).toEqual([
+      {
+        id: "lap-threshold-recovery-1",
+        kind: "recovery",
+        distanceKm: 0.25,
+        paceSecondsPerKm: 360,
+        averageHeartRateBpm: 152,
+        maximumHeartRateBpm: 160,
+      },
+      {
+        id: "lap-threshold-recovery-2",
+        kind: "recovery",
+        distanceKm: 0.25,
+        paceSecondsPerKm: 360,
+        averageHeartRateBpm: 158,
+        maximumHeartRateBpm: 166,
+      },
+    ]);
     expect(result?.laps[0]).toMatchObject({
       id: "lap-threshold-warmup",
       paceSecondsPerKm: 375,
@@ -144,10 +162,27 @@ describe("demo-athlete-v1", () => {
     });
     expect(result?.laps.at(-1)).toMatchObject({
       id: "lap-threshold-cooldown",
+      distanceKm: 1.5,
       paceSecondsPerKm: 390,
       averageHeartRateBpm: 142,
       maximumHeartRateBpm: 150,
     });
+    expect(result?.summary).toMatchObject({
+      distanceKm: 7,
+      durationSeconds: 2_358,
+      averagePaceSecondsPerKm: 2_358 / 7,
+      averageHeartRateBpm: 152,
+    });
+    expect(
+      result?.laps.reduce((distanceKm, lap) => distanceKm + lap.distanceKm, 0),
+    ).toBe(result?.summary.distanceKm);
+    expect(
+      result?.laps.reduce(
+        (durationSeconds, lap) =>
+          durationSeconds + lap.distanceKm * (lap.paceSecondsPerKm ?? 0),
+        0,
+      ),
+    ).toBe(result?.summary.durationSeconds);
   });
 
   it("seeds comparable completed threshold sessions before the partial attempt", async () => {

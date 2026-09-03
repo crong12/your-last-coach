@@ -119,11 +119,13 @@ test("renders the selector-backed partial result composition and suspends the ap
   await expect(screen.getByText("Threshold", { exact: true })).toBeVisible();
   await expect(screen.getByText("PARTIAL", { exact: true })).toHaveCount(0);
   await expect(
-    screen.locator(".workout-stats").getByText("7.5 km", { exact: true }),
+    screen.locator(".workout-stats").getByText("7 km", { exact: true }),
   ).toBeVisible();
-  await expect(screen.getByText("45:47", { exact: true })).toBeVisible();
-  await expect(screen.getByText("6:06/km", { exact: true })).toBeVisible();
-  await expect(screen.getByText("169 bpm", { exact: true })).toBeVisible();
+  await expect(screen.getByText("39:18", { exact: true })).toBeVisible();
+  await expect(screen.getByText("5:37/km", { exact: true })).toBeVisible();
+  await expect(
+    screen.locator(".workout-stats").getByText("152 bpm", { exact: true }),
+  ).toBeVisible();
   const structureHeading = screen.getByRole("heading", {
     name: "Workout structure",
   });
@@ -167,7 +169,7 @@ test("renders the selector-backed partial result composition and suspends the ap
     screen.getByText("3 repetitions", { exact: true }),
   ).toBeVisible();
   await expect(screen.locator("svg[data-result-detail-chart]")).toBeVisible();
-  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(5);
+  await expect(screen.locator("[data-result-lap-bar]")).toHaveCount(7);
   await expect(screen.locator("[data-result-chart-readout]")).toContainText(
     "6:15/km · Avg HR 130 bpm · Max HR 134 bpm",
   );

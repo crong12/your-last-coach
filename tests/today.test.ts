@@ -77,10 +77,10 @@ describe("Today pane selector", () => {
       workout: { id: "planned-2026-08-26-threshold" },
       result: { id: "result-2026-08-26-threshold", status: "partial" },
       metrics: {
-        distanceKm: 7.5,
-        durationSeconds: 2_747,
-        averagePaceSecondsPerKm: 366,
-        averageHeartRateBpm: 169,
+        distanceKm: 7,
+        durationSeconds: 2_358,
+        averagePaceSecondsPerKm: 2_358 / 7,
+        averageHeartRateBpm: 152,
       },
     });
   });
@@ -112,7 +112,7 @@ describe("Today pane selector", () => {
     expect(projection.todayWorkout).toMatchObject({
       state: "result",
       metrics: {
-        averagePaceSecondsPerKm: 2_747 / 7.5,
+        averagePaceSecondsPerKm: 2_358 / 7,
         averagePaceBasis: "derived",
       },
     });

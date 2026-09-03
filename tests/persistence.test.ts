@@ -551,10 +551,17 @@ describe("workspace initialization", () => {
       ({ id }) => id === "result-2026-08-26-threshold",
     );
     expect(result).toBeDefined();
+    result!.summary.distanceKm = 7.5;
     delete result!.summary.durationSeconds;
     delete result!.summary.averagePaceSecondsPerKm;
     delete result!.summary.averageHeartRateBpm;
     delete result!.summary.trainingLoad;
+    result!.laps = result!.laps.filter(({ kind }) => kind !== "recovery");
+    const cooldown = result!.laps.find(
+      ({ id }) => id === "lap-threshold-cooldown",
+    );
+    expect(cooldown).toBeDefined();
+    cooldown!.distanceKm = 1;
     const warmup = result!.laps.find(({ id }) => id === "lap-threshold-warmup");
     expect(warmup).toBeDefined();
     delete warmup!.averageHeartRateBpm;
@@ -587,9 +594,10 @@ describe("workspace initialization", () => {
         ({ id }) => id === "result-2026-08-26-threshold",
       )?.summary,
     ).toMatchObject({
-      durationSeconds: 2_747,
-      averagePaceSecondsPerKm: 366,
-      averageHeartRateBpm: 169,
+      distanceKm: 7,
+      durationSeconds: 2_358,
+      averagePaceSecondsPerKm: 2_358 / 7,
+      averageHeartRateBpm: 152,
     });
     expect(
       initialized.state.workoutResults
@@ -605,6 +613,16 @@ describe("workspace initialization", () => {
         .find(({ id }) => id === "result-2026-08-26-threshold")
         ?.laps.find(({ id }) => id === "lap-threshold-rep-1"),
     ).toMatchObject({ maximumHeartRateBpm: 175 });
+    expect(
+      initialized.state.workoutResults
+        .find(({ id }) => id === "result-2026-08-26-threshold")
+        ?.laps.filter(({ kind }) => kind === "recovery"),
+    ).toHaveLength(2);
+    expect(
+      initialized.state.workoutResults
+        .find(({ id }) => id === "result-2026-08-26-threshold")
+        ?.laps.find(({ id }) => id === "lap-threshold-cooldown")?.distanceKm,
+    ).toBe(1.5);
   });
 
   it("migrates the legacy August threshold records without resetting saved state", async () => {

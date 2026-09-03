@@ -326,7 +326,7 @@ describe("shared coaching read selectors", () => {
       id: "result-2026-08-26-threshold",
       status: "partial",
       summary: {
-        distanceKm: 7.5,
+        distanceKm: 7,
         completedWorkRepetitions: 3,
         plannedWorkRepetitions: 5,
       },
