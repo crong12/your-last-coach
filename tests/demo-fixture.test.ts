@@ -150,6 +150,85 @@ describe("demo-athlete-v1", () => {
     });
   });
 
+  it("seeds comparable completed threshold sessions before the partial attempt", async () => {
+    const state = await createDemoCoachingContextSource().loadContext();
+    const august6Plan = state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-06-threshold",
+    );
+    const august6Result = state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-06-threshold",
+    );
+    const august13Plan = state.trainingPlan.plannedWorkouts.find(
+      ({ id }) => id === "planned-2026-08-13-threshold",
+    );
+    const august13Result = state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-13-threshold",
+    );
+
+    expect(august6Plan).toMatchObject({
+      title: "3 × 2 km threshold",
+      type: "threshold",
+      distanceKm: 11,
+      prescription: {
+        blocks: [
+          { kind: "warmup", distanceKm: 2 },
+          {
+            kind: "repeat",
+            repetitions: 3,
+            workDistanceKm: 2,
+            targetPaceSecondsPerKm: { min: 278, max: 286 },
+            recoverySeconds: 120,
+          },
+          { kind: "cooldown", distanceKm: 3 },
+        ],
+      },
+    });
+    expect(
+      august6Result?.laps.filter(({ kind }) => kind === "work"),
+    ).toHaveLength(3);
+
+    expect(august13Plan).toMatchObject({
+      title: "5 × 1 km threshold",
+      type: "threshold",
+      distanceKm: 13,
+      prescription: {
+        blocks: [
+          { kind: "warmup", distanceKm: 2 },
+          {
+            kind: "repeat",
+            repetitions: 5,
+            workDistanceKm: 1,
+            targetPaceSecondsPerKm: { min: 275, max: 280 },
+            recoverySeconds: 90,
+          },
+          { kind: "cooldown", distanceKm: 1.5 },
+        ],
+      },
+    });
+    expect(august13Result).toMatchObject({
+      status: "completed",
+      summary: {
+        completedWorkRepetitions: 5,
+        plannedWorkRepetitions: 5,
+      },
+    });
+    expect(
+      august13Result?.laps
+        .filter(({ kind }) => kind === "work")
+        .map(({ distanceKm, paceSecondsPerKm, averageHeartRateBpm }) => ({
+          distanceKm,
+          paceSecondsPerKm,
+          averageHeartRateBpm,
+        })),
+    ).toEqual([
+      { distanceKm: 1, paceSecondsPerKm: 276, averageHeartRateBpm: 158 },
+      { distanceKm: 1, paceSecondsPerKm: 277, averageHeartRateBpm: 161 },
+      { distanceKm: 1, paceSecondsPerKm: 278, averageHeartRateBpm: 163 },
+      { distanceKm: 1, paceSecondsPerKm: 278, averageHeartRateBpm: 165 },
+      { distanceKm: 1, paceSecondsPerKm: 279, averageHeartRateBpm: 166 },
+    ]);
+  });
+
   it("returns an immutable fresh fixture with initial plan history", async () => {
     const source = createDemoCoachingContextSource();
     const first = await source.loadContext();

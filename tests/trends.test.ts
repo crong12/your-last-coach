@@ -485,14 +485,9 @@ describe("issue 64 fixture evidence", () => {
       await createDemoCoachingContextSource().loadContext(),
     ) as WorkspaceState;
     const second = state.trainingPlan.plannedWorkouts.find(
-      ({ id }) => id === "planned-2026-08-06-threshold",
+      ({ id }) => id === "planned-2026-08-13-threshold",
     );
     expect(second).toBeDefined();
-    second!.prescription.blocks = structuredClone(
-      state.trainingPlan.plannedWorkouts.find(
-        ({ id }) => id === "planned-2026-08-26-threshold",
-      )!.prescription.blocks,
-    );
     const repeatBlock = second!.prescription.blocks[1];
     expect(repeatBlock.kind).toBe("repeat");
     if (repeatBlock.kind === "repeat") repeatBlock.recoverySeconds = 120;

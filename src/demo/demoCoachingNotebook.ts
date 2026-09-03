@@ -58,16 +58,16 @@ export const DEMO_WEEKLY_PROGRESS_REVIEWS: CoachingNotebookReview[] = [
     recordedAt: "2026-08-17T08:10:00+01:00",
     headline: "Aerobic rhythm is settling in",
     assessment:
-      "Easy running stayed appropriately easy while the 18 km long run extended time on feet. Recovery evidence supported continuing the build without an extra cutback.",
+      "The controlled threshold session held pace without excessive heart-rate drift, while the 18 km long run extended time on feet. Recovery evidence supported continuing the build without an extra cutback.",
     progress: [
-      "Completed the 18 km long run and both supporting aerobic runs.",
-      "Kept the week's faster running to short strides rather than adding another hard session.",
+      "Completed all five 1 km threshold repetitions between 4:36 and 4:39 per kilometre.",
+      "Completed the 18 km long run and supporting aerobic running.",
     ],
     watch: [],
     nextFocus: ["Carry the same restraint into the first steady session."],
     evidenceRefs: [
       "workout-result:result-2026-08-16",
-      "workout-result:result-2026-08-13",
+      "workout-result:result-2026-08-13-threshold",
       "observation:recovery",
     ],
   },

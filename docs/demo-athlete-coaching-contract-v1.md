@@ -30,11 +30,11 @@ The Shared Coaching Workspace addresses the Athlete as “you” in coaching cop
 ## Data horizons
 
 - Planned Workouts cover August 2026 so the weekly and monthly Training Plan views share one fixture.
-- Detailed Workout Results cover 13–26 August 2026.
+- Detailed Workout Results cover the threshold sessions on 6, 13, and 26 August 2026.
 - Older history is represented by the current load snapshot and one active Coaching Topic.
 - The hero interaction begins immediately after the incomplete workout on Wednesday 26 August.
 
-The August Planned Workouts before the detailed result window exist to make the month view coherent; the coaching decision does not rely on their lap-level details.
+The other August Planned Workouts exist to make the month view coherent; the coaching decision does not rely on their lap-level details.
 
 ## Longitudinal coaching context
 
@@ -90,7 +90,8 @@ The Shared Coaching Workspace renders the same briefing from the same authoritat
 
 | Date       | Planned Workout / Workout Result     |  Distance |
 | ---------- | ------------------------------------ | --------: |
-| Thu 13 Aug | Easy run                             |      8 km |
+| Thu 6 Aug  | Completed `3 × 2 km threshold`       |     11 km |
+| Thu 13 Aug | Completed `5 × 1 km threshold`       |     13 km |
 | Sat 15 Aug | Easy run with strides                |      8 km |
 | Sun 16 Aug | Long run                             |     18 km |
 | Tue 18 Aug | Easy run                             |     10 km |
