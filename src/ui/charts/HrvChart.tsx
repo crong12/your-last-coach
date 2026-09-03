@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ChartCard } from "./ChartCard";
+import { ChartHitColumns } from "./ChartHitColumns";
 import { ChartPlot } from "./ChartPlot";
 import {
   createLinePath,
@@ -8,13 +9,24 @@ import {
   createTimeScale,
   getCoverage,
   parseChartDate,
+  weeklyTickDates,
 } from "./chartMath";
-import { InspectablePoint } from "./InspectablePoint";
 import {
-  CHART_PLOT,
+  chartPlotBounds,
   type ChartAnnotation,
   type ChartPoint,
+  type ChartTooltip,
 } from "./chartTypes";
+
+const READINESS_VIEWBOX = { width: 460, height: 300 } as const;
+const READINESS_PLOT = chartPlotBounds(READINESS_VIEWBOX);
+
+export interface ReadinessBandProps {
+  mean: number;
+  low: number;
+  high: number;
+  sampleCount: number;
+}
 
 const HRV_DEMO_DATES = [
   "2026-08-24",
@@ -53,6 +65,14 @@ export interface HrvChartProps {
   displayFrom?: string;
   displayTo?: string;
   average?: number | null;
+  /** 7-day rolling average series; when provided it becomes the primary line. */
+  rollingAverage?: readonly ChartPoint[];
+  /** Personal 28-day baseline band; when provided the header shows the delta. */
+  baseline?: ReadinessBandProps | null;
+  baselineDelta?: number | null;
+  baselineStatus?: "within" | "above" | "below" | null;
+  /** Which direction is good for this metric. Default "higher" (HRV). */
+  polarity?: "higher" | "lower";
 }
 
 function finiteValue(value: number | null) {
@@ -154,7 +174,13 @@ export function HrvChart({
   displayFrom,
   displayTo,
   average: suppliedAverage,
+  rollingAverage,
+  baseline = null,
+  baselineDelta = null,
+  baselineStatus = null,
+  polarity = "higher",
 }: HrvChartProps) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const points = useMemo(
     () =>
       (suppliedPoints ?? createDemoHrvPoints(currentValue)).map((point) => ({
@@ -217,11 +243,42 @@ export function HrvChart({
       ? annotationReadout(selection.annotation)
       : readoutForPoint(selectedPoint ?? latestObserved, unit);
   const currentLabel = latestObserved ? String(latestObserved.value) : "—";
-  const averageLabel =
-    average === null ? "7-night avg —" : `7-night avg ${average} ${unit}`;
+  const averageLabel = baseline
+    ? `28d baseline ${Math.round(baseline.mean)} ${unit}`
+    : average === null
+      ? "7-night avg —"
+      : `7-night avg ${average} ${unit}`;
   const trend = trendFor(latestObserved?.value ?? null, average);
+  const outsideBadSide =
+    (polarity === "higher" && baselineStatus === "below") ||
+    (polarity === "lower" && baselineStatus === "above");
+  const roundedDelta =
+    baselineDelta === null ? null : Math.round(baselineDelta);
+  const deltaTrend =
+    baseline && roundedDelta !== null
+      ? {
+          label:
+            roundedDelta === 0
+              ? "at baseline"
+              : `${roundedDelta > 0 ? "+" : "−"}${Math.abs(roundedDelta)} vs baseline`,
+          glyph:
+            baselineStatus === "above"
+              ? "▲"
+              : baselineStatus === "below"
+                ? "▼"
+                : undefined,
+          tone: (outsideBadSide ? "warn" : "neutral") as "warn" | "neutral",
+        }
+      : null;
+  const baselineSummary = baseline
+    ? ` Personal baseline (28 days, recorded days): ${Math.round(baseline.low)}–${Math.round(baseline.high)} ${unit}; latest is ${
+        baselineStatus === "within"
+          ? "within the baseline range"
+          : `${baselineStatus} the baseline range`
+      }.`
+    : "";
   const summary = latestObserved
-    ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
+    ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}.${baselineSummary} Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
     : `${metric}. Current: —. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
   const passiveLabels = passiveAnnotationLabels(
     annotations,
@@ -241,14 +298,43 @@ export function HrvChart({
           ...points.map(({ date }) => date),
           displayTo ?? points.at(-1)?.date,
         ].filter((date): date is string => date !== undefined),
-        [CHART_PLOT.left, CHART_PLOT.right],
+        [READINESS_PLOT.left, READINESS_PLOT.right],
       );
+      const rollingValues = (rollingAverage ?? []).map(({ value }) => value);
       const yScale = createLinearScale(
-        points.map(({ value }) => value),
-        [CHART_PLOT.bottom, CHART_PLOT.top],
+        [
+          ...points.map(({ value }) => value),
+          ...rollingValues,
+          ...(baseline ? [baseline.low, baseline.high] : []),
+        ],
+        [READINESS_PLOT.bottom, READINESS_PLOT.top],
       );
-      const path =
-        coverage.observed > 1 ? createLinePath(points, xScale, yScale) : "";
+      const hasRolling =
+        (rollingAverage ?? []).filter(({ value }) => finiteValue(value) !== null)
+          .length > 1;
+      const dailyPath =
+        !hasRolling && coverage.observed > 1
+          ? createLinePath(points, xScale, yScale)
+          : "";
+      const rollingPath = hasRolling
+        ? createLinePath(rollingAverage ?? [], xScale, yScale)
+        : "";
+      const hoverPoint = hoverIndex === null ? null : points[hoverIndex];
+      const hoverValue = hoverPoint ? finiteValue(hoverPoint.value) : null;
+      const hoverParsed = hoverPoint ? parseChartDate(hoverPoint.date) : null;
+      const tooltip: ChartTooltip | null =
+        hoverPoint && hoverParsed
+          ? {
+              x: xScale(hoverParsed),
+              y:
+                hoverValue === null
+                  ? READINESS_PLOT.bottom
+                  : yScale(hoverValue),
+              text: `${formatShortDate(hoverPoint.date)} · ${
+                hoverValue === null ? "No recording" : `${hoverValue} ${unit}`
+              }`,
+            }
+          : null;
       return (
         <ChartPlot
           id={chartId}
@@ -258,60 +344,130 @@ export function HrvChart({
           xScale={xScale}
           yScale={yScale}
           annotations={annotations}
+          viewBox={READINESS_VIEWBOX}
+          plotBounds={READINESS_PLOT}
+          xTickDates={weeklyTickDates(points.map(({ date }) => date))}
+          tooltip={tooltip}
           onSelectAnnotation={(annotation) =>
             setSelection({ kind: "annotation", annotation })
           }
         >
-          {points.map((point, index) => {
-            const parsedDate = parseChartDate(point.date);
-            if (!parsedDate) return null;
-            const value = finiteValue(point.value);
-            const x = xScale(parsedDate);
-            const y = value === null ? CHART_PLOT.bottom : yScale(value);
-            const accessibleValue =
-              value === null ? "no recording" : `${value} ${unit}`;
-            return (
-              <g key={point.date}>
-                {value === null && (
+          {baseline && (
+            <g data-chart-baseline aria-hidden="true">
+              <rect
+                data-chart-baseline-band
+                x={READINESS_PLOT.left}
+                y={yScale(baseline.high)}
+                width={READINESS_PLOT.right - READINESS_PLOT.left}
+                height={Math.max(
+                  yScale(baseline.low) - yScale(baseline.high),
+                  0,
+                )}
+                fill="var(--series-2)"
+                fillOpacity="0.14"
+              />
+              <line
+                data-chart-baseline-mean
+                x1={READINESS_PLOT.left}
+                x2={READINESS_PLOT.right}
+                y1={yScale(baseline.mean)}
+                y2={yScale(baseline.mean)}
+                stroke="var(--series-2)"
+                strokeWidth="1.5"
+                strokeDasharray="5 4"
+              />
+            </g>
+          )}
+          <g data-chart-marks aria-hidden="true" pointerEvents="none">
+            {points.map((point) => {
+              const parsedDate = parseChartDate(point.date);
+              if (!parsedDate) return null;
+              const value = finiteValue(point.value);
+              const x = xScale(parsedDate);
+              if (value === null) {
+                return (
                   <line
+                    key={point.date}
                     data-missing-date
                     data-chart-date={point.date}
-                    x1={x - 8}
-                    x2={x + 8}
-                    y1={CHART_PLOT.bottom}
-                    y2={CHART_PLOT.bottom}
+                    x1={x - 6}
+                    x2={x + 6}
+                    y1={READINESS_PLOT.bottom}
+                    y2={READINESS_PLOT.bottom}
                     stroke="var(--line)"
                     strokeWidth="2"
                     strokeDasharray="4 3"
                   />
-                )}
-                {index === 0 && path !== "" && (
-                  <path
-                    data-series={seriesId}
-                    d={path}
-                    fill="none"
-                    stroke="var(--series-1)"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                );
+              }
+              const y = yScale(value);
+              const isSelected =
+                selection?.kind === "point" && selection.date === point.date;
+              const isHovered = hoverPoint?.date === point.date;
+              return (
+                <g key={point.date}>
+                  {isSelected && (
+                    <circle
+                      className="chart-point__ring"
+                      data-chart-point-selection
+                      cx={x}
+                      cy={y}
+                      r="7.5"
+                      fill="none"
+                      stroke="var(--series-1)"
+                      strokeWidth="2"
+                    />
+                  )}
+                  <circle
+                    data-chart-dot
+                    data-chart-date={point.date}
+                    cx={x}
+                    cy={y}
+                    r={isHovered || isSelected ? 4 : hasRolling ? 2.5 : 3.5}
+                    fill={hasRolling ? "var(--series-2)" : "var(--series-1)"}
                   />
-                )}
-                <InspectablePoint
-                  x={x}
-                  y={y}
-                  date={point.date}
-                  label={`Inspect ${metric} for ${formatLongDate(point.date)}, ${accessibleValue}`}
-                  selected={
-                    selection?.kind === "point" && selection.date === point.date
-                  }
-                  missing={value === null}
-                  onActivate={() =>
-                    setSelection({ kind: "point", date: point.date })
-                  }
-                />
-              </g>
-            );
-          })}
+                </g>
+              );
+            })}
+            {dailyPath !== "" && (
+              <path
+                data-series={seriesId}
+                d={dailyPath}
+                fill="none"
+                stroke="var(--series-1)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+            {rollingPath !== "" && (
+              <path
+                data-series={`${seriesId}-rolling`}
+                d={rollingPath}
+                fill="none"
+                stroke="var(--series-1)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </g>
+          <ChartHitColumns
+            points={points}
+            xScale={xScale}
+            plotBounds={READINESS_PLOT}
+            selectedDate={selection?.kind === "point" ? selection.date : null}
+            label={(point) => {
+              const value = finiteValue(point.value);
+              return `Inspect ${metric} for ${formatLongDate(point.date)}, ${
+                value === null ? "no recording" : `${value} ${unit}`
+              }`;
+            }}
+            onActivate={(index) =>
+              setSelection({ kind: "point", date: points[index].date })
+            }
+            onHover={setHoverIndex}
+          />
         </ChartPlot>
       );
     })()
@@ -351,7 +507,13 @@ export function HrvChart({
       currentValue={status === "unavailable" ? "—" : currentLabel}
       unit={unit}
       averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
-      averageBasis="recorded nights"
+      averageBasis={baseline ? "recorded days" : "recorded nights"}
+      trendLabel={status === "unavailable" ? undefined : deltaTrend?.label}
+      trendGlyph={status === "unavailable" ? undefined : deltaTrend?.glyph}
+      trendTone={deltaTrend?.tone}
+      directionHint={`${unit} · ${
+        polarity === "lower" ? "lower is better ↓" : "higher is better ↑"
+      }`}
       readout={fixedReadout}
       plot={plot}
       coverage={

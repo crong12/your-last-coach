@@ -1056,6 +1056,11 @@ export function TrendsPane({
           chartId="hrv"
           seriesId="hrv"
           average={hrv.average}
+          rollingAverage={hrv.rollingAverage}
+          baseline={hrv.baseline}
+          baselineDelta={hrv.baselineDelta}
+          baselineStatus={hrv.baselineStatus}
+          polarity="higher"
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
@@ -1069,6 +1074,11 @@ export function TrendsPane({
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
           average={restingHeartRate.average}
+          rollingAverage={restingHeartRate.rollingAverage}
+          baseline={restingHeartRate.baseline}
+          baselineDelta={restingHeartRate.baselineDelta}
+          baselineStatus={restingHeartRate.baselineStatus}
+          polarity="lower"
           displayFrom={rangeWindow.from}
           displayTo={rangeWindow.to}
           onViewAdaptation={onViewAdaptation}
