@@ -280,6 +280,39 @@ describe("demo-athlete-v1", () => {
     ]);
   });
 
+  it("seeds coach targets on the upcoming planned workouts and passes validation", async () => {
+    const state = await createDemoCoachingContextSource().loadContext();
+    const byId = new Map(
+      state.trainingPlan.plannedWorkouts.map((workout) => [
+        workout.id,
+        workout,
+      ]),
+    );
+
+    expect(byId.get("planned-2026-08-27-recovery")?.targets).toEqual({
+      paceSecondsPerKm: { min: 370, max: 400 },
+      effortGuidance:
+        "Zone 1 — fully conversational; keep heart rate under 140 bpm",
+      durationSeconds: { min: 2_220, max: 2_400 },
+    });
+    expect(byId.get("planned-2026-08-29-strides")?.targets).toEqual({
+      paceSecondsPerKm: { min: 335, max: 360 },
+      effortGuidance:
+        "Zone 2 — relaxed and rhythmic, heart rate 140–152 bpm; strides quick but never strained",
+      durationSeconds: { min: 2_700, max: 2_940 },
+      recoveryProtocol:
+        "6 × 20-second strides after 6 km, walking back 60–90 seconds between strides",
+    });
+    expect(byId.get("planned-2026-08-30-long")?.targets).toEqual({
+      paceSecondsPerKm: { min: 330, max: 350 },
+      effortGuidance:
+        "Zone 2 steady — heart rate 145–158 bpm, no surging in the final third",
+      durationSeconds: { min: 5_940, max: 6_300 },
+    });
+
+    expect(validateWorkspaceState(state)).toEqual({ valid: true, errors: [] });
+  });
+
   it("returns an immutable fresh fixture with initial plan history", async () => {
     const source = createDemoCoachingContextSource();
     const first = await source.loadContext();

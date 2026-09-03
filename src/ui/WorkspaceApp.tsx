@@ -648,20 +648,32 @@ function WorkoutStructure({ workout }: { workout: PlannedWorkout }) {
   );
 }
 
-function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
+function CoachIntentSection({ workout }: { workout: PlannedWorkout }) {
+  return (
+    <section className="workout-detail__intent" aria-labelledby="intent-title">
+      <h2 id="intent-title">Intent</h2>
+      <p>{workout.purpose}</p>
+    </section>
+  );
+}
+
+function PlannedPrescriptionSections({ workout }: { workout: PlannedWorkout }) {
   const repeatBlock = workout.prescription.blocks.find(
     (block) => block.kind === "repeat",
   );
+  const targets = workout.targets;
+  const paceRange =
+    targets?.paceSecondsPerKm ??
+    (repeatBlock?.kind === "repeat"
+      ? repeatBlock.targetPaceSecondsPerKm
+      : undefined);
+  const recoveryProtocol =
+    targets?.recoveryProtocol ??
+    (repeatBlock?.kind === "repeat"
+      ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
+      : undefined);
   return (
     <>
-      <section
-        className="workout-detail__intent"
-        aria-labelledby="intent-title"
-      >
-        <h2 id="intent-title">Intent</h2>
-        <p>{workout.purpose}</p>
-      </section>
-
       <WorkoutStructure workout={workout} />
 
       <section aria-labelledby="targets-title">
@@ -671,14 +683,14 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
             <tr>
               <th scope="row">Target pace</th>
               <td>
-                {repeatBlock?.kind === "repeat"
-                  ? `${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.min)}–${formatPaceSeconds(repeatBlock.targetPaceSecondsPerKm.max)}/km`
+                {paceRange
+                  ? `${formatPaceSeconds(paceRange.min)}–${formatPaceSeconds(paceRange.max)}/km`
                   : "No pace target recorded"}
               </td>
             </tr>
             <tr>
               <th scope="row">Effort / heart-rate guidance</th>
-              <td>No guidance recorded</td>
+              <td>{targets?.effortGuidance ?? "No guidance recorded"}</td>
             </tr>
             <tr>
               <th scope="row">Planned distance</th>
@@ -686,15 +698,15 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
             </tr>
             <tr>
               <th scope="row">Planned duration</th>
-              <td>No duration recorded</td>
+              <td>
+                {targets?.durationSeconds
+                  ? `${formatDurationSeconds(targets.durationSeconds.min)}–${formatDurationSeconds(targets.durationSeconds.max)}`
+                  : "No duration recorded"}
+              </td>
             </tr>
             <tr>
               <th scope="row">Recovery protocol</th>
-              <td>
-                {repeatBlock?.kind === "repeat"
-                  ? `${repeatBlock.recoverySeconds} seconds easy jog between repetitions`
-                  : "No recovery protocol recorded"}
-              </td>
+              <td>{recoveryProtocol ?? "No recovery protocol recorded"}</td>
             </tr>
           </tbody>
         </table>
@@ -703,25 +715,30 @@ function PlannedWorkoutComposition({ workout }: { workout: PlannedWorkout }) {
   );
 }
 
-function ResultBackedWorkoutComposition({
-  context,
-  application,
-  onDurability,
-  onSelectWorkout,
+function WorkoutResultSections({
+  workout,
+  result,
 }: {
-  context: WorkoutContextData;
-  application: WorkspaceApplication;
-  onDurability: (durability: Durability) => void;
-  onSelectWorkout?: WorkoutSelect;
+  workout: PlannedWorkout;
+  result: WorkoutResult | null;
 }) {
-  const result = context.workoutResult;
-  if (!result) return null;
+  if (!result) {
+    return (
+      <section className="workout-result-section" aria-labelledby="stats-title">
+        <h2 id="stats-title">Workout Result</h2>
+        <p className="workout-result__empty">
+          Not completed yet — distance, time, pace, heart rate, and the plan
+          versus actual comparison will appear here once this workout is
+          recorded.
+        </p>
+      </section>
+    );
+  }
   const laps = normalizeResultLaps(result.laps);
   return (
     <>
-      <WorkoutStructure workout={context.plannedWorkout} />
       <WorkoutStats result={result} />
-      <PlanVersusActual workout={context.plannedWorkout} result={result} />
+      <PlanVersusActual workout={workout} result={result} />
       <section
         className="workout-result-section"
         aria-labelledby="lap-chart-title"
@@ -736,15 +753,6 @@ function ResultBackedWorkoutComposition({
           </>
         )}
       </section>
-      <WorkoutPreviousAttempts
-        context={context}
-        onSelectWorkout={onSelectWorkout}
-      />
-      <WorkoutFeedback
-        context={context}
-        application={application}
-        onDurability={onDurability}
-      />
     </>
   );
 }
@@ -813,16 +821,18 @@ function WorkoutDetailScreen({
             </small>
           )}
         </header>
-        {result ? (
-          <ResultBackedWorkoutComposition
-            context={context}
-            application={application}
-            onDurability={onDurability}
-            onSelectWorkout={onSelectWorkout}
-          />
-        ) : (
-          <PlannedWorkoutComposition workout={workout} />
-        )}
+        <CoachIntentSection workout={workout} />
+        <PlannedPrescriptionSections workout={workout} />
+        <WorkoutResultSections workout={workout} result={result} />
+        <WorkoutPreviousAttempts
+          context={context}
+          onSelectWorkout={onSelectWorkout}
+        />
+        <WorkoutFeedback
+          context={context}
+          application={application}
+          onDurability={onDurability}
+        />
       </article>
     </main>
   );

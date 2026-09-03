@@ -79,6 +79,13 @@ export type WorkoutBlock =
       recoverySeconds: number;
     };
 
+export interface PlannedWorkoutTargets {
+  paceSecondsPerKm?: { min: number; max: number };
+  effortGuidance?: string;
+  durationSeconds?: { min: number; max: number };
+  recoveryProtocol?: string;
+}
+
 export interface PlannedWorkout {
   id: string;
   date: IsoDate;
@@ -87,6 +94,7 @@ export interface PlannedWorkout {
   purpose: string;
   distanceKm: number;
   prescription: { blocks: WorkoutBlock[] };
+  targets?: PlannedWorkoutTargets;
 }
 
 export interface WorkoutLap {

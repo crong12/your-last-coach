@@ -243,6 +243,41 @@ function isValidWorkoutBlock(value: unknown): boolean {
   );
 }
 
+function isValidPositiveRange(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyFields(value, ["min", "max"]) &&
+    isPositiveNumber(value.min) &&
+    isPositiveNumber(value.max) &&
+    Number(value.min) <= Number(value.max)
+  );
+}
+
+function isValidPlannedWorkoutTargets(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (
+    !isRecord(value) ||
+    !hasOnlyFields(value, [
+      "paceSecondsPerKm",
+      "effortGuidance",
+      "durationSeconds",
+      "recoveryProtocol",
+    ])
+  ) {
+    return false;
+  }
+  return (
+    (value.paceSecondsPerKm === undefined ||
+      isValidPositiveRange(value.paceSecondsPerKm)) &&
+    (value.effortGuidance === undefined ||
+      isNonEmptyString(value.effortGuidance)) &&
+    (value.durationSeconds === undefined ||
+      isValidPositiveRange(value.durationSeconds)) &&
+    (value.recoveryProtocol === undefined ||
+      isNonEmptyString(value.recoveryProtocol))
+  );
+}
+
 function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
   return (
     isRecord(value) &&
@@ -254,7 +289,9 @@ function isValidPlannedWorkout(value: unknown): value is PlannedWorkout {
       "purpose",
       "distanceKm",
       "prescription",
+      "targets",
     ]) &&
+    isValidPlannedWorkoutTargets(value.targets) &&
     isNonEmptyString(value.id) &&
     isIsoDate(value.date) &&
     value.date.startsWith("2026-08-") &&

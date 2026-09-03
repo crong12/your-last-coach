@@ -500,14 +500,22 @@ test("keeps feedback visible and surfaces memory-only durability after a save fa
   ).toBeVisible();
 });
 
-test("renders honest unavailable targets for a simple Planned Workout", async ({
+test("renders seeded coach targets and honest gaps for an upcoming Planned Workout", async ({
   page,
 }) => {
   await page.goto("/#workout/planned-2026-08-30-long");
   const screen = page.getByRole("main", { name: "Planned Workout" });
 
   await expect(
-    screen.getByRole("cell", { name: "No pace target recorded" }),
+    screen.getByRole("cell", { name: "5:30–5:50/km" }),
+  ).toBeVisible();
+  await expect(
+    screen.getByRole("cell", {
+      name: "Zone 2 steady — heart rate 145–158 bpm, no surging in the final third",
+    }),
+  ).toBeVisible();
+  await expect(
+    screen.getByRole("cell", { name: "1:39:00–1:45:00" }),
   ).toBeVisible();
   await expect(
     screen.getByRole("cell", {

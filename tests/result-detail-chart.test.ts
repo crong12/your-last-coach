@@ -75,6 +75,26 @@ describe("Workout Result lap chart", () => {
       container.querySelectorAll("[data-result-lap-missing-pace]"),
     ).toHaveLength(1);
     expect(container.querySelector("[data-result-lap-hr-path]")).not.toBeNull();
+    expect(container.querySelectorAll("[data-result-facet]")).toHaveLength(2);
+    expect(
+      container.querySelector("svg[data-result-detail-hr-chart]"),
+    ).not.toBeNull();
+    expect(container.querySelectorAll("[data-result-lap-hr-dot]")).toHaveLength(
+      3,
+    );
+    expect(
+      container.querySelectorAll("[data-result-lap-missing-hr]"),
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll(
+        '[data-result-facet="pace"] [data-result-axis-tick]',
+      ).length,
+    ).toBeGreaterThan(2);
+    expect(
+      container.querySelectorAll(
+        '[data-result-facet="heartRate"] [data-result-axis-tick]',
+      ).length,
+    ).toBeGreaterThan(2);
     expect(container.textContent).toContain("3 of 4 laps with pace");
     expect(container.textContent).toContain("3 of 4 laps with average HR");
     expect(container.querySelector("svg desc")?.textContent).toContain(
@@ -85,23 +105,20 @@ describe("Workout Result lap chart", () => {
   it("keeps every lap inspectable with 44px targets and updates one fixed readout by keyboard", () => {
     renderChart();
 
-    const targets = container.querySelectorAll<SVGGElement>(
-      "[data-result-lap-target]",
+    const paceTargets = container.querySelectorAll<SVGGElement>(
+      '[data-result-facet="pace"] [data-result-lap-target]',
     );
-    expect(targets).toHaveLength(4);
-    expect(
-      targets[0]
-        .querySelector("[data-result-lap-hit-area]")
-        ?.getAttribute("width"),
-    ).toBe("44");
-    expect(
-      targets[0]
-        .querySelector("[data-result-lap-hit-area]")
-        ?.getAttribute("height"),
-    ).toBe("44");
+    const heartRateTargets = container.querySelectorAll<SVGGElement>(
+      '[data-result-facet="heartRate"] [data-result-lap-target]',
+    );
+    expect(paceTargets).toHaveLength(4);
+    expect(heartRateTargets).toHaveLength(4);
+    const hitArea = paceTargets[0].querySelector("[data-result-lap-hit-area]");
+    expect(Number(hitArea?.getAttribute("width"))).toBeGreaterThanOrEqual(44);
+    expect(Number(hitArea?.getAttribute("height"))).toBeGreaterThanOrEqual(44);
 
     act(() =>
-      targets[3].dispatchEvent(
+      paceTargets[3].dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
       ),
     );
@@ -111,6 +128,60 @@ describe("Workout Result lap chart", () => {
     expect(
       container.querySelector("[data-result-chart-readout]")?.textContent,
     ).toContain("No max HR recorded");
+
+    act(() =>
+      heartRateTargets[1].dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    expect(
+      container.querySelector("[data-result-chart-readout]")?.textContent,
+    ).toContain("Lap 2");
+  });
+
+  it("shows a facet tooltip on focus and hides it on blur", () => {
+    renderChart();
+
+    expect(container.querySelector("[data-result-chart-tooltip]")).toBeNull();
+
+    const heartRateTargets = container.querySelectorAll<SVGGElement>(
+      '[data-result-facet="heartRate"] [data-result-lap-target]',
+    );
+    act(() =>
+      heartRateTargets[3].dispatchEvent(
+        new FocusEvent("focusin", { bubbles: true }),
+      ),
+    );
+    const tooltips = container.querySelectorAll("[data-result-chart-tooltip]");
+    expect(tooltips).toHaveLength(1);
+    expect(tooltips[0].textContent).toBe("Lap 4 · avg 164 bpm");
+
+    act(() =>
+      heartRateTargets[3].dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true }),
+      ),
+    );
+    expect(container.querySelector("[data-result-chart-tooltip]")).toBeNull();
+  });
+
+  it("renders an honest heart-rate facet placeholder when no lap HR exists", () => {
+    renderChart([
+      {
+        id: "lap-1",
+        label: "Lap 1",
+        distanceKm: 2,
+        paceSecondsPerKm: 300,
+        averageHeartRateBpm: null,
+        maximumHeartRateBpm: null,
+      },
+    ]);
+
+    expect(
+      container.querySelector("svg[data-result-detail-hr-chart]"),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-result-facet="heartRate"]')?.textContent,
+    ).toContain("No lap heart rate recorded");
   });
 
   it("uses an exact missing max-HR segment and keeps recorded max HR explicit", () => {

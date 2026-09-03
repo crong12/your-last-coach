@@ -376,6 +376,12 @@ summary:focus-visible {
 .workout-result-section {
   min-width: 0;
 }
+.workout-result__empty {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
 .workout-result-section > h2 {
   max-width: 760px;
 }
@@ -499,17 +505,20 @@ summary:focus-visible {
   border-radius: 18px;
   background: rgba(248, 250, 246, 0.78);
 }
+/* Screen-reader-only live region: the tap-to-inspect readout stays the
+   accessible channel for lap values (tooltips are aria-hidden), but is no
+   longer rendered as a visible row above the chart. */
 .result-detail-chart__readout {
-  display: flex;
-  align-items: center;
-  min-height: 62px;
-  margin: 0;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .result-detail-chart__summary {
   margin: 0;
@@ -518,24 +527,82 @@ summary:focus-visible {
   font-size: 11px;
   line-height: 1.5;
 }
-.result-detail-chart__plot {
-  padding: 8px 12px 0;
+.result-detail-chart__facets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 26px;
+  padding: 12px 18px 4px;
 }
-.result-detail-chart__plot svg {
+.result-detail-chart__facet {
+  min-width: 0;
+  margin: 0;
+}
+.result-detail-chart__facet-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+}
+.result-detail-chart__facet-caption strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.result-detail-chart__facet-caption span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.result-detail-chart__facet-plot {
+  position: relative;
+}
+.result-detail-chart__facet-plot svg {
   display: block;
   width: 100%;
   height: auto;
   overflow: visible;
 }
-.result-detail-chart__plot [data-result-lap-target] {
+.result-detail-chart__facet-plot [data-result-lap-target] {
   cursor: pointer;
   outline: none;
 }
-.result-detail-chart__plot
+.result-detail-chart__facet-plot
   [data-result-lap-target]:focus-visible
   rect:first-child {
   stroke: #3f7e8a;
   stroke-width: 2;
+}
+.result-detail-chart__facet--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.result-detail-chart__facet--empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.result-detail-chart__tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(24, 44, 38, 0.16);
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
 }
 .result-detail-chart__coverage {
   display: flex;
@@ -3740,13 +3807,9 @@ h1 {
     grid-template-columns: 1fr;
     gap: 7px;
   }
-  .result-detail-chart__readout {
-    align-items: flex-start;
-    min-height: 70px;
-  }
-  .result-detail-chart__plot {
-    padding-right: 8px;
-    padding-left: 8px;
+  .result-detail-chart__facets {
+    padding-right: 10px;
+    padding-left: 10px;
   }
   .previous-attempt {
     align-items: flex-start;

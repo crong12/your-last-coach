@@ -26,6 +26,7 @@ const plannedWorkout = (
   purpose: string,
   distanceKm: number,
   blocks: WorkoutBlock[] = easyBlock(distanceKm),
+  targets?: PlannedWorkout["targets"],
 ): PlannedWorkout => ({
   id,
   date,
@@ -34,6 +35,7 @@ const plannedWorkout = (
   purpose,
   distanceKm,
   prescription: { blocks },
+  ...(targets ? { targets } : {}),
 });
 
 const completedResult = (
@@ -487,6 +489,13 @@ export const DEMO_WORKSPACE_STATE = {
         "6 km recovery",
         "Restore easy movement after threshold work",
         6,
+        easyBlock(6),
+        {
+          paceSecondsPerKm: { min: 370, max: 400 },
+          effortGuidance:
+            "Zone 1 — fully conversational; keep heart rate under 140 bpm",
+          durationSeconds: { min: 2_220, max: 2_400 },
+        },
       ),
       plannedWorkout(
         "planned-2026-08-29-strides",
@@ -495,6 +504,15 @@ export const DEMO_WORKSPACE_STATE = {
         "8 km easy with strides",
         "Keep relaxed leg speed",
         8,
+        easyBlock(8),
+        {
+          paceSecondsPerKm: { min: 335, max: 360 },
+          effortGuidance:
+            "Zone 2 — relaxed and rhythmic, heart rate 140–152 bpm; strides quick but never strained",
+          durationSeconds: { min: 2_700, max: 2_940 },
+          recoveryProtocol:
+            "6 × 20-second strides after 6 km, walking back 60–90 seconds between strides",
+        },
       ),
       plannedWorkout(
         "planned-2026-08-30-long",
@@ -503,6 +521,13 @@ export const DEMO_WORKSPACE_STATE = {
         "18 km long run",
         "Build aerobic durability",
         18,
+        easyBlock(18),
+        {
+          paceSecondsPerKm: { min: 330, max: 350 },
+          effortGuidance:
+            "Zone 2 steady — heart rate 145–158 bpm, no surging in the final third",
+          durationSeconds: { min: 5_940, max: 6_300 },
+        },
       ),
     ],
   },
