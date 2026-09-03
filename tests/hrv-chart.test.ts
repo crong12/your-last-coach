@@ -161,7 +161,7 @@ describe("HRV chart render states", () => {
     ).toBe("var(--series-1)");
   });
 
-  it("uses the supplied trailing average for the header and direction", () => {
+  it("uses the supplied trailing average without a direction summary", () => {
     renderChart(
       [
         { date: "2026-08-25", value: 1 },
@@ -175,8 +175,6 @@ describe("HRV chart render states", () => {
     expect(
       container.querySelector(".chart-card__average")?.textContent,
     ).toContain("7-night avg 50 ms");
-    expect(
-      container.querySelector(".chart-card__trend")?.textContent,
-    ).toContain("Up versus recorded nights");
+    expect(container.querySelector(".chart-card__trend")).toBeNull();
   });
 });

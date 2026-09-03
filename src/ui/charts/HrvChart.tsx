@@ -87,22 +87,20 @@ function currentPoint(points: readonly ChartPoint[]) {
   return null;
 }
 
+function trendFor(current: number | null, average: number | null) {
+  if (current === null || average === null) {
+    return { label: "No trend available" };
+  }
+  if (current > average) return { label: "Up versus recorded nights" };
+  if (current < average) return { label: "Down versus recorded nights" };
+  return { label: "Flat versus recorded nights" };
+}
+
 function readoutForPoint(point: ChartPoint | null, unit: string): ReactNode {
   if (!point) return "No recorded nights in this range";
   return `${formatShortDate(point.date)} · ${
     point.value === null ? "No recording" : `${point.value} ${unit}`
   }`;
-}
-
-function trendFor(current: number | null, average: number | null) {
-  if (current === null || average === null) {
-    return { glyph: "—", label: "No trend available" };
-  }
-  if (current > average)
-    return { glyph: "↑", label: "Up versus recorded nights" };
-  if (current < average)
-    return { glyph: "↓", label: "Down versus recorded nights" };
-  return { glyph: "→", label: "Flat versus recorded nights" };
 }
 
 function annotationReadout(annotation: ChartAnnotation) {
@@ -176,7 +174,6 @@ export function HrvChart({
       : null;
   const average =
     suppliedAverage === undefined ? calculatedAverage : suppliedAverage;
-  const trend = trendFor(latestObserved?.value ?? null, average);
   const [selection, setSelection] = useState<Selection>(() =>
     latestObserved
       ? { kind: "point", date: latestObserved.date }
@@ -222,9 +219,10 @@ export function HrvChart({
   const currentLabel = latestObserved ? String(latestObserved.value) : "—";
   const averageLabel =
     average === null ? "7-night avg —" : `7-night avg ${average} ${unit}`;
+  const trend = trendFor(latestObserved?.value ?? null, average);
   const summary = latestObserved
     ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
-    : `${metric}. Current: —. Direction: No trend available. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
+    : `${metric}. Current: —. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
   const passiveLabels = passiveAnnotationLabels(
     annotations,
     displayFrom ?? points[0]?.date,
@@ -354,8 +352,6 @@ export function HrvChart({
       unit={unit}
       averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
       averageBasis="recorded nights"
-      trendGlyph={status === "unavailable" ? "—" : trend.glyph}
-      trendLabel={status === "unavailable" ? "No trend available" : trend.label}
       readout={fixedReadout}
       plot={plot}
       coverage={

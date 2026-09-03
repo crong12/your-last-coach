@@ -50,19 +50,9 @@ test("keeps the built candidate chartable through Trends", async ({ page }) => {
   await expect(
     page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
   ).toHaveCount(4);
-  await page.getByRole("button", { name: "12w" }).click();
-  await expect(trends).toHaveAttribute("data-trends-range", "12w");
   await expect(
-    page.locator('[data-chart-card="sleep"] [data-sleep-night]'),
-  ).toHaveCount(84);
-  await expect(
-    page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
-  ).toHaveCount(12);
-  await page.getByRole("button", { name: "Build" }).click();
-  await expect(trends).toHaveAttribute("data-trends-range", "build");
-  await expect(
-    page.locator('[data-chart-card="hrv"] [data-chart-annotation-kind="race"]'),
-  ).toHaveCount(1);
+    page.getByRole("group", { name: "Trends range" }).getByRole("button"),
+  ).toHaveText(["4w"]);
 });
 
 test("serves the completed Workout Result proof from the static candidate", async ({

@@ -5,10 +5,10 @@ export interface ChartCardProps {
   metric: string;
   currentValue: string;
   unit: string;
-  averageLabel: string;
-  averageBasis: string;
-  trendLabel: string;
-  trendGlyph: string;
+  averageLabel?: string;
+  averageBasis?: string;
+  trendLabel?: string;
+  trendGlyph?: string;
   readout: ReactNode;
   plot: ReactNode;
   coverage: string;
@@ -61,16 +61,22 @@ export function ChartCard({
             )}
           </strong>
         </div>
-        <div className="chart-card__average">
-          <span>{averageLabel}</span>
-          <small>{averageBasis}</small>
-        </div>
-        <div className="chart-card__trend">
-          <span className="chart-card__trend-glyph" aria-hidden="true">
-            {trendGlyph}
-          </span>
-          <span>{trendLabel}</span>
-        </div>
+        {averageLabel && (
+          <div className="chart-card__average">
+            <span>{averageLabel}</span>
+            {averageBasis && <small>{averageBasis}</small>}
+          </div>
+        )}
+        {trendLabel && (
+          <div className="chart-card__trend">
+            {trendGlyph && (
+              <span className="chart-card__trend-glyph" aria-hidden="true">
+                {trendGlyph}
+              </span>
+            )}
+            <span>{trendLabel}</span>
+          </div>
+        )}
       </header>
       <div
         className="chart-card__readout"

@@ -9,11 +9,9 @@ import {
   deriveChartAnnotations,
   projectPaceHeartRate,
   projectReadinessSeries,
-  projectRepeatedSessions,
   projectWeeklyVolumeLoad,
   resolveTrendsRange,
   type PaceHeartRatePoint,
-  type RepeatedSessionGroup,
   type TrendsRange,
   type WeeklyVolumeLoadProjection,
 } from "../../application/trends";
@@ -83,13 +81,11 @@ function formatShortDate(date: string) {
 
 function trendFor(current: number | null, average: number | null) {
   if (current === null || average === null) {
-    return { glyph: "—", label: "No trend available" };
+    return { label: "No trend available" };
   }
-  if (current > average)
-    return { glyph: "↑", label: "Up versus recorded nights" };
-  if (current < average)
-    return { glyph: "↓", label: "Down versus recorded nights" };
-  return { glyph: "→", label: "Flat versus recorded nights" };
+  if (current > average) return { label: "Up versus recorded nights" };
+  if (current < average) return { label: "Down versus recorded nights" };
+  return { label: "Flat versus recorded nights" };
 }
 
 function SleepChart({
@@ -282,10 +278,6 @@ function SleepChart({
           : `7-night avg ${formatDuration(average)}`
       }
       averageBasis="recorded nights"
-      trendGlyph={projection.status === "unavailable" ? "—" : trend.glyph}
-      trendLabel={
-        projection.status === "unavailable" ? "No trend available" : trend.label
-      }
       readout={readout}
       plot={plot}
       coverage={
@@ -736,8 +728,6 @@ function VolumeLoadChart({
       unit="km"
       averageLabel={`Load ${loadCurrent}`}
       averageBasis="latest week · sourced per Workout Result"
-      trendGlyph="—"
-      trendLabel="Neutral direction"
       readout={fixedReadout}
       plot={plot}
       coverage={
@@ -956,14 +946,6 @@ function PaceHeartRateChart({
           : formatPace(selected.paceSecondsPerKm)
       }
       unit=""
-      averageLabel={
-        projection.status === "unavailable" || !selected
-          ? "Average HR —"
-          : `Average HR ${selected.heartRateBpm} bpm`
-      }
-      averageBasis="Derived from your runs"
-      trendGlyph="—"
-      trendLabel="No fitted trend"
       readout={
         <>
           {readout}
@@ -981,129 +963,7 @@ function PaceHeartRateChart({
   );
 }
 
-function repeatedSummaryText(group: RepeatedSessionGroup) {
-  const summary = group.latestSummary;
-  return `${summary.distanceKm === null ? "—" : `${summary.distanceKm} km`} · ${summary.durationSeconds === null ? "—" : `${Math.round(summary.durationSeconds / 60)} min`} · Load ${summary.trainingLoad === null ? "—" : summary.trainingLoad}`;
-}
-
-function RepeatedSessionsCard({
-  projection,
-  state,
-  onSelectWorkout,
-}: {
-  projection: ReturnType<typeof projectRepeatedSessions>;
-  state: WorkspaceState;
-  onSelectWorkout?: TrendsWorkoutSelect;
-}) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(
-    projection.groups[0]?.key ?? null,
-  );
-  useEffect(() => {
-    setSelectedKey((current) =>
-      projection.groups.some(({ key }) => key === current)
-        ? current
-        : (projection.groups[0]?.key ?? null),
-    );
-  }, [projection.groups]);
-  const selected = projection.groups.find(({ key }) => key === selectedKey);
-  const planned = selected
-    ? state.trainingPlan.plannedWorkouts.find(
-        ({ id }) =>
-          id ===
-          (selected.latestResult.plannedWorkoutId ?? selected.plannedWorkoutId),
-      )
-    : undefined;
-  return (
-    <section
-      className="repeated-sessions-card"
-      data-repeated-sessions
-      aria-labelledby="repeated-sessions-title"
-    >
-      <header className="section-heading section-heading--small">
-        <div>
-          <h3 id="repeated-sessions-title">Repeated sessions</h3>
-        </div>
-        <span className="repeated-sessions-card__basis">
-          Structured repeat prescriptions
-        </span>
-      </header>
-      {projection.status === "unavailable" ? (
-        <p className="chart-card__empty">Repeated sessions unavailable</p>
-      ) : projection.groups.length === 0 ? (
-        <p className="chart-card__empty">No repeated sessions in this range</p>
-      ) : (
-        <>
-          <div
-            className="repeated-session-options"
-            role="group"
-            aria-label="Comparable repeated sessions"
-          >
-            {projection.groups.map((group) => (
-              <button
-                type="button"
-                key={group.key}
-                className={`repeated-session-option ${group.key === selectedKey ? "repeated-session-option--selected" : ""}`}
-                aria-pressed={group.key === selectedKey}
-                data-repeated-session-option
-                data-group-key={group.key}
-                onClick={() => setSelectedKey(group.key)}
-              >
-                <strong>{group.label}</strong>
-                <span>
-                  {group.attemptCount} attempts · last{" "}
-                  {formatShortDate(group.latestResult.startedAt.slice(0, 10))}
-                </span>
-              </button>
-            ))}
-          </div>
-          {selected && (
-            <div
-              className="repeated-session-summary"
-              data-repeated-session-summary
-              aria-live="polite"
-            >
-              <span className="eyebrow">Latest supported summary</span>
-              <p>
-                {formatDate(selected.latestResult.startedAt.slice(0, 10))} ·{" "}
-                {repeatedSummaryText(selected)}
-              </p>
-              {selected.degraded && (
-                <small>
-                  Some optional Workout Result aggregates are unavailable.
-                </small>
-              )}
-              {planned && (
-                <button
-                  type="button"
-                  className="button button--quiet"
-                  id={`repeated-view-workout-${planned.id}`}
-                  data-repeated-view-workout
-                  onClick={(event) =>
-                    onSelectWorkout?.(planned, event.currentTarget)
-                  }
-                >
-                  View latest Workout Result
-                </button>
-              )}
-            </div>
-          )}
-        </>
-      )}
-      <footer className="chart-card__footer">
-        <span className="chart-card__coverage">
-          {projection.status === "unavailable"
-            ? "Repeated sessions unavailable"
-            : projection.status === "empty"
-              ? "No repeated sessions in this range"
-              : `${projection.groups.length} comparable group${projection.groups.length === 1 ? "" : "s"}`}
-        </span>
-        <span className="chart-card__source">Aggregate-only comparison</span>
-      </footer>
-    </section>
-  );
-}
-
-const TRENDS_RANGE_OPTIONS = ["4w", "12w", "build"] as const;
+const TRENDS_RANGE_OPTIONS = ["4w"] as const;
 
 /**
  * The range toggle is rendered by the pane title row, not by the pane body, so
@@ -1130,7 +990,7 @@ export function TrendsRangeControl({
           data-trends-range-option={option}
           onClick={() => onRangeChange(option)}
         >
-          {option === "build" ? "Build" : option}
+          {option}
         </button>
       ))}
     </div>
@@ -1172,10 +1032,6 @@ export function TrendsPane({
     () => projectPaceHeartRate(state, range),
     [range, state],
   );
-  const repeatedSessions = useMemo(
-    () => projectRepeatedSessions(state, range),
-    [range, state],
-  );
   return (
     <div className="trends-pane" data-trends-range={range}>
       {onRangeChange && (
@@ -1188,14 +1044,8 @@ export function TrendsPane({
       >
         <div className="section-heading section-heading--small">
           <div>
-            <span className="eyebrow">Shared Coaching Evidence</span>
             <h3 id="readiness-group-title">Readiness</h3>
           </div>
-          <p>
-            {range === "build"
-              ? "Build to Target Race"
-              : `${range === "4w" ? "28" : "84"} wake-up days`}
-          </p>
         </div>
         <HrvChart
           points={hrv.points}
@@ -1236,10 +1086,8 @@ export function TrendsPane({
       >
         <div className="section-heading section-heading--small">
           <div>
-            <span className="eyebrow">Training evidence</span>
-            <h3 id="performance-group-title">Performance</h3>
+            <h3 id="performance-group-title">Training Performance</h3>
           </div>
-          <p>Workout Result aggregates</p>
         </div>
         <VolumeLoadChart
           projection={volumeLoad}
@@ -1250,11 +1098,6 @@ export function TrendsPane({
         />
         <PaceHeartRateChart
           projection={paceHeartRate}
-          state={state}
-          onSelectWorkout={onSelectWorkout}
-        />
-        <RepeatedSessionsCard
-          projection={repeatedSessions}
           state={state}
           onSelectWorkout={onSelectWorkout}
         />
