@@ -658,6 +658,21 @@ describe("workspace initialization", () => {
       recordedAt: "2026-08-26T20:15:00+01:00",
     });
     saved.state.processedRequestIds.push("saved-before-threshold-migration");
+    saved.state.declinedAdaptations.push({
+      status: "declined",
+      reviewId: "review:declined-legacy-reference",
+      selectedOption: null,
+      recommendation: {
+        label: "Recovery first",
+        summary: "Reduce the rest of the week.",
+      },
+      declinedAt: "2026-08-26T20:13:00+01:00",
+      planVersion: 3,
+      evidenceRefs: [
+        "planned-workout:planned-2026-08-13-easy",
+        "workout-result:result-2026-08-13",
+      ],
+    });
     storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(saved));
 
     const initialized = await initializeWorkspace({
@@ -695,6 +710,82 @@ describe("workspace initialization", () => {
         relatedWorkoutResultId: "result-2026-08-13-threshold",
       }),
     );
+    expect(initialized.state.declinedAdaptations[0].evidenceRefs).toEqual([
+      "planned-workout:planned-2026-08-13-threshold",
+      "workout-result:result-2026-08-13-threshold",
+    ]);
+  });
+
+  it("rewrites every durable review reference when legacy fixture IDs migrate", () => {
+    const migrated = migrateDemoWorkspace({
+      state: {
+        trainingPlan: {
+          plannedWorkouts: [
+            {
+              id: "planned-2026-08-13-easy",
+              date: "2026-08-13",
+              type: "easy",
+              title: "8 km easy",
+              purpose: "Comfortable aerobic running",
+              distanceKm: 8,
+              prescription: { blocks: [{ kind: "easy", distanceKm: 8 }] },
+            },
+          ],
+        },
+        workoutResults: [],
+        pendingAdaptationProposal: {
+          proposal: {
+            sourceWorkoutId: "planned-2026-08-13-easy",
+            evidenceRefs: [
+              "planned-workout:planned-2026-08-13-easy",
+              "workout-result:result-2026-08-13",
+            ],
+          },
+        },
+        declinedAdaptations: [
+          {
+            evidenceRefs: ["workout-result:result-2026-08-13"],
+          },
+        ],
+        adaptationReceipts: [
+          {
+            affectedWorkouts: [
+              {
+                workoutId: "planned-2026-08-13-easy",
+                before: { id: "planned-2026-08-13-easy" },
+              },
+            ],
+            evidenceRefs: ["planned-workout:planned-2026-08-13-easy"],
+          },
+        ],
+      },
+      undeliveredFallbackResult: {
+        evidenceRefs: ["workout-result:result-2026-08-13"],
+      },
+    }) as Record<string, any>;
+
+    expect(migrated.state.pendingAdaptationProposal.proposal).toMatchObject({
+      sourceWorkoutId: "planned-2026-08-13-threshold",
+      evidenceRefs: [
+        "planned-workout:planned-2026-08-13-threshold",
+        "workout-result:result-2026-08-13-threshold",
+      ],
+    });
+    expect(migrated.state.declinedAdaptations[0].evidenceRefs).toEqual([
+      "workout-result:result-2026-08-13-threshold",
+    ]);
+    expect(migrated.state.adaptationReceipts[0]).toMatchObject({
+      affectedWorkouts: [
+        {
+          workoutId: "planned-2026-08-13-threshold",
+          before: { id: "planned-2026-08-13-threshold" },
+        },
+      ],
+      evidenceRefs: ["planned-workout:planned-2026-08-13-threshold"],
+    });
+    expect(migrated.undeliveredFallbackResult.evidenceRefs).toEqual([
+      "workout-result:result-2026-08-13-threshold",
+    ]);
   });
 
   it("reconciles the previously released threshold aggregate in saved state", async () => {

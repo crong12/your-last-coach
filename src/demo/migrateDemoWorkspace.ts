@@ -21,6 +21,35 @@ const RELEASED_FIVE_BY_ONE_PRESCRIPTION = {
   ],
 };
 
+const LEGACY_AUGUST13_REFERENCES = new Map([
+  ["planned-2026-08-13-easy", "planned-2026-08-13-threshold"],
+  ["result-2026-08-13", "result-2026-08-13-threshold"],
+  [
+    "planned-workout:planned-2026-08-13-easy",
+    "planned-workout:planned-2026-08-13-threshold",
+  ],
+  [
+    "workout-result:result-2026-08-13",
+    "workout-result:result-2026-08-13-threshold",
+  ],
+]);
+
+function rewriteLegacyAugust13References(value: unknown): unknown {
+  if (typeof value === "string") {
+    return LEGACY_AUGUST13_REFERENCES.get(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(rewriteLegacyAugust13References);
+  }
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      rewriteLegacyAugust13References(entry),
+    ]),
+  );
+}
+
 function hasReleasedFiveByOneShape(
   workout: Record<string, unknown>,
   id: string,
@@ -241,24 +270,7 @@ export function migrateDemoWorkspace(value: unknown): unknown {
         })),
       ]
     : existingWorkoutResults;
-  const existingAthleteFeedback = value.state.athleteFeedback;
-  const athleteFeedback = Array.isArray(existingAthleteFeedback)
-    ? existingAthleteFeedback.map((feedback: unknown) => {
-        if (!isRecord(feedback)) return feedback;
-        const relatedWorkoutId =
-          migrateLegacyAugust13 &&
-          feedback.relatedWorkoutId === "planned-2026-08-13-easy"
-            ? "planned-2026-08-13-threshold"
-            : feedback.relatedWorkoutId;
-        const relatedWorkoutResultId =
-          migrateLegacyAugust13 &&
-          feedback.relatedWorkoutResultId === "result-2026-08-13"
-            ? "result-2026-08-13-threshold"
-            : feedback.relatedWorkoutResultId;
-        return { ...feedback, relatedWorkoutId, relatedWorkoutResultId };
-      })
-    : existingAthleteFeedback;
-  return {
+  const migrated = {
     ...value,
     state: {
       ...value.state,
@@ -271,7 +283,9 @@ export function migrateDemoWorkspace(value: unknown): unknown {
           }
         : {}),
       workoutResults,
-      athleteFeedback,
     },
   };
+  return migrateLegacyAugust13
+    ? rewriteLegacyAugust13References(migrated)
+    : migrated;
 }
