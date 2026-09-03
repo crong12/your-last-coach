@@ -27,8 +27,6 @@ export interface WorkoutOriginReceipt {
   invokerId: string;
 }
 
-export type NavigationOriginReceipt = PaneOriginReceipt | WorkoutOriginReceipt;
-
 function navigationReceiptFromHistoryState(
   value: unknown,
   key = NAVIGATION_STATE_KEY,
@@ -92,14 +90,6 @@ function workoutReceiptFromHistoryState(
     return null;
   }
   return candidate as unknown as WorkoutOriginReceipt;
-}
-
-export function navigationOriginFromHistoryState(
-  value: unknown,
-): NavigationOriginReceipt | null {
-  return (
-    paneOriginFromHistoryState(value) ?? workoutOriginFromHistoryState(value)
-  );
 }
 
 export function workspaceRouteFromHash(hash: string): WorkspaceRoute | null {

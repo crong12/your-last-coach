@@ -41,8 +41,7 @@ import {
   formatPaceSeconds,
 } from "../metricFormatters";
 
-export const TRENDS_SOURCE =
-  "Source: seeded synthetic COROS-shaped observations";
+const TRENDS_SOURCE = "Source: seeded synthetic COROS-shaped observations";
 
 export type TrendsWorkoutSelect = (
   workout: PlannedWorkout,
