@@ -44,10 +44,11 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   await expect(svg).toHaveAttribute("width", "100%");
   await expect(svg.locator("title")).toHaveText("HRV trend");
   await expect(svg.locator("desc")).toContainText("55 ms");
-  const gridlineCount = await svg.locator("[data-chart-gridline]").count();
-  expect(gridlineCount).toBeGreaterThanOrEqual(2);
-  expect(gridlineCount).toBeLessThanOrEqual(4);
-  await expect(svg.locator("[data-chart-y-label]")).toHaveCount(gridlineCount);
+  // Gridlines were removed in the charts revamp; inline y labels remain.
+  await expect(svg.locator("[data-chart-gridline]")).toHaveCount(0);
+  const yLabelCount = await svg.locator("[data-chart-y-label]").count();
+  expect(yLabelCount).toBeGreaterThanOrEqual(2);
+  expect(yLabelCount).toBeLessThanOrEqual(4);
   await expect(svg.locator('[data-series="hrv"]')).toHaveCount(1);
   await expect(svg.locator("[data-missing-date]")).toHaveCount(7);
 

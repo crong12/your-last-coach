@@ -297,16 +297,6 @@ export function ChartPlot({
             const y = yScale(tick);
             return (
               <g key={tick}>
-                <line
-                  data-chart-gridline
-                  x1={plotBounds.left}
-                  x2={plotBounds.right}
-                  y1={y}
-                  y2={y}
-                  stroke="var(--line)"
-                  strokeWidth="1"
-                  shapeRendering="crispEdges"
-                />
                 <text
                   data-chart-y-label
                   x={plotBounds.left + 4}

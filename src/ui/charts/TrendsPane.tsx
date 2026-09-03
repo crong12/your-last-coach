@@ -753,16 +753,6 @@ function VolumeLoadChart({
                   if (y < 42) return null;
                   return (
                     <g key={`distance-${tick}`}>
-                      <line
-                        data-chart-gridline
-                        x1={CHART_PLOT.left}
-                        x2={CHART_PLOT.right}
-                        y1={y}
-                        y2={y}
-                        stroke="var(--line)"
-                        strokeWidth="1"
-                        shapeRendering="crispEdges"
-                      />
                       <text
                         data-chart-y-label
                         className="chart-axis-label"
@@ -782,16 +772,6 @@ function VolumeLoadChart({
                   if (y < 242) return null;
                   return (
                     <g key={`load-${tick}`}>
-                      <line
-                        data-chart-gridline
-                        x1={CHART_PLOT.left}
-                        x2={CHART_PLOT.right}
-                        y1={y}
-                        y2={y}
-                        stroke="var(--line)"
-                        strokeWidth="1"
-                        shapeRendering="crispEdges"
-                      />
                       <text
                         data-chart-y-label
                         className="chart-axis-label"
@@ -806,7 +786,7 @@ function VolumeLoadChart({
               {[170, 372].map((y) => (
                 <line
                   key={`baseline-${y}`}
-                  data-chart-gridline
+                  data-chart-baseline
                   x1={CHART_PLOT.left}
                   x2={CHART_PLOT.right}
                   y1={y}
@@ -1215,16 +1195,6 @@ function PaceHeartRateChart({
                 const y = yScale(tick);
                 return (
                   <g key={tick}>
-                    <line
-                      data-chart-gridline
-                      x1={CHART_PLOT.left}
-                      x2={CHART_PLOT.right}
-                      y1={y}
-                      y2={y}
-                      stroke="var(--line)"
-                      strokeWidth="1"
-                      shapeRendering="crispEdges"
-                    />
                     <text
                       data-chart-y-label
                       className="chart-axis-label"
