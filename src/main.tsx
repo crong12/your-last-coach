@@ -15,7 +15,6 @@ import { createPaneNavigation } from "./application/createPaneNavigation";
 import { createReviewCoordinator } from "./application/createReviewCoordinator";
 import { initializeWorkspace } from "./application/initializeWorkspace";
 import { createDemoCoachingContextSource } from "./demo/demoCoachingContextSource";
-import { migrateDemoWorkspace } from "./demo/migrateDemoWorkspace";
 import { WorkspaceApp } from "./ui/WorkspaceApp";
 import "./ui/styles.css";
 
@@ -25,7 +24,6 @@ async function bootstrap() {
   const initialized = await initializeWorkspace({
     fixtureSource,
     repository,
-    migrateSaved: migrateDemoWorkspace,
   });
   const application = createWorkspaceApplication({
     initialState: initialized.state,

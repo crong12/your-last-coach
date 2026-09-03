@@ -11,7 +11,6 @@ import { isWorkspaceState } from "../domain/validation";
 interface InitializeWorkspaceOptions {
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
-  migrateSaved?: (value: unknown) => unknown;
   now?: () => number;
 }
 
@@ -27,19 +26,6 @@ const REFRESH_NOTICE =
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function migratePersistedWorkspace(value: unknown): unknown {
-  if (!isRecord(value) || !isRecord(value.state)) return value;
-  return {
-    ...value,
-    state: {
-      ...value.state,
-      ...(Array.isArray(value.state.declinedAdaptations)
-        ? {}
-        : { declinedAdaptations: [] }),
-    },
-  };
 }
 
 function isPersistedWorkspace(value: unknown): value is {
@@ -121,19 +107,15 @@ export async function initializeWorkspace(
   options: InitializeWorkspaceOptions,
 ): Promise<InitializedWorkspace> {
   const saved = await options.repository.load();
-  const schemaMigratedSaved = migratePersistedWorkspace(saved);
-  const migratedSaved = options.migrateSaved
-    ? options.migrateSaved(schemaMigratedSaved)
-    : schemaMigratedSaved;
-  if (isPersistedWorkspace(migratedSaved)) {
-    const pending = migratedSaved.state.pendingAdaptationProposal;
+  if (isPersistedWorkspace(saved)) {
+    const pending = saved.state.pendingAdaptationProposal;
     const expired =
       pending !== undefined &&
       Number.isFinite(Date.parse(pending.expiresAt)) &&
       Date.parse(pending.expiresAt) <= (options.now?.() ?? Date.now());
     if (expired) {
       const { pendingAdaptationProposal: _pending, ...stateWithoutPending } =
-        migratedSaved.state;
+        saved.state;
       const state = deepFreeze(structuredClone(stateWithoutPending));
       const timeoutResult: PersistedFallbackResult = {
         status: "cancelled",
@@ -167,13 +149,13 @@ export async function initializeWorkspace(
       };
     }
     return {
-      state: deepFreeze(structuredClone(migratedSaved.state)),
+      state: deepFreeze(structuredClone(saved.state)),
       notice: null,
       durability: options.repository.durability ?? "persistent",
-      ...(migratedSaved.undeliveredFallbackResult === undefined
+      ...(saved.undeliveredFallbackResult === undefined
         ? {}
         : {
-            undeliveredFallbackResult: migratedSaved.undeliveredFallbackResult,
+            undeliveredFallbackResult: saved.undeliveredFallbackResult,
           }),
     };
   }

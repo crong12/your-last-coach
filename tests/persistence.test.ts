@@ -5,7 +5,6 @@ import { createWorkspaceApplication } from "../src/application/createWorkspaceAp
 import type { PersistedWorkspace } from "../src/application/ports";
 import type { AppliedPlanAdaptation } from "../src/domain/types";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
-import { migrateDemoWorkspace } from "../src/demo/migrateDemoWorkspace";
 import {
   BrowserWorkspaceRepository,
   WORKSPACE_STORAGE_KEY,
@@ -242,7 +241,7 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
-  it("migrates a prior schema-v1 envelope without declinedAdaptations", async () => {
+  it("refreshes a saved envelope that is missing a current required field", async () => {
     const envelope = await fixtureEnvelope(2);
     const savedFeedback = {
       id: "athlete-feedback:legacy-saved",
@@ -265,13 +264,15 @@ describe("workspace initialization", () => {
       repository: new BrowserWorkspaceRepository(() => storage),
     });
 
-    expect(initialized.notice).toBeNull();
-    expect(initialized.state.declinedAdaptations).toEqual([]);
-    expect(initialized.state.trainingPlan.planVersion).toBe(2);
-    expect(initialized.state.trainingPlan.plannedWorkouts[0].title).toBe(
-      "Saved easy recovery",
+    expect(initialized.notice).toBe(
+      "Saved demo data could not be used, so the Training Plan was refreshed.",
     );
-    expect(initialized.state.athleteFeedback).toContainEqual(savedFeedback);
+    expect(initialized.state.declinedAdaptations).toEqual([]);
+    expect(initialized.state.trainingPlan.planVersion).toBe(1);
+    expect(initialized.state.trainingPlan.plannedWorkouts[0].title).toBe(
+      "14 km long run",
+    );
+    expect(initialized.state.athleteFeedback).not.toContainEqual(savedFeedback);
   });
 
   it("restores a valid completed undelivered fallback result from schema version 1", async () => {
@@ -541,7 +542,7 @@ describe("workspace initialization", () => {
     expect(initialized.durability).toBe("persistent");
   });
 
-  it("fills newly seeded workout results and metrics into existing demo data", async () => {
+  it("restores valid saved data without backfilling it from the fixture", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope();
     saved.state.workoutResults = saved.state.workoutResults.filter(
@@ -551,17 +552,10 @@ describe("workspace initialization", () => {
       ({ id }) => id === "result-2026-08-26-threshold",
     );
     expect(result).toBeDefined();
-    result!.summary.distanceKm = 7.5;
     delete result!.summary.durationSeconds;
     delete result!.summary.averagePaceSecondsPerKm;
     delete result!.summary.averageHeartRateBpm;
     delete result!.summary.trainingLoad;
-    result!.laps = result!.laps.filter(({ kind }) => kind !== "recovery");
-    const cooldown = result!.laps.find(
-      ({ id }) => id === "lap-threshold-cooldown",
-    );
-    expect(cooldown).toBeDefined();
-    cooldown!.distanceKm = 1;
     const warmup = result!.laps.find(({ id }) => id === "lap-threshold-warmup");
     expect(warmup).toBeDefined();
     delete warmup!.averageHeartRateBpm;
@@ -577,55 +571,33 @@ describe("workspace initialization", () => {
     const initialized = await initializeWorkspace({
       fixtureSource: createDemoCoachingContextSource(),
       repository: new BrowserWorkspaceRepository(() => storage),
-      migrateSaved: migrateDemoWorkspace,
     });
 
+    expect(initialized.notice).toBeNull();
     expect(
       initialized.state.workoutResults.find(
         ({ id }) => id === "result-2026-08-02",
       ),
-    ).toMatchObject({
-      plannedWorkoutId: "planned-2026-08-02-long",
-      status: "completed",
-      summary: { distanceKm: 14 },
-    });
+    ).toBeUndefined();
+    const restoredResult = initialized.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-26-threshold",
+    )!;
+    expect(restoredResult.summary).not.toHaveProperty("durationSeconds");
+    expect(restoredResult.summary).not.toHaveProperty(
+      "averagePaceSecondsPerKm",
+    );
+    expect(restoredResult.summary).not.toHaveProperty("averageHeartRateBpm");
     expect(
-      initialized.state.workoutResults.find(
-        ({ id }) => id === "result-2026-08-26-threshold",
-      )?.summary,
-    ).toMatchObject({
-      distanceKm: 7,
-      durationSeconds: 2_358,
-      averagePaceSecondsPerKm: 2_358 / 7,
-      averageHeartRateBpm: 152,
-    });
-    expect(
-      initialized.state.workoutResults
-        .find(({ id }) => id === "result-2026-08-26-threshold")
-        ?.laps.find(({ id }) => id === "lap-threshold-warmup"),
-    ).toMatchObject({
-      paceSecondsPerKm: 375,
-      averageHeartRateBpm: 130,
-      maximumHeartRateBpm: 134,
-    });
+      restoredResult.laps.find(({ id }) => id === "lap-threshold-warmup"),
+    ).not.toHaveProperty("paceSecondsPerKm");
     expect(
       initialized.state.workoutResults
         .find(({ id }) => id === "result-2026-08-26-threshold")
         ?.laps.find(({ id }) => id === "lap-threshold-rep-1"),
     ).toMatchObject({ maximumHeartRateBpm: 175 });
-    expect(
-      initialized.state.workoutResults
-        .find(({ id }) => id === "result-2026-08-26-threshold")
-        ?.laps.filter(({ kind }) => kind === "recovery"),
-    ).toHaveLength(2);
-    expect(
-      initialized.state.workoutResults
-        .find(({ id }) => id === "result-2026-08-26-threshold")
-        ?.laps.find(({ id }) => id === "lap-threshold-cooldown")?.distanceKm,
-    ).toBe(1.5);
   });
 
-  it("migrates the legacy August threshold records without resetting saved state", async () => {
+  it("restores valid legacy-shaped records without rewriting them", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope(3);
     const august6 = saved.state.trainingPlan.plannedWorkouts.find(
@@ -668,14 +640,14 @@ describe("workspace initialization", () => {
     };
     august13Result.laps = [];
     saved.state.athleteFeedback.push({
-      id: "athlete-feedback:saved-before-threshold-migration",
-      requestId: "saved-before-threshold-migration",
+      id: "athlete-feedback:legacy-threshold-record",
+      requestId: "legacy-threshold-record",
       relatedWorkoutId: "planned-2026-08-13-easy",
       relatedWorkoutResultId: "result-2026-08-13",
       rawText: "Keep this saved feedback.",
       recordedAt: "2026-08-26T20:15:00+01:00",
     });
-    saved.state.processedRequestIds.push("saved-before-threshold-migration");
+    saved.state.processedRequestIds.push("legacy-threshold-record");
     saved.state.declinedAdaptations.push({
       status: "declined",
       reviewId: "review:declined-legacy-reference",
@@ -696,7 +668,6 @@ describe("workspace initialization", () => {
     const initialized = await initializeWorkspace({
       fixtureSource: createDemoCoachingContextSource(),
       repository: new BrowserWorkspaceRepository(() => storage),
-      migrateSaved: migrateDemoWorkspace,
     });
 
     expect(initialized.notice).toBeNull();
@@ -704,109 +675,37 @@ describe("workspace initialization", () => {
     expect(initialized.state.trainingPlan.plannedWorkouts).toContainEqual(
       expect.objectContaining({
         id: "planned-2026-08-06-threshold",
-        title: "3 × 2 km threshold",
+        title: "Threshold intervals",
       }),
     );
     expect(initialized.state.trainingPlan.plannedWorkouts).toContainEqual(
       expect.objectContaining({
-        id: "planned-2026-08-13-threshold",
-        type: "threshold",
-        distanceKm: 9.5,
+        id: "planned-2026-08-13-easy",
+        type: "easy",
+        distanceKm: 8,
       }),
     );
     expect(initialized.state.workoutResults).toContainEqual(
       expect.objectContaining({
-        id: "result-2026-08-13-threshold",
-        plannedWorkoutId: "planned-2026-08-13-threshold",
-        summary: expect.objectContaining({ distanceKm: 9.5 }),
+        id: "result-2026-08-13",
+        plannedWorkoutId: "planned-2026-08-13-easy",
+        summary: expect.objectContaining({ distanceKm: 8 }),
       }),
     );
     expect(initialized.state.athleteFeedback).toContainEqual(
       expect.objectContaining({
-        id: "athlete-feedback:saved-before-threshold-migration",
-        relatedWorkoutId: "planned-2026-08-13-threshold",
-        relatedWorkoutResultId: "result-2026-08-13-threshold",
+        id: "athlete-feedback:legacy-threshold-record",
+        relatedWorkoutId: "planned-2026-08-13-easy",
+        relatedWorkoutResultId: "result-2026-08-13",
       }),
     );
     expect(initialized.state.declinedAdaptations[0].evidenceRefs).toEqual([
-      "planned-workout:planned-2026-08-13-threshold",
-      "workout-result:result-2026-08-13-threshold",
+      "planned-workout:planned-2026-08-13-easy",
+      "workout-result:result-2026-08-13",
     ]);
   });
 
-  it("rewrites every durable review reference when legacy fixture IDs migrate", () => {
-    const migrated = migrateDemoWorkspace({
-      state: {
-        trainingPlan: {
-          plannedWorkouts: [
-            {
-              id: "planned-2026-08-13-easy",
-              date: "2026-08-13",
-              type: "easy",
-              title: "8 km easy",
-              purpose: "Comfortable aerobic running",
-              distanceKm: 8,
-              prescription: { blocks: [{ kind: "easy", distanceKm: 8 }] },
-            },
-          ],
-        },
-        workoutResults: [],
-        pendingAdaptationProposal: {
-          proposal: {
-            sourceWorkoutId: "planned-2026-08-13-easy",
-            evidenceRefs: [
-              "planned-workout:planned-2026-08-13-easy",
-              "workout-result:result-2026-08-13",
-            ],
-          },
-        },
-        declinedAdaptations: [
-          {
-            evidenceRefs: ["workout-result:result-2026-08-13"],
-          },
-        ],
-        adaptationReceipts: [
-          {
-            affectedWorkouts: [
-              {
-                workoutId: "planned-2026-08-13-easy",
-                before: { id: "planned-2026-08-13-easy" },
-              },
-            ],
-            evidenceRefs: ["planned-workout:planned-2026-08-13-easy"],
-          },
-        ],
-      },
-      undeliveredFallbackResult: {
-        evidenceRefs: ["workout-result:result-2026-08-13"],
-      },
-    }) as Record<string, any>;
-
-    expect(migrated.state.pendingAdaptationProposal.proposal).toMatchObject({
-      sourceWorkoutId: "planned-2026-08-13-threshold",
-      evidenceRefs: [
-        "planned-workout:planned-2026-08-13-threshold",
-        "workout-result:result-2026-08-13-threshold",
-      ],
-    });
-    expect(migrated.state.declinedAdaptations[0].evidenceRefs).toEqual([
-      "workout-result:result-2026-08-13-threshold",
-    ]);
-    expect(migrated.state.adaptationReceipts[0]).toMatchObject({
-      affectedWorkouts: [
-        {
-          workoutId: "planned-2026-08-13-threshold",
-          before: { id: "planned-2026-08-13-threshold" },
-        },
-      ],
-      evidenceRefs: ["planned-workout:planned-2026-08-13-threshold"],
-    });
-    expect(migrated.undeliveredFallbackResult.evidenceRefs).toEqual([
-      "workout-result:result-2026-08-13-threshold",
-    ]);
-  });
-
-  it("reconciles the previously released threshold aggregate in saved state", async () => {
+  it("restores valid older aggregates without reconciling them", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope(2);
     const august13Plan = saved.state.trainingPlan.plannedWorkouts.find(
@@ -830,39 +729,34 @@ describe("workspace initialization", () => {
     const initialized = await initializeWorkspace({
       fixtureSource: createDemoCoachingContextSource(),
       repository: new BrowserWorkspaceRepository(() => storage),
-      migrateSaved: migrateDemoWorkspace,
     });
 
     expect(
       initialized.state.trainingPlan.plannedWorkouts.find(
         ({ id }) => id === "planned-2026-08-13-threshold",
       )?.distanceKm,
-    ).toBe(9.5);
+    ).toBe(13);
     expect(
       initialized.state.trainingPlan.plannedWorkouts.find(
         ({ id }) => id === "planned-2026-08-26-threshold",
       )?.distanceKm,
-    ).toBe(9.5);
-    expect(
-      initialized.state.workoutResults.find(
-        ({ id }) => id === "result-2026-08-13-threshold",
-      ),
-    ).toMatchObject({
+    ).toBe(13);
+    const restoredResult = initialized.state.workoutResults.find(
+      ({ id }) => id === "result-2026-08-13-threshold",
+    )!;
+    expect(restoredResult).toMatchObject({
       summary: {
-        distanceKm: 9.5,
-        durationSeconds: 3_033,
-        averagePaceSecondsPerKm: 3_033 / 9.5,
+        distanceKm: 13,
+        durationSeconds: 3_900,
+        averagePaceSecondsPerKm: 300,
       },
-      laps: expect.arrayContaining([
-        expect.objectContaining({
-          id: "lap-threshold-aug13-recovery-1",
-          kind: "recovery",
-        }),
-      ]),
     });
+    expect(
+      restoredResult.laps.filter(({ kind }) => kind === "recovery"),
+    ).toHaveLength(0);
   });
 
-  it("preserves a non-legacy threshold workout instead of matching by ID alone", async () => {
+  it("restores an adapted threshold workout without rewriting it", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope(4);
     const adapted = saved.state.trainingPlan.plannedWorkouts.find(
@@ -875,7 +769,6 @@ describe("workspace initialization", () => {
     const initialized = await initializeWorkspace({
       fixtureSource: createDemoCoachingContextSource(),
       repository: new BrowserWorkspaceRepository(() => storage),
-      migrateSaved: migrateDemoWorkspace,
     });
 
     expect(initialized.notice).toBeNull();
@@ -887,7 +780,7 @@ describe("workspace initialization", () => {
     expect(initialized.state.trainingPlan.planVersion).toBe(4);
   });
 
-  it("preserves coordinated legacy-ID records after a date-only adaptation", async () => {
+  it("restores coordinated saved records after a date-only adaptation", async () => {
     const storage = new ControlledStorage();
     const saved = await fixtureEnvelope(4);
     const august13 = saved.state.trainingPlan.plannedWorkouts.find(
@@ -929,7 +822,6 @@ describe("workspace initialization", () => {
     const initialized = await initializeWorkspace({
       fixtureSource: createDemoCoachingContextSource(),
       repository: new BrowserWorkspaceRepository(() => storage),
-      migrateSaved: migrateDemoWorkspace,
     });
 
     expect(initialized.notice).toBeNull();
