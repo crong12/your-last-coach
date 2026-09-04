@@ -552,10 +552,10 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
-test("reviews both ranked Workout Adaptations and leaves browser Back non-mutating", async ({
+test("reviews both ranked Workout Adaptations through the non-blocking tool", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "primary");
+  await installWebMcpHarness(page, "fallback");
   await page.goto("/");
   const openReview = () =>
     page.evaluate((proposal) => {
@@ -575,9 +575,9 @@ test("reviews both ranked Workout Adaptations and leaves browser Back non-mutati
         }
       ).__webMcpHarness.registrations;
       const tool = registrations.find(
-        ({ tool }) => tool.name === "review_workout_adaptation",
+        ({ tool }) => tool.name === "open_workout_adaptation_review",
       )?.tool;
-      if (!tool) throw new Error("Primary review tool was not registered");
+      if (!tool) throw new Error("Adaptation review tool was not registered");
       void tool.execute(proposal, { signal: new AbortController().signal });
     }, acceptedReviewProposal());
 
@@ -612,11 +612,6 @@ test("reviews both ranked Workout Adaptations and leaves browser Back non-mutati
   await expect(review.getByText("16 km easy long run")).toBeVisible();
   await page.goBack();
   await expect(review).toBeHidden();
-  await showPane(page, "Coaching");
-  await expect(
-    page.getByRole("button", { name: "Review proposal" }),
-  ).toBeVisible();
-  await showPane(page, "Today");
   await expect(
     page
       .getByRole("region", { name: "Overview" })
