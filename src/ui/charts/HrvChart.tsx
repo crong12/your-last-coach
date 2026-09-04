@@ -147,21 +147,6 @@ function annotationIsVisible(
   );
 }
 
-function passiveAnnotationLabels(
-  annotations: readonly ChartAnnotation[],
-  from: string | undefined,
-  to: string | undefined,
-) {
-  return annotations
-    .filter(
-      (annotation) =>
-        annotation.kind !== "adaptation" &&
-        (!from || annotation.date >= from) &&
-        (!to || annotation.date <= to),
-    )
-    .map(({ label }) => label);
-}
-
 export function HrvChart({
   currentValue = 55,
   points: suppliedPoints,
@@ -288,14 +273,6 @@ export function HrvChart({
   const summary = latestObserved
     ? `${metric}. Current: ${latestObserved.value} ${unit}. Direction: ${trend.label}.${baselineSummary} Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`
     : `${metric}. Current: —. Direction: ${trend.label}. Coverage: ${coverage.observed} of ${coverage.expected} nights recorded.`;
-  const passiveLabels = passiveAnnotationLabels(
-    annotations,
-    displayFrom ?? points[0]?.date,
-    displayTo ?? points.at(-1)?.date,
-  );
-  const summaryWithAnnotations = passiveLabels.length
-    ? `${summary} Passive annotations: ${passiveLabels.join(", ")}.`
-    : summary;
   const hasObserved = coverage.observed > 0 && status !== "unavailable";
 
   const plot = hasObserved ? (
@@ -348,7 +325,7 @@ export function HrvChart({
         <ChartPlot
           id={chartId}
           title={`${metric} trend`}
-          description={summaryWithAnnotations}
+          description={summary}
           points={points}
           xScale={xScale}
           yScale={yScale}
@@ -410,29 +387,15 @@ export function HrvChart({
                 );
               }
               const y = yScale(value);
-              const isSelected =
-                selection?.kind === "point" && selection.date === point.date;
               const isHovered = hoverPoint?.date === point.date;
               return (
                 <g key={point.date}>
-                  {isSelected && (
-                    <circle
-                      className="chart-point__ring"
-                      data-chart-point-selection
-                      cx={x}
-                      cy={y}
-                      r="7.5"
-                      fill="none"
-                      stroke="var(--series-1)"
-                      strokeWidth="2"
-                    />
-                  )}
                   <circle
                     data-chart-dot
                     data-chart-date={point.date}
                     cx={x}
                     cy={y}
-                    r={isHovered || isSelected ? 4 : hasRolling ? 2.5 : 3.5}
+                    r={isHovered ? 4 : hasRolling ? 2.5 : 3.5}
                     fill={hasRolling ? "var(--series-2)" : "var(--series-1)"}
                   />
                 </g>
@@ -516,13 +479,6 @@ export function HrvChart({
       currentValue={status === "unavailable" ? "—" : currentLabel}
       unit={unit}
       averageLabel={status === "unavailable" ? "7-night avg —" : averageLabel}
-      averageBasis={
-        baseline
-          ? "recorded days"
-          : baselineUnavailable
-            ? "fewer than 7 recorded days"
-            : "recorded nights"
-      }
       trendLabel={status === "unavailable" ? undefined : deltaTrend?.label}
       trendGlyph={status === "unavailable" ? undefined : deltaTrend?.glyph}
       trendTone={deltaTrend?.tone}

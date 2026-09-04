@@ -156,6 +156,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.02,
   }),
   readinessRecord("2026-07-31", {
+    hrvMs: 52,
     restingHeartRateBpm: 56,
     sleepMinutes: 398,
     deepRatio: 0.155,
@@ -191,6 +192,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.02,
   }),
   readinessRecord("2026-08-04", {
+    hrvMs: 52,
     restingHeartRateBpm: 55,
     sleepMinutes: 389,
     deepRatio: 0.2,
@@ -235,6 +237,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.04,
   }),
   readinessRecord("2026-08-09", {
+    hrvMs: 54,
     restingHeartRateBpm: 53,
     sleepMinutes: 410,
     deepRatio: 0.2,
@@ -279,6 +282,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.03,
   }),
   readinessRecord("2026-08-14", {
+    hrvMs: 54,
     restingHeartRateBpm: 53,
     sleepMinutes: 400,
     deepRatio: 0.2,
@@ -314,6 +318,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.04,
   }),
   readinessRecord("2026-08-18", {
+    hrvMs: 55,
     restingHeartRateBpm: 51,
     sleepMinutes: 425,
     deepRatio: 0.185,
@@ -358,6 +363,7 @@ const READINESS_HISTORY = [
     awakeRatio: 0.03,
   }),
   readinessRecord("2026-08-23", {
+    hrvMs: 54,
     restingHeartRateBpm: 52,
     sleepMinutes: 430,
     deepRatio: 0.185,
@@ -365,8 +371,8 @@ const READINESS_HISTORY = [
     remRatio: 0.28,
     awakeRatio: 0.04,
   }),
-  readinessRecord("2026-08-24", { hrvMs: 54, restingHeartRateBpm: 53 }),
-  readinessRecord("2026-08-25", { restingHeartRateBpm: 53 }),
+  readinessRecord("2026-08-24", {}),
+  readinessRecord("2026-08-25", {}),
   readinessRecord("2026-08-26", {
     hrvMs: 55,
     restingHeartRateBpm: 52,

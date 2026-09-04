@@ -18,7 +18,6 @@ import {
 import { ChartCard } from "./ChartCard";
 import { ChartPlot } from "./ChartPlot";
 import {
-  createLinePath,
   createLinearScale,
   createTimeScale,
   parseChartDate,
@@ -41,7 +40,7 @@ import {
   formatPaceSeconds,
 } from "../metricFormatters";
 
-const TRENDS_SOURCE = "Source: seeded synthetic COROS-shaped observations";
+const TRENDS_SOURCE = "Source: synthetic health data";
 
 export type TrendsWorkoutSelect = (
   workout: PlannedWorkout,
@@ -160,6 +159,16 @@ function SleepChart({
   const current = projection.latest?.value ?? null;
   const trend = trendFor(current, average);
   const baseline = projection.baseline;
+  const baselineDelta =
+    current === null || baseline === null
+      ? null
+      : Math.round(current - baseline.mean);
+  const baselineTrend =
+    baselineDelta === null
+      ? undefined
+      : baselineDelta === 0
+        ? "at baseline"
+        : `${baselineDelta > 0 ? "+" : "−"}${Math.abs(baselineDelta)}m vs baseline`;
   const description = `Sleep duration. Current: ${current === null ? "—" : formatDuration(current)}. Direction: ${trend.label}.${
     baseline
       ? ` 28-day average (recorded nights): ${formatDuration(baseline.mean)}.`
@@ -354,14 +363,6 @@ function SleepChart({
                   strokeDasharray="5 4"
                   opacity="0.75"
                 />
-                <text
-                  className="chart-axis-label"
-                  x={READINESS_PLOT.right}
-                  y={yScale(baseline.mean) - 6}
-                  textAnchor="end"
-                >
-                  28d avg {formatMinutesClock(baseline.mean)}
-                </text>
               </g>
             )}
           </g>
@@ -403,10 +404,12 @@ function SleepChart({
       unit=""
       averageLabel={
         projection.status === "unavailable"
-          ? "7-night avg —"
-          : `7-night avg ${formatDuration(average)}`
+          ? "28d baseline —"
+          : `28d baseline ${formatDuration(baseline?.mean ?? null)}`
       }
-      averageBasis="recorded nights"
+      trendLabel={
+        projection.status === "unavailable" ? undefined : baselineTrend
+      }
       directionHint="h:mm · deep · light · rem · awake"
       readout={readout}
       plot={plot}
@@ -444,6 +447,7 @@ function VolumeAnnotations({
     <g data-chart-annotations data-chart-annotation-layer="volume-annotations">
       {annotations
         .filter((annotation) => annotationIsInRange(annotation, from, to))
+        .filter((annotation) => annotation.kind !== "phase")
         .map((annotation) => {
           const parsed = parseChartDate(annotation.date);
           if (!parsed) return null;
@@ -503,16 +507,9 @@ function VolumeAnnotations({
                 x2={x}
                 y1={CHART_PLOT.top}
                 y2={372}
-                stroke={
-                  annotation.kind === "race" ? "var(--ochre)" : "var(--line)"
-                }
-                strokeDasharray={annotation.kind === "race" ? "2 3" : "3 4"}
-                data-chart-phase-line={
-                  annotation.kind === "phase" ? true : undefined
-                }
-                data-chart-race-line={
-                  annotation.kind === "race" ? true : undefined
-                }
+                stroke="var(--ochre)"
+                strokeDasharray="2 3"
+                data-chart-race-line
               />
               {annotation.kind === "race" && (
                 <path
@@ -523,13 +520,9 @@ function VolumeAnnotations({
               )}
               <text
                 data-chart-annotation-label
-                className={
-                  annotation.kind === "phase"
-                    ? "chart-annotation__label chart-annotation__label--phase"
-                    : "chart-annotation__label"
-                }
+                className="chart-annotation__label"
                 x={x + 5}
-                y={annotation.kind === "race" ? 56 : 40}
+                y={56}
               >
                 {annotation.label}
               </text>
@@ -581,12 +574,6 @@ function VolumeLoadChart({
       };
     });
   }, [annotations, projection.weeks]);
-  const formatRamp = (percent: number) => {
-    const rounded = Math.round(percent);
-    return rounded === 0
-      ? "even with prior week"
-      : `${rounded > 0 ? "+" : "−"}${Math.abs(rounded)}% vs prior week`;
-  };
   const selectedWeek = projection.weeks.find(
     ({ weekStart }) => weekStart === selection.value,
   );
@@ -610,11 +597,7 @@ function VolumeLoadChart({
                 : `Race day: ${selectedAnnotation.label}`
           }`
         : selectedWeek
-          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}${
-              selectedWeek.distanceChangePercent === null
-                ? ""
-                : ` · ${formatRamp(selectedWeek.distanceChangePercent)}`
-            }`
+          ? `${formatShortDate(selectedWeek.weekStart)} week · ${selectedWeek.distanceKm.toFixed(1)} km · Training Load ${selectedWeek.trainingLoad === null ? "unavailable" : selectedWeek.trainingLoad}`
           : projection.status === "unavailable"
             ? "Training history unavailable"
             : "No Workout Results in this range";
@@ -625,21 +608,6 @@ function VolumeLoadChart({
       ? "—"
       : String(lastWeek.trainingLoad);
   const [hoverWeek, setHoverWeek] = useState<string | null>(null);
-  const rampRounded =
-    lastWeek?.distanceChangePercent === undefined ||
-    lastWeek?.distanceChangePercent === null
-      ? null
-      : Math.round(lastWeek.distanceChangePercent);
-  const rampTrend =
-    rampRounded === null
-      ? null
-      : {
-          label:
-            rampRounded === 0
-              ? "even with last week"
-              : `${rampRounded > 0 ? "+" : "−"}${Math.abs(rampRounded)}% vs last week`,
-          glyph: rampRounded > 0 ? "▲" : rampRounded < 0 ? "▼" : undefined,
-        };
   const hasWeeks =
     projection.weeks.length > 0 && projection.status !== "unavailable";
   const plot = hasWeeks ? (
@@ -673,24 +641,7 @@ function VolumeLoadChart({
         0,
       );
       loadScale.domain([0, maximumLoad === 0 ? 1 : maximumLoad * 1.1]);
-      const averagePath = createLinePath(
-        projection.weeks.map(({ weekStart, fourWeekAverageLoad }) => ({
-          date: weekStart,
-          value: fourWeekAverageLoad,
-        })),
-        xScale,
-        loadScale,
-      );
-      const passiveLabels = annotations
-        .filter(
-          (annotation) =>
-            annotation.kind !== "adaptation" &&
-            annotationIsInRange(annotation, rangeFrom, rangeTo),
-        )
-        .map(({ label }) => label);
-      const description = `Weekly volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}.${
-        rampTrend ? ` Week-over-week distance: ${rampTrend.label}.` : ""
-      } Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.${passiveLabels.length ? ` Passive annotations: ${passiveLabels.join(", ")}.` : ""}`;
+      const description = `Weekly Volume and Training Load. Current: ${volumeCurrent} km distance; Training Load ${loadCurrent}. Direction: Neutral direction. Coverage: ${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load.`;
       const hoveredWeek = projection.weeks.find(
         ({ weekStart }) => weekStart === hoverWeek,
       );
@@ -720,7 +671,7 @@ function VolumeLoadChart({
             aria-labelledby="volume-load-title volume-load-description"
           >
             <title id="volume-load-title">
-              Weekly volume and Training Load
+              Weekly Volume and Training Load
             </title>
             <desc id="volume-load-description">{description}</desc>
             <g data-chart-grid aria-hidden="true">
@@ -735,8 +686,9 @@ function VolumeLoadChart({
                       <text
                         data-chart-y-label
                         className="chart-axis-label"
-                        x={CHART_PLOT.left + 4}
+                        x={CHART_PLOT.left - 8}
                         y={y - 5}
+                        textAnchor="end"
                       >
                         {tick}
                       </text>
@@ -754,8 +706,9 @@ function VolumeLoadChart({
                       <text
                         data-chart-y-label
                         className="chart-axis-label"
-                        x={CHART_PLOT.left + 4}
+                        x={CHART_PLOT.left - 8}
                         y={y - 5}
+                        textAnchor="end"
                       >
                         {tick}
                       </text>
@@ -909,43 +862,6 @@ function VolumeLoadChart({
                   />
                 );
               })}
-              {averagePath && (
-                <>
-                  <path
-                    data-load-average-line
-                    d={averagePath}
-                    fill="none"
-                    stroke="var(--series-1)"
-                    strokeWidth="2"
-                    strokeDasharray="6 4"
-                    opacity="0.85"
-                  />
-                  {(() => {
-                    const lastAverage = projection.weeks.at(-1);
-                    const lastParsed = lastAverage
-                      ? parseChartDate(lastAverage.weekStart)
-                      : null;
-                    if (
-                      !lastAverage ||
-                      !lastParsed ||
-                      lastAverage.fourWeekAverageLoad === null
-                    ) {
-                      return null;
-                    }
-                    return (
-                      <text
-                        data-load-average-label
-                        className="chart-axis-label"
-                        x={xScale(lastParsed) + 26}
-                        y={loadScale(lastAverage.fourWeekAverageLoad) + 4}
-                        textAnchor="start"
-                      >
-                        4-wk avg
-                      </text>
-                    );
-                  })()}
-                </>
-              )}
             </g>
             <g data-chart-x-labels aria-hidden="true">
               {projection.weeks.map((week, index) => {
@@ -1013,36 +929,14 @@ function VolumeLoadChart({
   return (
     <ChartCard
       id="volume-load"
-      metric="Weekly volume + Training Load"
+      metric="Weekly Volume + Training Load"
       currentValue={projection.status === "unavailable" ? "—" : volumeCurrent}
       unit="km"
-      averageLabel={`Load ${loadCurrent}`}
-      averageBasis="latest week · sourced per Workout Result"
-      trendLabel={
-        projection.status === "unavailable" ? undefined : rampTrend?.label
-      }
-      trendGlyph={
-        projection.status === "unavailable" ? undefined : rampTrend?.glyph
-      }
-      directionHint="weekly km · training load · dashed = 4-wk avg load"
+      directionHint="weekly km · training load"
       readout={fixedReadout}
       plot={plot}
-      coverage={
-        projection.status === "unavailable"
-          ? "Training history unavailable"
-          : `${projection.coverage.availableLoads} of ${projection.coverage.results} Workout Results with available load`
-      }
-    >
-      <div className="chart-card__secondary-metrics" data-volume-summary>
-        <span>
-          Distance <strong data-volume-current>{volumeCurrent} km</strong>
-        </span>
-        <span>
-          Training Load <strong data-load-current>{loadCurrent}</strong>
-        </span>
-        <span>4-week average uses available loads only</span>
-      </div>
-    </ChartCard>
+      coverage=""
+    />
   );
 }
 
@@ -1125,7 +1019,6 @@ function PaceHeartRateChart({
           index,
         ]),
       );
-      const newestId = chronological.at(-1)?.workoutResultId ?? null;
       const opacityFor = (workoutResultId: string) => {
         if (chronological.length < 2) return 1;
         const rank = recencyRank.get(workoutResultId) ?? 0;
@@ -1157,7 +1050,7 @@ function PaceHeartRateChart({
             role="img"
             aria-labelledby="pace-heart-rate-title pace-heart-rate-description"
           >
-            <title id="pace-heart-rate-title">Pace versus heart rate</title>
+            <title id="pace-heart-rate-title">Pace versus Heart Rate</title>
             <desc id="pace-heart-rate-description">
               Derived from your runs. Current:{" "}
               {selected ? formatPace(selected.paceSecondsPerKm) : "—"}.
@@ -1177,8 +1070,9 @@ function PaceHeartRateChart({
                     <text
                       data-chart-y-label
                       className="chart-axis-label"
-                      x={CHART_PLOT.left + 4}
+                      x={CHART_PLOT.left - 8}
                       y={y - 5}
+                      textAnchor="end"
                     >
                       {tick}
                     </text>
@@ -1232,7 +1126,6 @@ function PaceHeartRateChart({
               {projection.points.map((point) => {
                 const x = xScale(point.paceSecondsPerKm);
                 const y = yScale(point.heartRateBpm);
-                const selectedPoint = selectedId === point.workoutResultId;
                 return (
                   <g
                     key={point.workoutResultId}
@@ -1261,29 +1154,6 @@ function PaceHeartRateChart({
                       fill="var(--paper)"
                       fillOpacity="0.001"
                     />
-                    {selectedPoint && (
-                      <circle
-                        data-pace-point-selection
-                        cx={x}
-                        cy={y}
-                        r="9"
-                        fill="none"
-                        stroke="var(--series-1)"
-                        strokeWidth="2"
-                      />
-                    )}
-                    {point.workoutResultId === newestId && !selectedPoint && (
-                      <circle
-                        data-pace-point-newest
-                        cx={x}
-                        cy={y}
-                        r="9"
-                        fill="none"
-                        stroke="var(--series-1)"
-                        strokeWidth="1.5"
-                        strokeDasharray="2 2"
-                      />
-                    )}
                     <circle
                       data-pace-point-visible
                       cx={x}
@@ -1356,7 +1226,7 @@ function PaceHeartRateChart({
   return (
     <ChartCard
       id="pace-heart-rate"
-      metric="Pace vs heart rate"
+      metric="Pace vs Heart Rate"
       currentValue={
         projection.status === "unavailable" || !selected
           ? "—"
@@ -1371,12 +1241,7 @@ function PaceHeartRateChart({
         </>
       }
       plot={plot}
-      coverage={
-        projection.status === "unavailable"
-          ? "Run comparison data unavailable"
-          : `${projection.points.length} eligible Outdoor Run pairs${projection.excludedOutdoorRuns ? ` · ${projection.excludedOutdoorRuns} missing a measure` : ""}`
-      }
-      source="Derived from your runs"
+      coverage=""
     />
   );
 }
@@ -1487,7 +1352,7 @@ export function TrendsPane({
           points={restingHeartRate.points}
           annotations={annotations}
           status={restingHeartRate.status}
-          metric="Resting heart rate"
+          metric="Resting Heart Rate"
           unit="bpm"
           chartId="resting-heart-rate"
           seriesId="resting-heart-rate"
