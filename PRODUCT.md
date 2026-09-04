@@ -40,7 +40,7 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 - Six WebMCP fallback tools: `get_coaching_briefing`, `get_training_plan`, `get_workout_context`, `record_athlete_feedback`, `open_workout_adaptation_review`, `read_workout_adaptation_decision`. The entry briefing's structured interaction contract carries the workflow so a fresh generic Agent can coach correctly; downstream descriptions remain operation-specific.
 - Domain invariants live in `src/domain/`; one application-owned state serves both React and WebMCP (`src/application/`); adapters own persistence and WebMCP mechanics without coaching judgment.
 - The ubiquitous language in [CONTEXT.md](CONTEXT.md) is binding for UI copy and specifications (e.g. "Shared Coaching Workspace", never "dashboard" in product copy; "Athlete", never "user").
-- The product does not connect to COROS yet, does not diagnose injury, does not generate a complete training season, and has no multi-user or authenticated persistence. Real COROS sync is a roadmap Stage 2 concern.
+- The product does not connect to COROS yet, does not diagnose injury, does not generate a complete training season, and has no multi-user or authenticated persistence. Real-data integration is tracked in [Integrate real COROS data into the coaching workspace](https://github.com/crong12/your-last-coach/issues/108).
 
 ## Brand Commitments
 
@@ -61,4 +61,4 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 2. **Approval gates every mutation** — proposals preview; only explicit Athlete approval changes the Training Plan.
 3. **Evidence with provenance** — every Coach Recommendation traces to time-stamped, provenance-labelled Coaching Evidence.
 4. **The domain language is the interface language** — CONTEXT.md terms appear verbatim in UI copy and specs.
-5. **Design for the real product, render with the demo** — decisions target the COROS-fed roadmap dashboard; the deterministic fixture remains the rendering vehicle, and every visualization records its data prerequisite.
+5. **Design for the real product, render with the demo** — decisions target the future COROS-fed workspace; the deterministic fixture remains the current rendering vehicle. Real-data inputs must be verified before integration rather than inferred from the fixture.
