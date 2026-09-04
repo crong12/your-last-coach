@@ -937,7 +937,7 @@ function DemoGuide({
         : "Coach Agent unavailable";
   const connectionCopy =
     connection.status === "connected"
-      ? "The fallback review tools are ready in this browser."
+      ? "The adaptation review tools are ready in this browser."
       : connection.status === "error"
         ? "Reload this page and try again. Your Training Plan was not changed."
         : "Coach Agent tools aren’t available in this browser. You can still explore the workspace.";
@@ -2663,7 +2663,7 @@ export function AdaptationScreen({
 
   useEffect(() => {
     if (pending && coordinatorState.status === "idle") {
-      coordinator.open(pending.proposal, pending.delivery);
+      coordinator.open(pending.proposal);
     }
   }, [coordinator, coordinatorState.status, pending]);
 

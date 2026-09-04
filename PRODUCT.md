@@ -37,7 +37,7 @@ The Athlete and the Coach Agent share one authoritative workspace state rather t
 
 ## Capabilities and Constraints
 
-- Six WebMCP fallback tools: `get_coaching_briefing`, `get_training_plan`, `get_workout_context`, `record_athlete_feedback`, `open_workout_adaptation_review`, `read_workout_adaptation_decision`. The entry briefing's structured interaction contract carries the workflow so a fresh generic Agent can coach correctly; downstream descriptions remain operation-specific.
+- Six WebMCP tools: `get_coaching_briefing`, `get_training_plan`, `get_workout_context`, `record_athlete_feedback`, `open_workout_adaptation_review`, `read_workout_adaptation_decision`. The entry briefing's structured interaction contract carries the workflow so a fresh generic Agent can coach correctly; downstream descriptions remain operation-specific.
 - Domain invariants live in `src/domain/`; one application-owned state serves both React and WebMCP (`src/application/`); adapters own persistence and WebMCP mechanics without coaching judgment.
 - The ubiquitous language in [CONTEXT.md](CONTEXT.md) is binding for UI copy and specifications (e.g. "Shared Coaching Workspace", never "dashboard" in product copy; "Athlete", never "user").
 - The product does not connect to COROS yet, does not diagnose injury, does not generate a complete training season, and has no multi-user or authenticated persistence. Real-data integration is tracked in [Integrate real COROS data into the coaching workspace](https://github.com/crong12/your-last-coach/issues/108).

@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("serves the built fallback workspace without external runtime requests", async ({
+test("serves the built workspace without external runtime requests", async ({
   page,
 }) => {
   const externalRequests = new Set<string>();

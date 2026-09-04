@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function installFallbackHarness(page: Page) {
+async function installWebMcpHarness(page: Page) {
   await page.addInitScript(() => {
     const registrations: Array<{
       tool: {
@@ -20,7 +20,7 @@ async function installFallbackHarness(page: Page) {
     }> = [];
     Object.defineProperty(window, "__webMcpHarness", {
       configurable: true,
-      value: { registrations, reviewMode: "fallback" },
+      value: { registrations },
     });
     Object.defineProperty(document, "modelContext", {
       configurable: true,
@@ -115,7 +115,7 @@ async function openReviewFromAgent(
     const tool = registrations.find(
       ({ tool }) => tool.name === "open_workout_adaptation_review",
     )?.tool;
-    if (!tool) throw new Error("Fallback review tool was not registered");
+    if (!tool) throw new Error("Adaptation review tool was not registered");
     return tool.execute(input, { signal: new AbortController().signal });
   }, proposal);
 }
@@ -266,7 +266,7 @@ test("keeps the full-page Plan Approval route while omitting its pending Coachin
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.goto("/#coaching");
 
   await expect(openReviewFromAgent(page)).resolves.toMatchObject({
@@ -304,7 +304,7 @@ test("opens an approved receipt from Adaptation History and survives reload @con
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.goto("/#coaching");
   await openReviewFromAgent(page);
   await approveRecommendation(page);
@@ -347,7 +347,7 @@ test("opens an approved receipt from Adaptation History and survives reload @con
 test("focuses an approved adaptation whose review ID contains punctuation @contract", async ({
   page,
 }) => {
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.goto("/#coaching");
   const proposal = approvedReceiptProposal();
   proposal.reviewId = "review:rest-of-week:2026-08-26";
@@ -365,7 +365,7 @@ test("keeps the desktop adaptation action bar readable @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.goto("/#coaching");
   await openReviewFromAgent(page);
 
@@ -389,7 +389,7 @@ test("keeps the desktop adaptation action bar readable @contract", async ({
 test("keeps unsupported receipt evidence literal in the complete record @contract", async ({
   page,
 }) => {
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.goto("/#coaching");
   const proposal = approvedReceiptProposal();
   proposal.evidenceRefs = ["planned-workout:planned-2026-08-26-threshold"];
@@ -404,7 +404,7 @@ test("keeps unsupported receipt evidence literal in the complete record @contrac
     envelope.state.adaptationReceipts[0].evidenceRefs.push(
       "evidence:unverified-source",
     );
-    delete envelope.undeliveredFallbackResult;
+    delete envelope.undeliveredReviewResult;
     window.localStorage.setItem(key, JSON.stringify(envelope));
   });
   await page.reload();

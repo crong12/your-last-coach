@@ -202,18 +202,18 @@ async function setup() {
 describe("Workout Adaptation review coordinator", () => {
   afterEach(() => vi.useRealTimers());
 
-  it("persists one fallback timeout after five minutes without mutating the plan", async () => {
+  it("persists one review timeout after five minutes without mutating the plan", async () => {
     vi.useFakeTimers();
     const { application } = await setup();
     const coordinator = createReviewCoordinator({ application });
     const before = application.getState();
 
-    coordinator.open(acceptedProposal(), "fallback");
+    coordinator.open(acceptedProposal());
     await vi.advanceTimersByTimeAsync(300_000);
 
     expect(coordinator.getState()).toEqual({ status: "idle" });
     await expect(
-      application.readFallbackResult("review:rest-of-week:2026-08-26"),
+      application.readReviewResult("review:rest-of-week:2026-08-26"),
     ).resolves.toEqual({
       status: "cancelled",
       reviewId: "review:rest-of-week:2026-08-26",
@@ -223,11 +223,12 @@ describe("Workout Adaptation review coordinator", () => {
   });
 
   it("rejects stale UI actions from an earlier review generation", async () => {
-    const { coordinator } = await setup();
+    const { application, coordinator } = await setup();
     coordinator.open(acceptedProposal());
     const first = coordinator.getState();
     if (first.status !== "reviewing") throw new Error("Expected review");
     await coordinator.dismiss("athlete_dismissed", first.generation);
+    await application.readReviewResult(acceptedProposal().reviewId);
     coordinator.open(acceptedProposal());
 
     expect(
@@ -244,7 +245,7 @@ describe("Workout Adaptation review coordinator", () => {
     expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
   });
 
-  it("settles in memory when fallback cancellation persistence rejects", async () => {
+  it("settles in memory when review cancellation persistence rejects", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const application = createWorkspaceApplication({
       initialState: await fixtureSource.loadContext(),
@@ -260,42 +261,22 @@ describe("Workout Adaptation review coordinator", () => {
       },
     });
     const coordinator = createReviewCoordinator({ application });
-    coordinator.open(acceptedProposal(), "fallback");
+    coordinator.open(acceptedProposal());
 
     await expect(coordinator.discussFurther()).resolves.toEqual({
       status: "discuss_further",
       reviewId: "review:rest-of-week:2026-08-26",
     });
     expect(coordinator.getState()).toEqual({ status: "idle" });
-    expect(application.hasUndeliveredFallbackResult()).toBe(true);
+    expect(application.hasUndeliveredReviewResult()).toBe(true);
   });
 
-  it("disposes an active primary waiter once and clears its timeout", async () => {
-    vi.useFakeTimers();
-    const { application } = await setup();
-    const coordinator = createReviewCoordinator({ application });
-    coordinator.open(acceptedProposal());
-    const pending = coordinator.waitForSettlement(
-      "review:rest-of-week:2026-08-26",
-    );
-
-    coordinator.dispose();
-    coordinator.dispose();
-
-    await expect(pending).resolves.toMatchObject({
-      status: "cancelled",
-      reason: "teardown",
-    });
-    await vi.advanceTimersByTimeAsync(300_000);
-    expect(coordinator.getState()).toEqual({ status: "idle" });
-  });
-
-  it("lets the first fallback cancellation win across abort, teardown, and timeout", async () => {
+  it("lets the first review cancellation win across abort, teardown, and timeout", async () => {
     vi.useFakeTimers();
     const { application, saved } = await setup();
     const coordinator = createReviewCoordinator({ application });
     const controller = new AbortController();
-    coordinator.open(acceptedProposal(), "fallback", controller.signal);
+    coordinator.open(acceptedProposal(), controller.signal);
 
     controller.abort();
     coordinator.dispose();
@@ -304,7 +285,7 @@ describe("Workout Adaptation review coordinator", () => {
 
     expect(saved).toHaveLength(1);
     await expect(
-      application.readFallbackResult("review:rest-of-week:2026-08-26"),
+      application.readReviewResult("review:rest-of-week:2026-08-26"),
     ).resolves.toEqual({
       status: "cancelled",
       reviewId: "review:rest-of-week:2026-08-26",
@@ -312,18 +293,14 @@ describe("Workout Adaptation review coordinator", () => {
     });
   });
 
-  it("keeps fallback pending when the host aborts after durable publication", async () => {
+  it("keeps review pending when the host aborts after durable publication", async () => {
     const { application } = await setup();
     const coordinator = createReviewCoordinator({ application });
     const controller = new AbortController();
     const cancelPlanReview = vi.spyOn(application, "cancelPlanReview");
 
     await expect(
-      coordinator.openAndPersist(
-        acceptedProposal(),
-        "fallback",
-        controller.signal,
-      ),
+      coordinator.openAndPersist(acceptedProposal(), controller.signal),
     ).resolves.toMatchObject({ status: "review_opened" });
     controller.abort();
     await Promise.resolve();
@@ -332,17 +309,28 @@ describe("Workout Adaptation review coordinator", () => {
     expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
     expect(application.getPendingAdaptationProposal()).toMatchObject({
       proposal: { reviewId: acceptedProposal().reviewId },
-      delivery: "fallback",
     });
   });
 
   it("idempotently reopens the same active review", async () => {
     const { coordinator } = await setup();
-    const first = coordinator.open(acceptedProposal(), "fallback");
+    const first = coordinator.open(acceptedProposal());
 
     expect(first).toMatchObject({ status: "review_opened" });
-    expect(coordinator.open(acceptedProposal(), "fallback")).toEqual(first);
+    expect(coordinator.open(acceptedProposal())).toEqual(first);
     expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
+  });
+
+  it("returns an applied review outcome after its pending result is read", async () => {
+    const { application, coordinator } = await setup();
+    const proposal = acceptedProposal();
+    coordinator.open(proposal);
+    coordinator.select("recovery-first");
+    const approved = await coordinator.approve();
+    await application.readReviewResult(proposal.reviewId);
+
+    expect(coordinator.open(proposal)).toEqual(approved);
+    expect(coordinator.getState()).toEqual({ status: "idle" });
   });
 
   it("requires a selection, then approves and settles with the structured application result", async () => {
@@ -355,9 +343,6 @@ describe("Workout Adaptation review coordinator", () => {
     });
     expect(application.getState().trainingPlan.planVersion).toBe(1);
     coordinator.select("recovery-first");
-    const settlement = coordinator.waitForSettlement(
-      "review:rest-of-week:2026-08-26",
-    );
 
     const approved = await coordinator.approve();
 
@@ -368,21 +353,9 @@ describe("Workout Adaptation review coordinator", () => {
       planVersionAfter: 2,
       durability: "persistent",
     });
-    await expect(settlement).resolves.toEqual(approved);
     expect(coordinator.getState()).toEqual({ status: "idle" });
     expect(application.getState().trainingPlan.planVersion).toBe(2);
     expect(saved).toHaveLength(1);
-  });
-
-  it("returns an applied review outcome without reopening the modal", async () => {
-    const { coordinator } = await setup();
-    const proposal = acceptedProposal();
-    coordinator.open(proposal);
-    coordinator.select("recovery-first");
-    const first = await coordinator.approve();
-
-    expect(coordinator.open(proposal)).toEqual(first);
-    expect(coordinator.getState()).toEqual({ status: "idle" });
   });
 
   it("opens the accepted proposal and previews both exact fixture options without mutation", async () => {
@@ -569,7 +542,7 @@ describe("Workout Adaptation review coordinator", () => {
   });
 
   it("returns busy and settles discussion, dismissal, and reset without authoritative mutation", async () => {
-    const { application, coordinator, fixtureSource, saved } = await setup();
+    const { application, coordinator, fixtureSource } = await setup();
     const before = structuredClone(application.getState());
     coordinator.open(acceptedProposal());
 
@@ -590,6 +563,7 @@ describe("Workout Adaptation review coordinator", () => {
       reviewId: "review:rest-of-week:2026-08-26",
     });
     expect(application.getState()).toEqual(before);
+    await application.readReviewResult(acceptedProposal().reviewId);
 
     coordinator.open(acceptedProposal());
     await expect(coordinator.dismiss("athlete_dismissed")).resolves.toEqual({
@@ -598,6 +572,7 @@ describe("Workout Adaptation review coordinator", () => {
       reason: "athlete_dismissed",
     });
     expect(application.getState()).toEqual(before);
+    await application.readReviewResult(acceptedProposal().reviewId);
 
     coordinator.open(acceptedProposal());
     const reset = coordinator.reset();
@@ -607,7 +582,6 @@ describe("Workout Adaptation review coordinator", () => {
     });
     await application.command({ type: "reset_demo" });
     expect(application.getState()).toEqual(await fixtureSource.loadContext());
-    expect(saved).toHaveLength(0);
   });
 });
 

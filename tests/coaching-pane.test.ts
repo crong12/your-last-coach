@@ -36,7 +36,7 @@ describe("CoachingPane notebook", () => {
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     const application = await createFixtureApplication();
-    await application.openPlanReview(acceptedProposal(), "fallback");
+    await application.openPlanReview(acceptedProposal());
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);

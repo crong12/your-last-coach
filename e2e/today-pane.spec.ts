@@ -65,7 +65,7 @@ function pendingProposal() {
   };
 }
 
-async function installFallbackHarness(page: Page) {
+async function installWebMcpHarness(page: Page) {
   await page.addInitScript(() => {
     const registrations: Array<{
       tool: {
@@ -91,7 +91,7 @@ async function installFallbackHarness(page: Page) {
   });
 }
 
-async function runFallbackTool(
+async function runReviewTool(
   page: Page,
   proposal: ReturnType<typeof pendingProposal>,
 ) {
@@ -115,7 +115,7 @@ async function runFallbackTool(
       ({ tool: registered }) =>
         registered.name === "open_workout_adaptation_review",
     )?.tool;
-    if (!tool) throw new Error("Fallback review tool was not registered");
+    if (!tool) throw new Error("Adaptation review tool was not registered");
     return tool.execute(reviewProposal, {
       signal: new AbortController().signal,
     });
@@ -232,11 +232,11 @@ test("contains the Today 5+2 layout at 360px without nested horizontal scrolling
 test("reopens the pending proposal from the Overview signal @contract", async ({
   page,
 }) => {
-  await installFallbackHarness(page);
+  await installWebMcpHarness(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#today");
 
-  await runFallbackTool(page, pendingProposal());
+  await runReviewTool(page, pendingProposal());
   await page
     .getByRole("main", { name: "Workout Adaptation review" })
     .getByRole("button", { name: "Back to Overview" })
