@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
-import type {
-  PlannedWorkout,
-  ReadinessHistoryRecord,
-  WorkspaceState,
-} from "../../domain/types";
+import type { PlannedWorkout, WorkspaceState } from "../../domain/types";
 import {
   deriveChartAnnotations,
   projectPaceHeartRate,
   projectReadinessSeries,
   projectWeeklyVolumeLoad,
   resolveTrendsRange,
-  type PaceHeartRatePoint,
   type TrendsRange,
   type WeeklyVolumeLoadProjection,
 } from "../../application/trends";

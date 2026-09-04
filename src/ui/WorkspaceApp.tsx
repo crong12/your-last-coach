@@ -45,9 +45,7 @@ import {
 } from "../application/createPaneNavigation";
 import type {
   AppliedPlanAdaptation,
-  AthleteFeedback,
   DeclinedPlanAdaptation,
-  PendingAdaptationProposal,
   PlannedWorkout,
   WorkoutResult,
   WorkspaceState,
@@ -59,7 +57,6 @@ import {
   type ReviewPreviewRow,
 } from "../domain/review";
 import { useModalFocus } from "./useModalFocus";
-import { HrvChart } from "./charts/HrvChart";
 import { BrandMark } from "./BrandMark";
 import { ResultDetailChart } from "./charts/ResultDetailChart";
 import { normalizeResultLaps } from "./charts/resultDetailMath";
@@ -1054,81 +1051,16 @@ function DemoGuide({
   );
 }
 
-type CoachingTimelineLink = {
-  entryId: string;
-  direction: "causal" | "related";
-};
-
-type CoachingTimelineEntry =
-  | {
-      kind: "feedback";
-      id: string;
-      timestamp: string;
-      feedback: AthleteFeedback;
-      relatedEntries: CoachingTimelineLink[];
-    }
-  | {
-      kind: "workout-result";
-      id: string;
-      timestamp: string;
-      result: WorkoutResult;
-      workout: PlannedWorkout | null;
-      relatedEntries: CoachingTimelineLink[];
-    }
-  | {
-      kind: "approved-adaptation";
-      id: string;
-      timestamp: string;
-      receipt: AppliedPlanAdaptation;
-      relatedEntries: CoachingTimelineLink[];
-    }
-  | {
-      kind: "declined-adaptation";
-      id: string;
-      timestamp: string;
-      decision: DeclinedPlanAdaptation;
-      relatedEntries: CoachingTimelineLink[];
-    };
-
 const coachingEntryId = (
-  kind: CoachingTimelineEntry["kind"],
+  kind: "approved-adaptation" | "declined-adaptation",
   sourceId: string,
 ) => {
-  const prefix =
-    kind === "feedback"
-      ? "athlete-feedback"
-      : kind === "workout-result"
-        ? "workout-result"
-        : kind === "approved-adaptation"
-          ? "approved-adaptation"
-          : "declined-adaptation";
   const normalizedSourceId = sourceId
     .replace(/^(athlete-feedback:|result-|review:)/, "")
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "");
-  return `coaching-entry-${prefix}-${normalizedSourceId}`;
+  return `coaching-entry-${kind}-${normalizedSourceId}`;
 };
-
-function timelineTimestamp(value: string) {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-}
-
-function workoutResultForFeedback(
-  feedback: AthleteFeedback,
-  results: WorkoutResult[],
-) {
-  if (feedback.relatedWorkoutResultId !== undefined) {
-    return (
-      results.find(({ id }) => id === feedback.relatedWorkoutResultId) ?? null
-    );
-  }
-  return (
-    results.find(
-      ({ plannedWorkoutId }) => plannedWorkoutId === feedback.relatedWorkoutId,
-    ) ?? null
-  );
-}
 
 function workoutResultForEvidenceRef(ref: string, context: AthleteContextData) {
   if (!ref.startsWith("workout-result:")) return null;
@@ -1175,445 +1107,6 @@ function sourceLabelForEvidenceRef(
   return observationLabels[ref] ?? `Evidence reference ${ref}`;
 }
 
-function projectCoachingTimeline(
-  context: AthleteContextData,
-  plannedWorkouts: PlannedWorkout[],
-  declinedAdaptations: DeclinedPlanAdaptation[] = [],
-): CoachingTimelineEntry[] {
-  const feedbackEntries = context.recentAthleteFeedback.map((feedback) => ({
-    kind: "feedback" as const,
-    id: coachingEntryId("feedback", feedback.id),
-    timestamp: feedback.recordedAt,
-    feedback,
-    relatedEntries: [] as CoachingTimelineLink[],
-  }));
-  const resultsById = new Map(
-    context.recentTraining.map((result) => [result.id, result]),
-  );
-  const referencedResultIds = new Set<string>();
-  for (const feedback of context.recentAthleteFeedback) {
-    const result = workoutResultForFeedback(feedback, context.recentTraining);
-    if (result) referencedResultIds.add(result.id);
-  }
-  for (const receipt of context.recentAdaptationHistory) {
-    for (const ref of receipt.evidenceRefs) {
-      const result = workoutResultForEvidenceRef(ref, context);
-      if (result) referencedResultIds.add(result.id);
-    }
-  }
-
-  const resultEntries = [...referencedResultIds]
-    .map((resultId) => resultsById.get(resultId))
-    .filter((result): result is WorkoutResult => result !== undefined)
-    .map((result) => ({
-      kind: "workout-result" as const,
-      id: coachingEntryId("workout-result", result.id),
-      timestamp: result.startedAt,
-      result,
-      workout:
-        plannedWorkouts.find(({ id }) => id === result.plannedWorkoutId) ??
-        null,
-      relatedEntries: [] as CoachingTimelineLink[],
-    }));
-  const adaptationEntries = context.recentAdaptationHistory.map((receipt) => ({
-    kind: "approved-adaptation" as const,
-    id: coachingEntryId("approved-adaptation", receipt.reviewId),
-    timestamp: receipt.appliedAt,
-    receipt,
-    relatedEntries: [] as CoachingTimelineLink[],
-  }));
-  const declinedEntries = declinedAdaptations.map((decision) => ({
-    kind: "declined-adaptation" as const,
-    id: coachingEntryId("declined-adaptation", decision.reviewId),
-    timestamp: decision.declinedAt,
-    decision,
-    relatedEntries: [] as CoachingTimelineLink[],
-  }));
-  const entries: CoachingTimelineEntry[] = [
-    ...feedbackEntries,
-    ...resultEntries,
-    ...adaptationEntries,
-    ...declinedEntries,
-  ];
-  const resultEntryById = new Map(
-    resultEntries.map((entry) => [entry.result.id, entry]),
-  );
-  const feedbackEntryById = new Map(
-    feedbackEntries.map((entry) => [entry.feedback.id, entry]),
-  );
-
-  const addThreadLink = (
-    entry: CoachingTimelineEntry,
-    relatedEntry: CoachingTimelineEntry,
-    direction: CoachingTimelineLink["direction"],
-  ) => {
-    if (
-      !entry.relatedEntries.some(({ entryId }) => entryId === relatedEntry.id)
-    ) {
-      entry.relatedEntries.push({ entryId: relatedEntry.id, direction });
-    }
-  };
-  const connectThread = (
-    dependent: CoachingTimelineEntry,
-    source: CoachingTimelineEntry,
-  ) => {
-    const direction =
-      timelineTimestamp(dependent.timestamp) >
-      timelineTimestamp(source.timestamp)
-        ? "causal"
-        : "related";
-    addThreadLink(dependent, source, direction);
-    addThreadLink(source, dependent, "related");
-  };
-
-  for (const feedbackEntry of feedbackEntries) {
-    const result = workoutResultForFeedback(
-      feedbackEntry.feedback,
-      context.recentTraining,
-    );
-    const resultEntry = result ? resultEntryById.get(result.id) : undefined;
-    if (resultEntry) {
-      connectThread(feedbackEntry, resultEntry);
-    }
-  }
-  for (const adaptationEntry of adaptationEntries) {
-    const { receipt } = adaptationEntry;
-    for (const ref of receipt.evidenceRefs) {
-      const result = workoutResultForEvidenceRef(ref, context);
-      const resultEntry = result ? resultEntryById.get(result.id) : undefined;
-      if (resultEntry) connectThread(adaptationEntry, resultEntry);
-      if (ref.startsWith("athlete-feedback:")) {
-        const feedbackId = ref.slice("athlete-feedback:".length);
-        const feedbackEntry = feedbackEntryById.get(feedbackId);
-        if (feedbackEntry) connectThread(adaptationEntry, feedbackEntry);
-      }
-    }
-  }
-  for (const declinedEntry of declinedEntries) {
-    for (const ref of declinedEntry.decision.evidenceRefs) {
-      const result = workoutResultForEvidenceRef(ref, context);
-      const resultEntry = result ? resultEntryById.get(result.id) : undefined;
-      if (resultEntry) connectThread(declinedEntry, resultEntry);
-      if (ref.startsWith("athlete-feedback:")) {
-        const feedbackId = ref.slice("athlete-feedback:".length);
-        const feedbackEntry = feedbackEntryById.get(feedbackId);
-        if (feedbackEntry) connectThread(declinedEntry, feedbackEntry);
-      }
-    }
-  }
-  return entries.sort(
-    (a, b) =>
-      timelineTimestamp(b.timestamp) - timelineTimestamp(a.timestamp) ||
-      timelineEntryPriority(a.kind) - timelineEntryPriority(b.kind) ||
-      a.id.localeCompare(b.id),
-  );
-}
-
-function timelineEntryPriority(kind: CoachingTimelineEntry["kind"]) {
-  if (kind === "approved-adaptation" || kind === "declined-adaptation") {
-    return -1;
-  }
-  if (kind === "workout-result") return 0;
-  return 1;
-}
-
-function timelineEntryLabel(kind: CoachingTimelineEntry["kind"]) {
-  if (kind === "feedback") return "Athlete Feedback";
-  if (kind === "workout-result") return "Workout Result";
-  if (kind === "approved-adaptation") return "Approved Adaptation";
-  return "Declined Adaptation";
-}
-
-function TimelineThreadLinks({
-  entry,
-  entries,
-}: {
-  entry: CoachingTimelineEntry;
-  entries: CoachingTimelineEntry[];
-}) {
-  if (entry.relatedEntries.length === 0) return null;
-  const relatedEntries = entry.relatedEntries
-    .map((link) => ({
-      ...link,
-      entry: entries.find((candidate) => candidate.id === link.entryId),
-    }))
-    .filter(
-      (
-        candidate,
-      ): candidate is CoachingTimelineLink & {
-        entry: CoachingTimelineEntry;
-      } => candidate.entry !== undefined,
-    );
-  if (relatedEntries.length === 0) return null;
-  return (
-    <nav
-      className="coaching-entry__threads"
-      aria-label="Related coaching entries"
-    >
-      {relatedEntries.map(({ entry: related, direction }) => (
-        <a
-          key={related.id}
-          href={`#${related.id}`}
-          onClick={(event) => {
-            event.preventDefault();
-            const target = document.getElementById(related.id);
-            target?.scrollIntoView({
-              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
-                .matches
-                ? "auto"
-                : "smooth",
-              block: "center",
-            });
-            target?.focus({ preventScroll: true });
-          }}
-        >
-          ↳ {threadLinkLabel(entry, related, direction)}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
-function threadLinkLabel(
-  entry: CoachingTimelineEntry,
-  related: CoachingTimelineEntry,
-  direction: CoachingTimelineLink["direction"],
-) {
-  if (direction === "related") {
-    return `Related ${timelineEntryLabel(related.kind)}`;
-  }
-  return entry.kind === "approved-adaptation" ||
-    entry.kind === "declined-adaptation"
-    ? `Based on ${timelineEntryLabel(related.kind)}`
-    : `In response to ${timelineEntryLabel(related.kind)}`;
-}
-
-function CoachingTimelineEntryView({
-  entry,
-  entries,
-  context,
-  plannedWorkouts,
-  onSelectWorkout,
-}: {
-  entry: CoachingTimelineEntry;
-  entries: CoachingTimelineEntry[];
-  context: AthleteContextData;
-  plannedWorkouts: PlannedWorkout[];
-  onSelectWorkout?: WorkoutSelect;
-}) {
-  const typeLabel = timelineEntryLabel(entry.kind);
-  return (
-    <li
-      id={entry.id}
-      className={`coaching-entry coaching-entry--${entry.kind}`}
-      tabIndex={-1}
-    >
-      <article className="coaching-entry__card">
-        <header className="coaching-entry__header">
-          <span className="coaching-entry__icon" aria-hidden="true">
-            {entry.kind === "feedback"
-              ? "“"
-              : entry.kind === "workout-result"
-                ? "⌁"
-                : entry.kind === "approved-adaptation"
-                  ? "↗"
-                  : "—"}
-          </span>
-          <span className="eyebrow">{typeLabel}</span>
-          <time dateTime={entry.timestamp}>
-            {formatDate(entry.timestamp.slice(0, 10))}
-          </time>
-        </header>
-        {entry.kind === "feedback" && (
-          <>
-            <blockquote>{entry.feedback.rawText}</blockquote>
-            {entry.feedback.reported && (
-              <dl className="feedback-reported">
-                {entry.feedback.reported.sessionRpe !== undefined && (
-                  <div>
-                    <dt>Effort</dt>
-                    <dd>{entry.feedback.reported.sessionRpe}/10 effort</dd>
-                  </div>
-                )}
-                {entry.feedback.reported.legFeel !== undefined && (
-                  <div>
-                    <dt>Legs</dt>
-                    <dd>{entry.feedback.reported.legFeel}</dd>
-                  </div>
-                )}
-                {entry.feedback.reported.painReported !== undefined && (
-                  <div>
-                    <dt>Pain</dt>
-                    <dd>
-                      {entry.feedback.reported.painReported
-                        ? "Pain reported"
-                        : "No pain reported"}
-                    </dd>
-                  </div>
-                )}
-                {entry.feedback.reported.stoppedReason !== undefined && (
-                  <div>
-                    <dt>Why you stopped</dt>
-                    <dd>{entry.feedback.reported.stoppedReason}</dd>
-                  </div>
-                )}
-              </dl>
-            )}
-          </>
-        )}
-        {entry.kind === "workout-result" && (
-          <>
-            <h3>{entry.workout?.title ?? "Recorded workout"}</h3>
-            <p className="coaching-entry__summary">
-              {formatClassification(entry.result.status)} ·{" "}
-              {entry.result.summary.completedWorkRepetitions !== undefined &&
-              entry.result.summary.plannedWorkRepetitions !== undefined
-                ? `${entry.result.summary.completedWorkRepetitions} of ${entry.result.summary.plannedWorkRepetitions} work repetitions · `
-                : ""}
-              {entry.result.summary.distanceKm} km
-            </p>
-            <p className="coaching-entry__provenance">
-              Based on:{" "}
-              {entry.workout
-                ? `${formatDate(entry.result.startedAt.slice(0, 10))} · ${entry.workout.title}`
-                : `Workout Result ${formatDate(entry.result.startedAt.slice(0, 10))}`}
-            </p>
-            {entry.workout && onSelectWorkout && (
-              <a
-                id={`coaching-view-workout-${entry.workout.id}`}
-                className="coaching-entry__workout-link"
-                href={workspaceRouteHash({
-                  kind: "workout",
-                  workoutId: entry.workout.id,
-                })}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onSelectWorkout(entry.workout!, event.currentTarget);
-                }}
-              >
-                View workout
-              </a>
-            )}
-          </>
-        )}
-        {entry.kind === "approved-adaptation" && (
-          <>
-            <h3>{entry.receipt.selectedOption.label}</h3>
-            <p className="coaching-entry__summary">approved by you</p>
-            <dl className="coaching-entry__facts">
-              <div>
-                <dt>Plan version</dt>
-                <dd>
-                  {entry.receipt.planVersionBefore} →{" "}
-                  {entry.receipt.planVersionAfter}
-                </dd>
-              </div>
-              <div>
-                <dt>Applied</dt>
-                <dd>{formatDate(entry.receipt.appliedAt.slice(0, 10))}</dd>
-              </div>
-              <div>
-                <dt>Workouts affected</dt>
-                <dd>{entry.receipt.affectedWorkouts.length}</dd>
-              </div>
-            </dl>
-            <p className="coaching-entry__provenance">
-              Based on:{" "}
-              {[
-                ...new Set(
-                  entry.receipt.evidenceRefs.map((ref) =>
-                    sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
-                  ),
-                ),
-              ].join(" · ") || "No linked Coaching Evidence available."}
-            </p>
-          </>
-        )}
-        {entry.kind === "declined-adaptation" && (
-          <>
-            <h3>{entry.decision.recommendation.label}</h3>
-            <p className="coaching-entry__summary">kept current plan</p>
-            <dl className="coaching-entry__facts">
-              <div>
-                <dt>Plan version</dt>
-                <dd>{entry.decision.planVersion}</dd>
-              </div>
-              <div>
-                <dt>Decision</dt>
-                <dd>{formatDate(entry.decision.declinedAt.slice(0, 10))}</dd>
-              </div>
-            </dl>
-            <p className="coaching-entry__provenance">
-              Based on:{" "}
-              {[
-                ...new Set(
-                  entry.decision.evidenceRefs.map((ref) =>
-                    sourceLabelForEvidenceRef(ref, context, plannedWorkouts),
-                  ),
-                ),
-              ].join(" · ") || "No linked Coaching Evidence available."}
-            </p>
-          </>
-        )}
-        <TimelineThreadLinks entry={entry} entries={entries} />
-      </article>
-    </li>
-  );
-}
-
-function AthleteProfileSummary({ context }: { context: AthleteContextData }) {
-  const { profile } = context.athlete;
-  return (
-    <section className="profile-card" aria-labelledby="profile-title">
-      <div className="section-heading section-heading--small">
-        <div>
-          <span className="eyebrow">Shared profile</span>
-          <h2 id="profile-title">Athlete Profile</h2>
-        </div>
-        <strong className="profile-name">{context.athlete.displayName}</strong>
-      </div>
-      <dl className="profile-list">
-        <div>
-          <dt>Target Race</dt>
-          <dd>
-            {context.targetRace.name} · {formatDate(context.targetRace.date)}
-          </dd>
-        </div>
-        <div>
-          <dt>Objective</dt>
-          <dd>{formatObjective(context.targetRace.objectiveSeconds)}</dd>
-        </div>
-        <div>
-          <dt>Availability</dt>
-          <dd>
-            {profile.preferredLongRunDay.value} long run · up to{" "}
-            {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
-            weekdays
-          </dd>
-        </div>
-        <div>
-          <dt>Constraints</dt>
-          <dd>
-            Weekday sessions capped at{" "}
-            {profile.maximumWeekdayTrainingDurationMinutes.value} minutes
-          </dd>
-        </div>
-        <div>
-          <dt>Performance context</dt>
-          <dd>
-            {profile.normalWeeklyVolumeKm.value.min}–
-            {profile.normalWeeklyVolumeKm.value.max} km weekly ·{" "}
-            {formatObjective(profile.recentHalfMarathonSeconds.value)}{" "}
-            half-marathon ·{" "}
-            {formatPaceSeconds(profile.thresholdPaceSecondsPerKm.value)}/km
-            threshold
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
 function evidenceSummary(
   evidenceRefs: string[],
   context: AthleteContextData,
@@ -1623,142 +1116,6 @@ function evidenceSummary(
     [...new Set(evidenceRefs)]
       .map((ref) => sourceLabelForEvidenceRef(ref, context, plannedWorkouts))
       .join(" · ") || "No linked Coaching Evidence available."
-  );
-}
-
-function PendingAdaptationCard({
-  pending,
-  context,
-  plannedWorkouts,
-  onReview,
-}: {
-  pending: PendingAdaptationProposal;
-  context: AthleteContextData;
-  plannedWorkouts: PlannedWorkout[];
-  onReview: (reviewId: string, invoker: HTMLButtonElement) => void;
-}) {
-  return (
-    <section
-      className="coaching-review-card"
-      aria-labelledby="coaching-review-card-title"
-    >
-      <header className="coaching-review-card__header">
-        <span className="eyebrow">
-          <span className="attention-dot" aria-hidden="true" />
-          Awaiting your review
-        </span>
-        <time dateTime={pending.openedAt}>
-          Opened {formatClock(pending.openedAt, "Europe/London")}
-        </time>
-      </header>
-      <h3 id="coaching-review-card-title">
-        {pending.proposal.recommended.label}
-      </h3>
-      <p>{pending.proposal.rationale.summary}</p>
-      <p className="coaching-review-card__provenance">
-        Based on:{" "}
-        {evidenceSummary(
-          pending.proposal.evidenceRefs,
-          context,
-          plannedWorkouts,
-        )}
-      </p>
-      <button
-        id="coaching-review-card"
-        className="button button--primary"
-        type="button"
-        onClick={(event) =>
-          onReview(pending.proposal.reviewId, event.currentTarget)
-        }
-      >
-        Review proposal
-      </button>
-    </section>
-  );
-}
-
-function MonitoringCard({ context }: { context: AthleteContextData }) {
-  if (context.activeCoachingTopics.length === 0) return null;
-  return (
-    <section className="monitoring-card" aria-labelledby="monitoring-title">
-      <div className="section-heading section-heading--small">
-        <div>
-          <span className="eyebrow">Longitudinal context</span>
-          <h2 id="monitoring-title">Monitoring</h2>
-        </div>
-      </div>
-      <div className="monitoring-topics">
-        {context.activeCoachingTopics.map((topic) => (
-          <article className="monitoring-topic" key={topic.id}>
-            <span className="monitoring-status">
-              {formatClassification(topic.status)}
-            </span>
-            <h3>{topic.title}</h3>
-            <blockquote>{topic.athleteReport}</blockquote>
-            <dl className="monitoring-meta">
-              <div>
-                <dt>Recorded</dt>
-                <dd>
-                  <time dateTime={topic.latestReportedAt}>
-                    {formatDate(topic.latestReportedAt.slice(0, 10))}
-                  </time>
-                </dd>
-              </div>
-              <div>
-                <dt>Follow-up</dt>
-                <dd>{topic.followUpCondition}</dd>
-              </div>
-            </dl>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RecentTrainingCard({
-  context,
-  plannedWorkouts,
-}: {
-  context: AthleteContextData;
-  plannedWorkouts: PlannedWorkout[];
-}) {
-  const priorWeekDistanceKm = context.recentTraining
-    .filter(({ startedAt }) => {
-      const date = startedAt.slice(0, 10);
-      return date >= "2026-08-18" && date <= "2026-08-23";
-    })
-    .reduce((total, result) => total + result.summary.distanceKm, 0);
-  return (
-    <section className="recent-training-card">
-      <div className="section-heading section-heading--small">
-        <div>
-          <span className="eyebrow">Synthetic observation history</span>
-          <h2>Recent training</h2>
-        </div>
-      </div>
-      <p className="recent-training-summary">
-        {priorWeekDistanceKm} km from 18–23 August
-      </p>
-      <ol className="recent-training-list">
-        {context.recentTraining.map((result) => {
-          const date = result.startedAt.slice(0, 10);
-          const workout = plannedWorkouts.find(
-            ({ id }) => id === result.plannedWorkoutId,
-          );
-          return (
-            <li key={result.id}>
-              <time dateTime={date}>{formatShortDate(date)}</time>
-              <span>{workout?.title ?? "Recorded workout"}</span>
-              <strong>
-                {result.summary.distanceKm} km
-                {result.status === "partial" ? " · partial" : ""}
-              </strong>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
   );
 }
 
@@ -2141,11 +1498,8 @@ export function CoachingPane({
 }: {
   context: AthleteContextData;
   plannedWorkouts: PlannedWorkout[];
-  pending?: PendingAdaptationProposal | null;
-  declinedAdaptations?: DeclinedPlanAdaptation[];
   onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
-  onViewAdaptation?: (reviewId: string) => void;
   reviews?: CoachingNotebookReview[];
   seededAdaptations?: SeededAdaptationHistoryEntry[];
 }) {
@@ -2187,8 +1541,6 @@ function ContextRail({
   context,
   plannedWorkouts,
   surface,
-  pending,
-  declinedAdaptations,
   onReview,
   onSelectWorkout,
   onViewAdaptation,
@@ -2201,8 +1553,6 @@ function ContextRail({
   surface: PaneId;
   trendsRange?: TrendsRange;
   onTrendsRangeChange?: (range: TrendsRange) => void;
-  pending?: PendingAdaptationProposal | null;
-  declinedAdaptations?: DeclinedPlanAdaptation[];
   onReview?: (reviewId: string, invoker: HTMLElement) => void;
   onSelectWorkout?: WorkoutSelect;
   onViewAdaptation?: (adaptationId: string) => void;
@@ -2214,11 +1564,8 @@ function ContextRail({
       <CoachingPane
         context={context}
         plannedWorkouts={plannedWorkouts}
-        pending={pending}
-        declinedAdaptations={declinedAdaptations}
         onReview={onReview}
         onSelectWorkout={onSelectWorkout}
-        onViewAdaptation={onViewAdaptation}
       />
     );
   }
@@ -3774,8 +3121,6 @@ export function WorkspaceApp({
                   context={athleteContext.data}
                   plannedWorkouts={month.plannedWorkouts}
                   surface="coaching"
-                  pending={state.pendingAdaptationProposal}
-                  declinedAdaptations={state.declinedAdaptations}
                   onReview={openAdaptationRoute}
                   onSelectWorkout={openWorkout}
                 />

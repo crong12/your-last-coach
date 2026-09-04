@@ -18,7 +18,6 @@ import type {
 import {
   validateAdaptationOption,
   collectWorkspaceEvidenceRefs,
-  validatePendingAdaptationProposal,
   validateReviewProposal,
   type AdaptationOption,
   type ReviewProposal,

@@ -8,7 +8,6 @@ import { createWorkspaceApplication } from "../src/application/createWorkspaceAp
 import type { WorkspaceRepository } from "../src/application/ports";
 import { createDemoCoachingContextSource } from "../src/demo/demoCoachingContextSource";
 import { CoachingPane } from "../src/ui/WorkspaceApp";
-import { acceptedProposal } from "./review-coordinator.test";
 
 async function createFixtureApplication() {
   const fixtureSource = createDemoCoachingContextSource();
@@ -36,7 +35,6 @@ describe("CoachingPane notebook", () => {
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
     const application = await createFixtureApplication();
-    await application.openPlanReview(acceptedProposal());
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -47,7 +45,6 @@ describe("CoachingPane notebook", () => {
         createElement(CoachingPane, {
           context: context.data,
           plannedWorkouts: application.getState().trainingPlan.plannedWorkouts,
-          pending: application.getState().pendingAdaptationProposal,
           onReview: () => {},
         }),
       );
@@ -97,8 +94,6 @@ describe("CoachingPane notebook", () => {
     expect(container.textContent).not.toContain("Coaching timeline");
     expect(container.textContent).not.toContain("Recent training");
     expect(container.textContent).not.toContain("Athlete Profile");
-    expect(container.textContent).not.toContain("Awaiting your review");
-    expect(container.querySelector("#coaching-review-card")).toBeNull();
 
     await act(async () => root.unmount());
     container.remove();
