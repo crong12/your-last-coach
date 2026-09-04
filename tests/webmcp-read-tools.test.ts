@@ -194,29 +194,21 @@ describe("WebMCP coaching tools", () => {
     ).resolves.toMatchObject({ status: "ok", data: { planVersion: 2 } });
   });
 
-  it("keeps primary and fallback review registrations mutually exclusive", async () => {
-    for (const mode of ["primary", "fallback"] as const) {
-      const application = await createApplication();
-      const coordinator = createReviewCoordinator({ application });
-      const { host, registrations } = createRecordingHost();
+  it("registers the non-blocking adaptation review tools", async () => {
+    const application = await createApplication();
+    const coordinator = createReviewCoordinator({ application });
+    const { host, registrations } = createRecordingHost();
 
-      const registration = await registerWebMcpTools(host, application, {
-        reviewMode: mode,
-        reviewCoordinator: coordinator,
-      });
-      const names = registrations.map(({ tool }) => tool.name);
+    const registration = await registerWebMcpTools(host, application, {
+      reviewMode: "fallback",
+      reviewCoordinator: coordinator,
+    });
+    const names = registrations.map(({ tool }) => tool.name);
 
-      expect(names.includes("review_workout_adaptation")).toBe(
-        mode === "primary",
-      );
-      expect(names.includes("open_workout_adaptation_review")).toBe(
-        mode === "fallback",
-      );
-      expect(names.includes("read_workout_adaptation_decision")).toBe(
-        mode === "fallback",
-      );
-      expect(registration.toolNames).toEqual(names);
-    }
+    expect(names).not.toContain("review_workout_adaptation");
+    expect(names).toContain("open_workout_adaptation_review");
+    expect(names).toContain("read_workout_adaptation_decision");
+    expect(registration.toolNames).toEqual(names);
   });
 
   it("teaches the fallback tools the six-step coaching lifecycle", async () => {
@@ -757,81 +749,6 @@ describe("WebMCP coaching tools", () => {
         status: "approved",
         reviewId: "review:webmcp",
       },
-    });
-  });
-
-  it("keeps an accepted primary call pending through selection and settles discussion", async () => {
-    const application = await createApplication();
-    const coordinator = createReviewCoordinator({ application });
-    const { host, registrations } = createRecordingHost();
-    await registerWebMcpTools(host, application, {
-      reviewMode: "primary",
-      reviewCoordinator: coordinator,
-    });
-    const tool = registrations.find(
-      ({ tool }) => tool.name === "review_workout_adaptation",
-    )!.tool;
-    let settled = false;
-    const pending = tool
-      .execute(reviewProposal() as unknown as Record<string, unknown>, {
-        signal: new AbortController().signal,
-      })
-      .then((result) => {
-        settled = true;
-        return result;
-      });
-
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
-    coordinator.select("recovery-first");
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    coordinator.discussFurther();
-    await expect(pending).resolves.toEqual({
-      status: "discuss_further",
-      reviewId: "review:webmcp",
-    });
-    expect(application.getState().trainingPlan.planVersion).toBe(2);
-  });
-
-  it("returns invalid, stale, and busy primary outcomes immediately", async () => {
-    const application = await createApplication();
-    const coordinator = createReviewCoordinator({ application });
-    const { host, registrations } = createRecordingHost();
-    await registerWebMcpTools(host, application, {
-      reviewMode: "primary",
-      reviewCoordinator: coordinator,
-    });
-    const tool = registrations.find(
-      ({ tool }) => tool.name === "review_workout_adaptation",
-    )!.tool;
-    const execution = { signal: new AbortController().signal };
-
-    await expect(tool.execute({}, execution)).resolves.toMatchObject({
-      status: "error",
-      code: "invalid_input",
-      issues: expect.arrayContaining([
-        expect.objectContaining({ path: expect.any(String) }),
-      ]),
-    });
-    const stale = reviewProposal();
-    stale.expectedPlanVersion = 1;
-    await expect(
-      tool.execute(stale as unknown as Record<string, unknown>, execution),
-    ).resolves.toMatchObject({ status: "error", code: "stale_plan" });
-
-    coordinator.open(reviewProposal());
-    const duplicate = tool.execute(
-      reviewProposal() as unknown as Record<string, unknown>,
-      execution,
-    );
-    await Promise.resolve();
-    expect(coordinator.getState()).toMatchObject({ status: "reviewing" });
-    coordinator.discussFurther();
-    await expect(duplicate).resolves.toEqual({
-      status: "discuss_further",
-      reviewId: "review:webmcp",
     });
   });
 

@@ -41,20 +41,11 @@ async function bootstrap() {
   const modelContext = (
     document as Document & { readonly modelContext?: ModelContextHost }
   ).modelContext;
-  const controlledHarnessMode = (
-    window as Window & {
-      __webMcpHarness?: { reviewMode?: "primary" | "fallback" };
-    }
-  ).__webMcpHarness?.reviewMode;
-  const reviewMode =
-    import.meta.env.DEV && controlledHarnessMode === "primary"
-      ? "primary"
-      : "fallback";
   const webMcpRegistration = await registerWebMcpTools(
     modelContext,
     application,
     {
-      reviewMode,
+      reviewMode: "fallback",
       reviewCoordinator,
       onActivity: toolActivityStore.publish,
     },

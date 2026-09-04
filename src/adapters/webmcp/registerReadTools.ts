@@ -88,7 +88,7 @@ function safeExecution(
   };
 }
 
-export type ReviewMode = "primary" | "fallback";
+export type ReviewMode = "fallback";
 
 interface RegisterWebMcpOptions {
   reviewMode: ReviewMode;
@@ -101,7 +101,6 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   get_training_plan: "reading the Training Plan",
   get_workout_context: "reading the workout context",
   record_athlete_feedback: "recording Athlete Feedback",
-  review_workout_adaptation: "opening the adaptation review",
   open_workout_adaptation_review: "opening the adaptation review",
   read_workout_adaptation_decision: "reading your adaptation decision",
 };
@@ -417,33 +416,7 @@ function createTools(
       }),
     ),
   });
-  if (options?.reviewMode === "primary") {
-    tools.push({
-      name: "review_workout_adaptation",
-      title: "Review workout adaptation",
-      description:
-        "Submit evidence-grounded rationale and exactly two ranked, structurally different options for the on-page review; never apply a plan directly; the call remains pending until the Athlete chooses an outcome.",
-      inputSchema: reviewProposalSchema,
-      annotations: {
-        readOnlyHint: false,
-        untrustedContentHint: false,
-      },
-      execute: safeExecution(async (input, execution) => {
-        const opened = (await options.reviewCoordinator.openAndPersist(
-          normalizeHostValue(input),
-          "primary",
-          execution?.signal,
-        )) as {
-          status: string;
-          reviewId?: string;
-        };
-        if (opened.status !== "review_opened" || !opened.reviewId) {
-          return opened;
-        }
-        return options.reviewCoordinator.waitForSettlement(opened.reviewId);
-      }),
-    });
-  } else if (options?.reviewMode === "fallback") {
+  if (options?.reviewMode === "fallback") {
     tools.push(
       {
         name: "open_workout_adaptation_review",
