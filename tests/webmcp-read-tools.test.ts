@@ -142,7 +142,6 @@ describe("WebMCP coaching tools", () => {
     }> = [];
 
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
       onActivity: (event) => activity.push(event),
     });
@@ -176,7 +175,6 @@ describe("WebMCP coaching tools", () => {
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
       onActivity: () => {
         throw new Error("UI observer failed");
@@ -200,7 +198,6 @@ describe("WebMCP coaching tools", () => {
     const { host, registrations } = createRecordingHost();
 
     const registration = await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const names = registrations.map(({ tool }) => tool.name);
@@ -211,13 +208,12 @@ describe("WebMCP coaching tools", () => {
     expect(registration.toolNames).toEqual(names);
   });
 
-  it("teaches the fallback tools the six-step coaching lifecycle", async () => {
+  it("teaches the review tools the six-step coaching lifecycle", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
 
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
 
@@ -320,12 +316,11 @@ describe("WebMCP coaching tools", () => {
     expect(instructionFor("read_decision")).toMatch(/same reviewId.*terminal/i);
   });
 
-  it("opens a fallback review immediately and reports not_ready while it is active", async () => {
+  it("opens a review immediately and reports not_ready while it is active", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -354,12 +349,11 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
-  it("opens a fallback review from a JSON-compatible host-shaped nested input", async () => {
+  it("opens a review from a JSON-compatible host-shaped nested input", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -386,12 +380,11 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
-  it("opens a fallback review when a host omits execution options", async () => {
+  it("opens a review when a host omits execution options", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tool = registrations.find(
@@ -413,7 +406,7 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
-  it("stores one non-mutating fallback cancellation when the host aborts", async () => {
+  it("stores one non-mutating review cancellation when the host aborts", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const initialState = structuredClone(await fixtureSource.loadContext());
     initialState.trainingPlan.planVersion = 2;
@@ -443,7 +436,6 @@ describe("WebMCP coaching tools", () => {
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -474,7 +466,7 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
-  it("persists fallback approval with its plan state and delivers it exactly once", async () => {
+  it("persists review approval with its plan state and delivers it exactly once", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const initialState = structuredClone(await fixtureSource.loadContext());
     initialState.trainingPlan.planVersion = 2;
@@ -497,7 +489,6 @@ describe("WebMCP coaching tools", () => {
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -532,9 +523,9 @@ describe("WebMCP coaching tools", () => {
       },
     });
     expect(saves[2]).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       state: { trainingPlan: { planVersion: 3 } },
-      undeliveredFallbackResult: {
+      undeliveredReviewResult: {
         status: "approved",
         reviewId: "review:webmcp",
         planVersionBefore: 2,
@@ -568,15 +559,14 @@ describe("WebMCP coaching tools", () => {
       reviewId: "review:webmcp",
     });
     expect(saves).toHaveLength(4);
-    expect(saves[3].undeliveredFallbackResult).toBeUndefined();
+    expect(saves[3].undeliveredReviewResult).toBeUndefined();
   });
 
-  it("stores a non-mutating fallback discussion, blocks another open, and serializes reads", async () => {
+  it("stores a non-mutating review discussion, blocks another open, and serializes reads", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -617,12 +607,11 @@ describe("WebMCP coaching tools", () => {
     });
   });
 
-  it("delivers a declined fallback decision exactly once", async () => {
+  it("delivers a declined review decision exactly once", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -658,7 +647,7 @@ describe("WebMCP coaching tools", () => {
     expect(application.getState().trainingPlan.planVersion).toBe(2);
   });
 
-  it("keeps a published fallback proposal through registration teardown", async () => {
+  it("keeps a published review proposal through registration teardown", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const initialState = structuredClone(await fixtureSource.loadContext());
     initialState.trainingPlan.planVersion = 2;
@@ -692,7 +681,6 @@ describe("WebMCP coaching tools", () => {
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     const registration = await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(
@@ -718,7 +706,7 @@ describe("WebMCP coaching tools", () => {
       reviewId: "review:webmcp",
     });
     await expect(
-      application.readFallbackResult("review:webmcp"),
+      application.readReviewResult("review:webmcp"),
     ).resolves.toEqual({
       status: "approved",
       reviewId: "review:webmcp",
@@ -745,7 +733,7 @@ describe("WebMCP coaching tools", () => {
     });
     expect(saves[2]).toMatchObject({
       state: { trainingPlan: { planVersion: 3 } },
-      undeliveredFallbackResult: {
+      undeliveredReviewResult: {
         status: "approved",
         reviewId: "review:webmcp",
       },
@@ -885,12 +873,11 @@ describe("WebMCP coaching tools", () => {
     });
   });
 
-  it("opens a fresh fallback review immediately after resetting an active review", async () => {
+  it("opens a fresh review immediately after resetting an active review", async () => {
     const application = await createApplication();
     const coordinator = createReviewCoordinator({ application });
     const { host, registrations } = createRecordingHost();
     await registerWebMcpTools(host, application, {
-      reviewMode: "fallback",
       reviewCoordinator: coordinator,
     });
     const tools = Object.fromEntries(

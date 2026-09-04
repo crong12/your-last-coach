@@ -37,14 +37,6 @@ function formatDate(date: string) {
   }).format(new Date(`${date}T12:00:00Z`));
 }
 
-function formatShortDate(date: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T12:00:00Z`));
-}
-
 function formatDay(date: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",

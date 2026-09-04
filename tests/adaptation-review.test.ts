@@ -36,7 +36,7 @@ describe("durable adaptation review", () => {
       repository: firstRepository,
     });
     const firstProposal = acceptedProposal();
-    await firstApplication.openPlanReview(firstProposal, "primary");
+    await firstApplication.openPlanReview(firstProposal);
     const approved = await firstApplication.command({
       type: "apply_plan_approval",
       reviewId: firstProposal.reviewId,
@@ -79,9 +79,7 @@ describe("durable adaptation review", () => {
       `plan-adaptation:${firstProposal.reviewId}`,
     ];
 
-    await expect(
-      application.openPlanReview(proposal, "fallback"),
-    ).resolves.toMatchObject({
+    await expect(application.openPlanReview(proposal)).resolves.toMatchObject({
       status: "review_opened",
       reviewId: proposal.reviewId,
     });
@@ -124,7 +122,7 @@ describe("durable adaptation review", () => {
     });
 
     await expect(
-      coordinator.openAndPersist(acceptedProposal(), "fallback"),
+      coordinator.openAndPersist(acceptedProposal()),
     ).resolves.toMatchObject({ status: "error", code: "invalid_input" });
     expect(coordinator.getState()).toEqual({ status: "idle" });
     expect(application.getPendingAdaptationProposal()).toBeNull();
@@ -139,7 +137,7 @@ describe("durable adaptation review", () => {
       repository,
     });
     const proposal = acceptedProposal();
-    await application.openPlanReview(proposal, "fallback");
+    await application.openPlanReview(proposal);
     await expect(
       application.declinePlanReview(proposal.reviewId),
     ).resolves.toEqual({
@@ -147,15 +145,16 @@ describe("durable adaptation review", () => {
       reviewId: proposal.reviewId,
     });
     await expect(
-      application.readFallbackResult(proposal.reviewId),
+      application.readReviewResult(proposal.reviewId),
     ).resolves.toEqual({
       status: "declined",
       reviewId: proposal.reviewId,
     });
 
-    await expect(
-      application.openPlanReview(proposal, "fallback"),
-    ).resolves.toMatchObject({ status: "error", code: "busy" });
+    await expect(application.openPlanReview(proposal)).resolves.toMatchObject({
+      status: "error",
+      code: "busy",
+    });
     const attemptedApproval = await application.command({
       type: "apply_plan_approval",
       reviewId: proposal.reviewId,
@@ -181,7 +180,7 @@ describe("durable adaptation review", () => {
       repository,
     });
     const proposal = acceptedProposal();
-    await application.openPlanReview(proposal, "primary");
+    await application.openPlanReview(proposal);
     const approved = await application.command({
       type: "apply_plan_approval",
       reviewId: proposal.reviewId,
@@ -228,9 +227,7 @@ describe("durable adaptation review", () => {
       },
     });
     const proposal = acceptedProposal();
-    await expect(
-      application.openPlanReview(proposal, "fallback"),
-    ).resolves.toEqual({
+    await expect(application.openPlanReview(proposal)).resolves.toEqual({
       status: "review_opened",
       reviewId: proposal.reviewId,
       durability: "memory_only",
@@ -247,7 +244,7 @@ describe("durable adaptation review", () => {
     });
   });
 
-  it("clears fallback cancellation delivery during an explicit demo reset", async () => {
+  it("clears review cancellation result during an explicit demo reset", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const { repository } = recordingRepository();
     const application = createWorkspaceApplication({
@@ -257,7 +254,7 @@ describe("durable adaptation review", () => {
     });
     const coordinator = createReviewCoordinator({ application });
     const proposal = acceptedProposal();
-    await coordinator.openAndPersist(proposal, "fallback");
+    await coordinator.openAndPersist(proposal);
     await expect(coordinator.reset()).resolves.toMatchObject({
       status: "cancelled",
       reviewId: proposal.reviewId,
@@ -266,7 +263,7 @@ describe("durable adaptation review", () => {
     await application.command({ type: "reset_demo" });
 
     await expect(
-      application.readFallbackResult(proposal.reviewId),
+      application.readReviewResult(proposal.reviewId),
     ).resolves.toEqual({
       status: "not_ready",
       reviewId: proposal.reviewId,
@@ -282,10 +279,7 @@ describe("durable adaptation review", () => {
       repository,
     });
 
-    const result = await application.openPlanReview(
-      acceptedProposal(),
-      "fallback",
-    );
+    const result = await application.openPlanReview(acceptedProposal());
 
     expect(result).toEqual({
       status: "review_opened",
@@ -293,7 +287,6 @@ describe("durable adaptation review", () => {
     });
     expect(application.getState().pendingAdaptationProposal).toMatchObject({
       proposal: { reviewId: "review:rest-of-week:2026-08-26" },
-      delivery: "fallback",
       selectedOptionId: null,
     });
     expect(saves).toHaveLength(1);
@@ -312,7 +305,7 @@ describe("durable adaptation review", () => {
     });
     const coordinator = createReviewCoordinator({ application });
 
-    expect(coordinator.open(acceptedProposal(), "fallback")).toMatchObject({
+    expect(coordinator.open(acceptedProposal())).toMatchObject({
       status: "review_opened",
     });
     const declined = await coordinator.decline();
@@ -334,25 +327,25 @@ describe("durable adaptation review", () => {
       }),
     ]);
     expect(application.getState().trainingPlan.planVersion).toBe(1);
-    expect(saves.at(-1)?.undeliveredFallbackResult).toEqual({
+    expect(saves.at(-1)?.undeliveredReviewResult).toEqual({
       status: "declined",
       reviewId: acceptedProposal().reviewId,
     });
     await expect(
-      application.readFallbackResult(acceptedProposal().reviewId),
+      application.readReviewResult(acceptedProposal().reviewId),
     ).resolves.toEqual({
       status: "declined",
       reviewId: acceptedProposal().reviewId,
     });
     await expect(
-      application.readFallbackResult(acceptedProposal().reviewId),
+      application.readReviewResult(acceptedProposal().reviewId),
     ).resolves.toEqual({
       status: "not_ready",
       reviewId: acceptedProposal().reviewId,
     });
   });
 
-  it("rehydrates an open pending review and converts an expired fallback to timeout", async () => {
+  it("rehydrates an open pending review and converts an expired review to timeout", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const { repository: sourceRepository, saves } = recordingRepository();
     const application = createWorkspaceApplication({
@@ -362,7 +355,7 @@ describe("durable adaptation review", () => {
       now: () => Date.parse("2026-08-26T20:15:00+01:00"),
       reviewTimeoutMs: 5 * 60 * 1000,
     });
-    await application.openPlanReview(acceptedProposal(), "fallback");
+    await application.openPlanReview(acceptedProposal());
     const persisted = saves.at(-1);
     if (!persisted) throw new Error("Expected a persisted review");
 
@@ -381,7 +374,6 @@ describe("durable adaptation review", () => {
     });
     expect(rehydrated.state.pendingAdaptationProposal).toMatchObject({
       proposal: { reviewId: acceptedProposal().reviewId },
-      delivery: "fallback",
     });
 
     const expiredSaves: PersistedWorkspace[] = [];
@@ -400,17 +392,17 @@ describe("durable adaptation review", () => {
       },
     });
     expect(expired.state.pendingAdaptationProposal).toBeUndefined();
-    expect(expired.undeliveredFallbackResult).toEqual({
+    expect(expired.undeliveredReviewResult).toEqual({
       status: "cancelled",
       reviewId: acceptedProposal().reviewId,
       reason: "timeout",
     });
-    expect(expiredSaves.at(-1)?.undeliveredFallbackResult).toEqual(
-      expired.undeliveredFallbackResult,
+    expect(expiredSaves.at(-1)?.undeliveredReviewResult).toEqual(
+      expired.undeliveredReviewResult,
     );
   });
 
-  it("rehydrates a declined fallback result for exact-once delivery", async () => {
+  it("rehydrates a declined review result for exact-once delivery", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const { repository, saves } = recordingRepository();
     const application = createWorkspaceApplication({
@@ -418,7 +410,7 @@ describe("durable adaptation review", () => {
       fixtureSource,
       repository,
     });
-    await application.openPlanReview(acceptedProposal(), "fallback");
+    await application.openPlanReview(acceptedProposal());
     await application.declinePlanReview(acceptedProposal().reviewId);
     const persisted = saves.at(-1);
     if (!persisted) throw new Error("Expected a persisted declined result");
@@ -436,7 +428,7 @@ describe("durable adaptation review", () => {
       },
     });
     expect(initialized.state.declinedAdaptations).toHaveLength(1);
-    expect(initialized.undeliveredFallbackResult).toEqual({
+    expect(initialized.undeliveredReviewResult).toEqual({
       status: "declined",
       reviewId: acceptedProposal().reviewId,
     });
@@ -453,23 +445,23 @@ describe("durable adaptation review", () => {
         },
         async clear() {},
       },
-      initialUndeliveredFallbackResult: initialized.undeliveredFallbackResult,
+      initialUndeliveredReviewResult: initialized.undeliveredReviewResult,
     });
     await expect(
-      restored.readFallbackResult(acceptedProposal().reviewId),
+      restored.readReviewResult(acceptedProposal().reviewId),
     ).resolves.toEqual({
       status: "declined",
       reviewId: acceptedProposal().reviewId,
     });
     await expect(
-      restored.readFallbackResult(acceptedProposal().reviewId),
+      restored.readReviewResult(acceptedProposal().reviewId),
     ).resolves.toEqual({
       status: "not_ready",
       reviewId: acceptedProposal().reviewId,
     });
   });
 
-  it("keeps a published fallback proposal pending across coordinator teardown", async () => {
+  it("keeps a published review proposal pending across coordinator teardown", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     const { repository } = recordingRepository();
     const application = createWorkspaceApplication({
@@ -477,21 +469,20 @@ describe("durable adaptation review", () => {
       fixtureSource,
       repository,
     });
-    await application.openPlanReview(acceptedProposal(), "fallback");
+    await application.openPlanReview(acceptedProposal());
     const coordinator = createReviewCoordinator({ application });
 
-    expect(coordinator.open(acceptedProposal(), "fallback")).toMatchObject({
+    expect(coordinator.open(acceptedProposal())).toMatchObject({
       status: "review_opened",
     });
     coordinator.dispose();
 
     expect(application.getPendingAdaptationProposal()).toMatchObject({
       proposal: { reviewId: acceptedProposal().reviewId },
-      delivery: "fallback",
     });
   });
 
-  it("does not report a fallback open before its pending proposal is saved", async () => {
+  it("does not report a review open before its pending proposal is saved", async () => {
     const fixtureSource = createDemoCoachingContextSource();
     let releaseSave!: () => void;
     let saveStarted!: () => void;
@@ -520,7 +511,7 @@ describe("durable adaptation review", () => {
 
     let resolved = false;
     const opening = coordinator
-      .openAndPersist(acceptedProposal(), "fallback")
+      .openAndPersist(acceptedProposal())
       .then((result) => {
         resolved = true;
         return result;

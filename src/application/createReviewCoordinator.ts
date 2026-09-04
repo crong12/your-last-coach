@@ -29,7 +29,6 @@ export type ReviewCoordinatorState =
       proposal: ReviewProposal;
       selectedOptionId: string | null;
       preview: ReviewPreviewRow[];
-      delivery: "primary" | "fallback";
       generation: number;
       applying?: true;
       settling?: true;
@@ -37,16 +36,8 @@ export type ReviewCoordinatorState =
 
 export interface ReviewCoordinator {
   getState(): ReviewCoordinatorState;
-  open(
-    value: unknown,
-    delivery?: "primary" | "fallback",
-    signal?: AbortSignal,
-  ): unknown;
-  openAndPersist(
-    value: unknown,
-    delivery?: "primary" | "fallback",
-    signal?: AbortSignal,
-  ): Promise<unknown>;
+  open(value: unknown, signal?: AbortSignal): unknown;
+  openAndPersist(value: unknown, signal?: AbortSignal): Promise<unknown>;
   select(optionId: string, generation?: number): unknown;
   approve(generation?: number): Promise<unknown>;
   decline(
@@ -60,10 +51,6 @@ export interface ReviewCoordinator {
     generation?: number,
   ): ReviewTerminalResult | ReviewActionError | Promise<ReviewTerminalResult>;
   reset(): ReviewTerminalResult | Promise<ReviewTerminalResult> | null;
-  waitForSettlement(
-    reviewId: string,
-    signal?: AbortSignal,
-  ): Promise<ReviewTerminalResult>;
   subscribe(listener: () => void): () => void;
   dispose(): void;
 }
@@ -82,14 +69,6 @@ export function createReviewCoordinator({
   let terminalInFlight: Promise<ReviewTerminalResult> | null = null;
   let disposed = false;
   const listeners = new Set<() => void>();
-  const settledResults = new Map<string, ReviewTerminalResult>();
-  const waiters = new Map<
-    string,
-    Set<{
-      resolve: (result: ReviewTerminalResult) => void;
-      removeAbort?: () => void;
-    }>
-  >();
 
   const publish = () => listeners.forEach((listener) => listener());
   const settle = (result: ReviewTerminalResult) => {
@@ -100,13 +79,7 @@ export function createReviewCoordinator({
     application.deactivatePlanReview(result.reviewId);
     terminalInFlight = null;
     state = { status: "idle" };
-    settledResults.set(result.reviewId, result);
     publish();
-    waiters.get(result.reviewId)?.forEach((waiter) => {
-      waiter.removeAbort?.();
-      waiter.resolve(result);
-    });
-    waiters.delete(result.reviewId);
     return result;
   };
   const missing = () => ({
@@ -144,26 +117,18 @@ export function createReviewCoordinator({
     if (!current(generation)) return result;
     if (result.status === "approved") return settle(result);
     if (state.status !== "reviewing") return result;
-    const settlementResult =
-      result.status === "declined"
-        ? result
-        : state.delivery === "fallback"
-          ? result
-          : undefined;
     state = { ...state, settling: true };
     publish();
-    terminalInFlight = application
-      .cancelPlanReview(settlementResult)
-      .then(() => {
-        if (!current(generation)) return result;
-        return settle(result);
-      });
+    terminalInFlight = application.cancelPlanReview(result).then(() => {
+      if (!current(generation)) return result;
+      return settle(result);
+    });
     return terminalInFlight;
   };
 
   return {
     getState: () => state,
-    open(value, delivery = "primary", signal) {
+    open(value, signal) {
       if (disposed) return missing();
       const inputReviewId =
         typeof value === "object" &&
@@ -172,10 +137,7 @@ export function createReviewCoordinator({
         typeof value.reviewId === "string"
           ? value.reviewId
           : null;
-      if (
-        delivery === "fallback" &&
-        application.hasUndeliveredFallbackResult()
-      ) {
+      if (application.hasUndeliveredReviewResult()) {
         return {
           status: "error",
           code: "busy",
@@ -258,13 +220,9 @@ export function createReviewCoordinator({
         proposal: validated.proposal,
         selectedOptionId: pending?.selectedOptionId ?? null,
         preview: [],
-        delivery: pending?.delivery ?? delivery,
         generation,
       };
-      application.activatePlanReview(
-        validated.proposal,
-        pending?.delivery ?? delivery,
-      );
+      application.activatePlanReview(validated.proposal);
       publish();
       if (signal) {
         const abort = () => {
@@ -284,8 +242,8 @@ export function createReviewCoordinator({
       armTimeout(validated.proposal.reviewId, generation, pending?.expiresAt);
       return { status: "review_opened", reviewId: validated.proposal.reviewId };
     },
-    async openAndPersist(value, delivery = "primary", signal) {
-      const opened = this.open(value, delivery, signal) as {
+    async openAndPersist(value, signal) {
+      const opened = this.open(value, signal) as {
         status: string;
         reviewId?: string;
         durability?: "persistent" | "memory_only";
@@ -293,7 +251,6 @@ export function createReviewCoordinator({
       if (opened.status !== "review_opened" || !opened.reviewId) return opened;
       const persisted = await application.openPlanReview(
         value as ReviewProposal,
-        delivery,
       );
       if (persisted.status !== "review_opened") {
         if (
@@ -311,7 +268,6 @@ export function createReviewCoordinator({
         return persisted;
       }
       if (
-        delivery === "fallback" &&
         state.status === "reviewing" &&
         state.proposal.reviewId === opened.reviewId
       ) {
@@ -470,42 +426,6 @@ export function createReviewCoordinator({
         state.generation,
       );
     },
-    waitForSettlement(reviewId, signal) {
-      return new Promise((resolve) => {
-        const settled = settledResults.get(reviewId);
-        if (settled) {
-          resolve(settled);
-          return;
-        }
-        const registrations = waiters.get(reviewId) ?? new Set();
-        const waiter: {
-          resolve: (result: ReviewTerminalResult) => void;
-          removeAbort?: () => void;
-        } = { resolve };
-        registrations.add(waiter);
-        waiters.set(reviewId, registrations);
-        if (signal) {
-          const abort = () => {
-            if (
-              state.status === "reviewing" &&
-              state.proposal.reviewId === reviewId
-            ) {
-              void complete(
-                {
-                  status: "cancelled",
-                  reviewId,
-                  reason: "host_aborted",
-                },
-                state.generation,
-              );
-            }
-          };
-          signal.addEventListener("abort", abort, { once: true });
-          waiter.removeAbort = () => signal.removeEventListener("abort", abort);
-          if (signal.aborted) abort();
-        }
-      });
-    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -513,33 +433,18 @@ export function createReviewCoordinator({
     dispose() {
       if (disposed) return;
       if (state.status === "reviewing") {
-        const generation = state.generation;
-        if (state.delivery === "primary") {
-          void complete(
-            {
-              status: "cancelled",
-              reviewId: state.proposal.reviewId,
-              reason: "teardown",
-            },
-            generation,
-          );
-        } else {
-          application.deactivatePlanReview(state.proposal.reviewId);
-          if (timeout) clearTimeout(timeout);
-          timeout = null;
-          removeActiveAbort?.();
-          removeActiveAbort = null;
-          state = { status: "idle" };
-        }
+        application.deactivatePlanReview(state.proposal.reviewId);
+        if (timeout) clearTimeout(timeout);
+        timeout = null;
+        removeActiveAbort?.();
+        removeActiveAbort = null;
+        state = { status: "idle" };
       }
       disposed = true;
       if (timeout) clearTimeout(timeout);
       timeout = null;
       removeActiveAbort?.();
       removeActiveAbort = null;
-      waiters.forEach((registrations) =>
-        registrations.forEach((waiter) => waiter.removeAbort?.()),
-      );
       listeners.clear();
     },
   };

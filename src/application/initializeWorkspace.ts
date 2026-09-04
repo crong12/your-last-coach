@@ -1,7 +1,7 @@
 import type {
   CoachingContextSource,
   Durability,
-  PersistedFallbackResult,
+  PersistedReviewResult,
   WorkspaceRepository,
 } from "./ports";
 import type { WorkspaceState } from "../domain/types";
@@ -18,7 +18,7 @@ export interface InitializedWorkspace {
   state: WorkspaceState;
   notice: string | null;
   durability: Durability;
-  undeliveredFallbackResult?: PersistedFallbackResult;
+  undeliveredReviewResult?: PersistedReviewResult;
 }
 
 const REFRESH_NOTICE =
@@ -29,22 +29,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isPersistedWorkspace(value: unknown): value is {
-  schemaVersion: 1;
+  schemaVersion: 2;
   seedVersion: "demo-athlete-v1";
   savedAt: string;
   state: WorkspaceState;
-  undeliveredFallbackResult?: PersistedFallbackResult;
+  undeliveredReviewResult?: PersistedReviewResult;
 } {
   if (!(
     isRecord(value) &&
-    value.schemaVersion === 1 &&
+    value.schemaVersion === 2 &&
     value.seedVersion === "demo-athlete-v1" &&
     typeof value.savedAt === "string" &&
     isWorkspaceState(value.state) &&
     value.state.seedVersion === value.seedVersion
   ))
     return false;
-  const result = value.undeliveredFallbackResult;
+  const result = value.undeliveredReviewResult;
   if (result === undefined) return true;
   if (
     !isRecord(result) ||
@@ -96,7 +96,7 @@ async function saveFixture(
   repository: WorkspaceRepository,
 ): Promise<Durability> {
   return repository.save({
-    schemaVersion: 1,
+    schemaVersion: 2,
     seedVersion: "demo-athlete-v1",
     savedAt: state.clock.now,
     state,
@@ -117,24 +117,21 @@ export async function initializeWorkspace(
       const { pendingAdaptationProposal: _pending, ...stateWithoutPending } =
         saved.state;
       const state = deepFreeze(structuredClone(stateWithoutPending));
-      const timeoutResult: PersistedFallbackResult = {
+      const timeoutResult: PersistedReviewResult = {
         status: "cancelled",
         reviewId: pending.proposal.reviewId,
         reason: "timeout",
       };
-      const persistedFallbackResult =
-        pending.delivery === "fallback" ? timeoutResult : undefined;
+      const persistedReviewResult = timeoutResult;
       let durability: Durability =
         options.repository.durability ?? "persistent";
       try {
         durability = await options.repository.save({
-          schemaVersion: 1,
+          schemaVersion: 2,
           seedVersion: "demo-athlete-v1",
           savedAt: state.clock.now,
           state,
-          ...(persistedFallbackResult === undefined
-            ? {}
-            : { undeliveredFallbackResult: persistedFallbackResult }),
+          undeliveredReviewResult: persistedReviewResult,
         });
       } catch {
         durability = "memory_only";
@@ -143,19 +140,17 @@ export async function initializeWorkspace(
         state,
         notice: null,
         durability,
-        ...(persistedFallbackResult === undefined
-          ? {}
-          : { undeliveredFallbackResult: persistedFallbackResult }),
+        undeliveredReviewResult: persistedReviewResult,
       };
     }
     return {
       state: deepFreeze(structuredClone(saved.state)),
       notice: null,
       durability: options.repository.durability ?? "persistent",
-      ...(saved.undeliveredFallbackResult === undefined
+      ...(saved.undeliveredReviewResult === undefined
         ? {}
         : {
-            undeliveredFallbackResult: saved.undeliveredFallbackResult,
+            undeliveredReviewResult: saved.undeliveredReviewResult,
           }),
     };
   }

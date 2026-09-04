@@ -179,7 +179,6 @@ export interface PendingAdaptationProposal {
   proposal: ReviewProposal;
   openedAt: string;
   expiresAt: string;
-  delivery: "primary" | "fallback";
   selectedOptionId: string | null;
 }
 

@@ -8,18 +8,18 @@ import type {
 
 export type Durability = "persistent" | "memory_only";
 
-export type PersistedFallbackResult =
+export type PersistedReviewResult =
   | ({ status: "approved" } & AppliedPlanAdaptation)
   | { status: "discuss_further"; reviewId: string }
   | { status: "declined"; reviewId: string }
   | { status: "cancelled"; reviewId: string; reason: string };
 
 export interface PersistedWorkspace {
-  schemaVersion: 1;
+  schemaVersion: 2;
   seedVersion: "demo-athlete-v1";
   savedAt: string;
   state: WorkspaceState;
-  undeliveredFallbackResult?: PersistedFallbackResult;
+  undeliveredReviewResult?: PersistedReviewResult;
 }
 
 export interface WorkspaceRepository {

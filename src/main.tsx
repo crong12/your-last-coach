@@ -29,7 +29,7 @@ async function bootstrap() {
     initialState: initialized.state,
     fixtureSource,
     repository,
-    initialUndeliveredFallbackResult: initialized.undeliveredFallbackResult,
+    initialUndeliveredReviewResult: initialized.undeliveredReviewResult,
   });
   const reviewCoordinator = createReviewCoordinator({ application });
   const paneNavigation = createPaneNavigation();
@@ -45,7 +45,6 @@ async function bootstrap() {
     modelContext,
     application,
     {
-      reviewMode: "fallback",
       reviewCoordinator,
       onActivity: toolActivityStore.publish,
     },

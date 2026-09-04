@@ -8,7 +8,7 @@ All Athlete, workout, recovery, and COROS-shaped observations are deterministic 
 
 ## Product surface
 
-The repository ships a client-only React, TypeScript, and Vite application. When WebMCP is available, the Coach Agent receives these six fallback tools:
+The repository ships a client-only React, TypeScript, and Vite application. When WebMCP is available, the Coach Agent receives these six tools:
 
 - `get_coaching_briefing`
 - `get_training_plan`
@@ -44,7 +44,7 @@ The application keeps one authoritative, application-owned workspace state. Reac
 - `src/adapters/persistence/` stores a versioned browser envelope and falls back to page memory when storage is unavailable.
 - `src/adapters/webmcp/` owns tool registration and host mechanics without making coaching judgments.
 - `src/ui/` renders the Training Plan, evidence, Demo Guide, adaptation review, and reset flow.
-- `src/main.tsx` initializes the fixture, repository, application, fallback WebMCP tools, and UI.
+- `src/main.tsx` initializes the fixture, repository, application, WebMCP tools, and UI.
 
 ## Judge flow
 
@@ -90,7 +90,7 @@ npm run format:check && \
   npm run test:static
 ```
 
-`npm run test:e2e` exercises the application and both review semantics through a controlled WebMCP harness. `npm run test:static` serves the existing production build from `dist/` and verifies that the public fallback workspace loads without WebMCP or external runtime requests. Neither test substitutes for manual verification in an enabled WebMCP host.
+`npm run test:e2e` exercises the application and adaptation review flow through a controlled WebMCP harness. `npm run test:static` serves the existing production build from `dist/` and verifies that the public workspace loads without WebMCP or external runtime requests. Neither test substitutes for manual verification in an enabled WebMCP host.
 
 GitHub Actions runs the same stages for pull requests targeting `main` and pushes to `main`. See the [verification workflow](.github/workflows/ci.yml).
 

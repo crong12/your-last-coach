@@ -225,7 +225,6 @@ describe("TodayPane", () => {
       },
       openedAt: state.clock.now,
       expiresAt: "2026-08-27T20:15:00+01:00",
-      delivery: "fallback",
       selectedOptionId: null,
     };
     const pendingProjection = selectTodayPane(state);

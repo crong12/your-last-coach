@@ -2,7 +2,7 @@ import type { WorkspaceRepository } from "./ports";
 import type {
   AdaptationRecord,
   Durability,
-  PersistedFallbackResult,
+  PersistedReviewResult,
   ReviewOpenResult,
 } from "./ports";
 import type {
@@ -18,7 +18,6 @@ import type {
 import {
   validateAdaptationOption,
   collectWorkspaceEvidenceRefs,
-  validatePendingAdaptationProposal,
   validateReviewProposal,
   type AdaptationOption,
   type ReviewProposal,
@@ -40,7 +39,7 @@ interface CreateWorkspaceApplicationOptions {
   initialState: WorkspaceState;
   fixtureSource: CoachingContextSource;
   repository: WorkspaceRepository;
-  initialUndeliveredFallbackResult?: PersistedFallbackResult;
+  initialUndeliveredReviewResult?: PersistedReviewResult;
   reviewTimeoutMs?: number;
   now?: () => number;
 }
@@ -124,10 +123,7 @@ export interface WorkspaceApplication {
   command(
     command: Extract<WorkspaceCommand, { type: "apply_plan_approval" }>,
   ): Promise<PlanApprovalResult | PlanApprovalError>;
-  openPlanReview(
-    proposal: ReviewProposal,
-    delivery?: "primary" | "fallback",
-  ): Promise<ReviewOpenResult>;
+  openPlanReview(proposal: ReviewProposal): Promise<ReviewOpenResult>;
   getDurability(): Durability;
   persistPendingPlanReview(reviewId: string): Promise<Durability>;
   getPendingAdaptationProposal(): PendingAdaptationProposal | null;
@@ -142,28 +138,25 @@ export interface WorkspaceApplication {
         retryable: boolean;
       }
   >;
-  activatePlanReview(
-    proposal: ReviewProposal,
-    delivery?: "primary" | "fallback",
-  ): void;
+  activatePlanReview(proposal: ReviewProposal): void;
   deactivatePlanReview(reviewId: string): void;
   getPlanApproval(reviewId: string): PlanApprovalResult | null;
-  hasUndeliveredFallbackResult(): boolean;
+  hasUndeliveredReviewResult(): boolean;
   cancelPlanReview(
-    result?: Exclude<PersistedFallbackResult, { status: "approved" }>,
+    result?: Exclude<PersistedReviewResult, { status: "approved" }>,
   ): Promise<void>;
-  readFallbackResult(
+  readReviewResult(
     reviewId: unknown,
   ): Promise<
-    | ReviewFallbackDelivery
+    | ReviewResultDelivery
     | { status: "not_ready"; reviewId: string }
     | CommandError
   >;
   subscribe(listener: () => void): () => void;
 }
 
-type ReviewFallbackDelivery =
-  PlanApprovalResult | Exclude<PersistedFallbackResult, { status: "approved" }>;
+type ReviewResultDelivery =
+  PlanApprovalResult | Exclude<PersistedReviewResult, { status: "approved" }>;
 
 function addDays(date: IsoDate, days: number): IsoDate {
   const next = new Date(`${date}T00:00:00Z`);
@@ -185,11 +178,10 @@ export function createWorkspaceApplication(
   } | null = null;
   let activePlanReview: {
     proposal: ReviewProposal;
-    delivery: "primary" | "fallback";
     generation: number;
   } | null = null;
   let reviewGeneration = 0;
-  let undeliveredFallbackResult = options.initialUndeliveredFallbackResult;
+  let undeliveredReviewResult = options.initialUndeliveredReviewResult;
   let currentDurability: Durability =
     options.repository.durability ?? "persistent";
   let persistenceTail: Promise<void> = Promise.resolve();
@@ -224,18 +216,18 @@ export function createWorkspaceApplication(
 
   const persist = (
     persistedState: WorkspaceState,
-    fallbackResult = undeliveredFallbackResult,
+    reviewResult = undeliveredReviewResult,
   ): Promise<Durability> => {
     let durability = currentDurability;
     const operation = persistenceTail.then(async () => {
       durability = await options.repository.save({
-        schemaVersion: 1,
+        schemaVersion: 2,
         seedVersion: "demo-athlete-v1",
         savedAt: persistedState.clock.now,
         state: persistedState,
-        ...(fallbackResult === undefined
+        ...(reviewResult === undefined
           ? {}
-          : { undeliveredFallbackResult: fallbackResult }),
+          : { undeliveredReviewResult: reviewResult }),
       });
       markDurability(durability);
     });
@@ -450,18 +442,16 @@ export function createWorkspaceApplication(
 
     clearPendingExpiryTimer();
     const nextState = withoutPending(state);
-    const staleResult: PersistedFallbackResult = {
+    const staleResult: PersistedReviewResult = {
       status: "cancelled",
       reviewId: pending.proposal.reviewId,
       reason: "stale_plan_changed",
     };
-    const persistedFallbackResult =
-      pending.delivery === "fallback" ? staleResult : undefined;
+    const persistedReviewResult = staleResult;
     staleReviewIds.add(pending.proposal.reviewId);
-    if (pending.delivery === "fallback")
-      undeliveredFallbackResult = staleResult;
+    undeliveredReviewResult = staleResult;
     publishState(nextState);
-    void persist(nextState, persistedFallbackResult).catch(() => undefined);
+    void persist(nextState, persistedReviewResult).catch(() => undefined);
     return null;
   };
 
@@ -478,19 +468,10 @@ export function createWorkspaceApplication(
     return null;
   };
 
-  const reviewDeliveryFor = (reviewId: string) => {
-    const pending = pendingFor(reviewId);
-    if (pending) return pending.delivery;
-    if (activePlanReview?.proposal.reviewId === reviewId)
-      return activePlanReview.delivery;
-    return null;
-  };
-
   const openPlanReview = async (
     proposal: ReviewProposal,
-    delivery: "primary" | "fallback" = "fallback",
   ): Promise<ReviewOpenResult> => {
-    if (delivery === "fallback" && undeliveredFallbackResult !== undefined) {
+    if (undeliveredReviewResult !== undefined) {
       return {
         status: "error",
         code: "busy",
@@ -548,7 +529,6 @@ export function createWorkspaceApplication(
     const pending: PendingAdaptationProposal = {
       proposal: validated.proposal,
       ...timestamps,
-      delivery,
       selectedOptionId: null,
     };
     publishState({ ...state, pendingAdaptationProposal: pending });
@@ -618,11 +598,10 @@ export function createWorkspaceApplication(
   };
 
   const cancelPlanReview = async (
-    result?: Exclude<PersistedFallbackResult, { status: "approved" }>,
+    result?: Exclude<PersistedReviewResult, { status: "approved" }>,
   ) => {
     const reviewId = result?.reviewId ?? activePlanReview?.proposal.reviewId;
     const proposal = reviewId ? reviewProposalFor(reviewId) : null;
-    const delivery = reviewId ? reviewDeliveryFor(reviewId) : null;
     reviewGeneration += 1;
     activePlanReview = null;
     let nextState = state;
@@ -668,20 +647,16 @@ export function createWorkspaceApplication(
     }
     const stateChanged = nextState !== state;
     if (result || stateChanged) {
-      const persistedFallbackResult =
-        delivery === "fallback" ? result : undeliveredFallbackResult;
       try {
         await persist(
           nextState,
-          result === undefined
-            ? undeliveredFallbackResult
-            : persistedFallbackResult,
+          result === undefined ? undeliveredReviewResult : result,
         );
       } catch {
         // Keep the completed decision available in memory for this page.
         markDurability("memory_only");
       }
-      if (delivery === "fallback") undeliveredFallbackResult = result;
+      if (result !== undefined) undeliveredReviewResult = result;
     }
     if (stateChanged) publishState(nextState);
     if (stateChanged) clearPendingExpiryTimer();
@@ -729,10 +704,9 @@ export function createWorkspaceApplication(
     getAdaptationRecord,
     selectPlanReviewOption,
     declinePlanReview,
-    activatePlanReview(proposal, delivery = "primary") {
+    activatePlanReview(proposal) {
       activePlanReview = {
         proposal,
-        delivery,
         generation: ++reviewGeneration,
       };
     },
@@ -746,19 +720,19 @@ export function createWorkspaceApplication(
       );
       return receipt ? replay(receipt) : null;
     },
-    hasUndeliveredFallbackResult() {
-      return undeliveredFallbackResult !== undefined;
+    hasUndeliveredReviewResult() {
+      return undeliveredReviewResult !== undefined;
     },
     cancelPlanReview,
-    async readFallbackResult(reviewId) {
+    async readReviewResult(reviewId) {
       if (typeof reviewId !== "string" || reviewId.trim() === "") {
         return invalidFeedback("reviewId must be a non-empty string.");
       }
-      const claimed = undeliveredFallbackResult;
+      const claimed = undeliveredReviewResult;
       if (!claimed || claimed.reviewId !== reviewId) {
         return { status: "not_ready", reviewId };
       }
-      undeliveredFallbackResult = undefined;
+      undeliveredReviewResult = undefined;
       try {
         const durability = await persist(state, undefined);
         return claimed.status === "approved"
@@ -766,11 +740,11 @@ export function createWorkspaceApplication(
           : claimed;
       } catch {
         markDurability("memory_only");
-        undeliveredFallbackResult = claimed;
+        undeliveredReviewResult = claimed;
         return {
           status: "error",
           code: "not_found",
-          message: "The completed fallback decision could not be delivered.",
+          message: "The completed review decision could not be delivered.",
           retryable: false,
         };
       }
@@ -827,8 +801,6 @@ export function createWorkspaceApplication(
         const pendingReview = pendingFor(reviewId);
         const reviewProposal =
           pendingReview?.proposal ?? activePlanReview?.proposal;
-        const reviewDelivery =
-          pendingReview?.delivery ?? activePlanReview?.delivery;
         if (
           !reviewProposal ||
           reviewProposal.expectedPlanVersion !== command.expectedPlanVersion ||
@@ -920,13 +892,13 @@ export function createWorkspaceApplication(
             };
           }
           clearPendingExpiryTimer();
-          const persistedFallbackResult: PersistedFallbackResult | undefined =
-            reviewDelivery === "fallback"
-              ? { status: "approved", ...receipt }
-              : undeliveredFallbackResult;
+          const persistedReviewResult: PersistedReviewResult = {
+            status: "approved",
+            ...receipt,
+          };
           let durability: Durability = "persistent";
           try {
-            durability = await persist(nextState, persistedFallbackResult);
+            durability = await persist(nextState, persistedReviewResult);
           } catch {
             markDurability("memory_only");
             durability = "memory_only";
@@ -944,7 +916,7 @@ export function createWorkspaceApplication(
             };
           }
           state = nextState;
-          undeliveredFallbackResult = persistedFallbackResult;
+          undeliveredReviewResult = persistedReviewResult;
           activePlanReview = null;
           approvalDurability.set(reviewId, durability);
           listeners.forEach((listener) => listener());
@@ -1046,7 +1018,7 @@ export function createWorkspaceApplication(
       reviewGeneration += 1;
       activePlanReview = null;
       clearPendingExpiryTimer();
-      undeliveredFallbackResult = undefined;
+      undeliveredReviewResult = undefined;
       let durability: Durability = "persistent";
       try {
         await clearPersisted();

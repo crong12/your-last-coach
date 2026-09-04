@@ -244,7 +244,7 @@ describe("Workspace application", () => {
       observed.push(application.getState().trainingPlan.planVersion),
     );
     const proposal = acceptedProposal();
-    application.activatePlanReview(proposal, "fallback");
+    application.activatePlanReview(proposal);
 
     const approval = application.command({
       type: "apply_plan_approval",

@@ -30,11 +30,8 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function installWebMcpHarness(
-  page: Page,
-  reviewMode: "primary" | "fallback" = "fallback",
-) {
-  await page.addInitScript((mode) => {
+async function installWebMcpHarness(page: Page) {
+  await page.addInitScript(() => {
     const registrations: Array<{
       tool: {
         name: string;
@@ -51,7 +48,7 @@ async function installWebMcpHarness(
     }> = [];
     Object.defineProperty(window, "__webMcpHarness", {
       configurable: true,
-      value: { registrations, reviewMode: mode },
+      value: { registrations },
     });
     Object.defineProperty(document, "modelContext", {
       configurable: true,
@@ -64,7 +61,7 @@ async function installWebMcpHarness(
         },
       },
     });
-  }, reviewMode);
+  });
 }
 
 function acceptedReviewProposal() {
@@ -224,7 +221,7 @@ test("offers three copyable Demo Guide prompts, stays reachable, and reopens aft
   context,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/?fresh-guide");
 
   const guide = page.getByRole("dialog", { name: "Demo Guide" });
@@ -359,7 +356,7 @@ test("contains and restores focus for guide, Workout screen, and reset", async (
 test("an external review displaces an unseen Demo Guide without marking or reopening it", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/?fresh-guide");
   const guide = page.getByRole("dialog", { name: "Demo Guide" });
   await expect(guide).toBeVisible();
@@ -405,7 +402,7 @@ test("an external review displaces an unseen Demo Guide without marking or reope
 test("reset temporarily owns an active review and either restores or cancels it", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   const openReview = () =>
     page.evaluate(async (proposal) => {
@@ -449,10 +446,10 @@ test("reset temporarily owns an active review and either restores or cancels it"
   await expect(page.getByRole("dialog", { name: "Demo Guide" })).toBeVisible();
 });
 
-test("completes fallback decline, approval, view changes, and reset by keyboard", async ({
+test("completes review decline, approval, view changes, and reset by keyboard", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   const runTool = (name: string, input: Record<string, unknown>) =>
     page.evaluate(
@@ -555,7 +552,7 @@ test("completes fallback decline, approval, view changes, and reset by keyboard"
 test("reviews both ranked Workout Adaptations through the non-blocking tool", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   const openReview = () =>
     page.evaluate((proposal) => {
@@ -663,7 +660,7 @@ test("shows the shared coaching briefing", async ({ page }) => {
 test("persists feedback context and plan adaptations across reload and reset", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   const opened = await page.evaluate(async (proposal) => {
     const harness = window as unknown as {
@@ -682,7 +679,7 @@ test("persists feedback context and plan adaptations across reload and reset", a
     const tool = harness.__webMcpHarness.registrations.find(
       ({ tool }) => tool.name === "open_workout_adaptation_review",
     )?.tool;
-    if (!tool) throw new Error("Fallback open tool was not registered");
+    if (!tool) throw new Error("Adaptation review tool was not registered");
     return tool.execute(proposal, {
       signal: new AbortController().signal,
     });
@@ -737,7 +734,8 @@ test("persists feedback context and plan adaptations across reload and reset", a
         const tool = registrations.find(
           ({ tool }) => tool.name === "read_workout_adaptation_decision",
         )?.tool;
-        if (!tool) throw new Error("Fallback read tool was not registered");
+        if (!tool)
+          throw new Error("Adaptation decision tool was not registered");
         return tool.execute(
           { reviewId: "review:playwright" },
           { signal: new AbortController().signal },
@@ -920,10 +918,10 @@ test("registers selector-backed WebMCP tools once and tears them down @contract"
   expect(signalsAborted).toBe(true);
 });
 
-test("completes the fallback six-tool coaching lifecycle @contract", async ({
+test("completes the six-tool coaching lifecycle @contract", async ({
   page,
 }) => {
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   const runTool = (name: string, input: Record<string, unknown>) =>
     page.evaluate(
@@ -1506,11 +1504,11 @@ test("keeps Today readable beside ChatGPT", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("keeps the guide and fallback review contained at a narrow viewport", async ({
+test("keeps the guide and adaptation review contained at a narrow viewport", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await installWebMcpHarness(page, "fallback");
+  await installWebMcpHarness(page);
   await page.goto("/");
   await openGuideDialog(page);
   const guide = page.getByRole("dialog", { name: "Demo Guide" });

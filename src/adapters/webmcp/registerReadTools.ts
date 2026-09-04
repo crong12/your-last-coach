@@ -88,10 +88,7 @@ function safeExecution(
   };
 }
 
-export type ReviewMode = "fallback";
-
 interface RegisterWebMcpOptions {
-  reviewMode: ReviewMode;
   reviewCoordinator: ReviewCoordinator;
   onActivity?: (activity: ToolActivity) => void;
 }
@@ -416,7 +413,7 @@ function createTools(
       }),
     ),
   });
-  if (options?.reviewMode === "fallback") {
+  if (options?.reviewCoordinator) {
     tools.push(
       {
         name: "open_workout_adaptation_review",
@@ -431,7 +428,6 @@ function createTools(
         execute: safeExecution((input, execution) =>
           options.reviewCoordinator.openAndPersist(
             normalizeHostValue(input),
-            "fallback",
             execution?.signal,
           ),
         ),
@@ -449,7 +445,7 @@ function createTools(
         },
         annotations,
         execute: safeExecution((input) =>
-          application.readFallbackResult(input.reviewId),
+          application.readReviewResult(input.reviewId),
         ),
       },
     );

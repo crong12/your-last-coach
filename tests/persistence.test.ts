@@ -54,7 +54,7 @@ async function fixtureEnvelope(planVersion = 1): Promise<PersistedWorkspace> {
   );
   state.trainingPlan.planVersion = planVersion;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     seedVersion: "demo-athlete-v1",
     savedAt: "2026-08-26T20:14:00+01:00",
     state,
@@ -241,6 +241,31 @@ describe("browser workspace persistence", () => {
 });
 
 describe("workspace initialization", () => {
+  it("refreshes schema version 1 state before the submitted app is first used", async () => {
+    const envelope = await fixtureEnvelope(2);
+    envelope.state.trainingPlan.plannedWorkouts[0].title =
+      "Saved pre-submission workout";
+    const legacyEnvelope = { ...envelope, schemaVersion: 1 };
+    const storage = new ControlledStorage();
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(legacyEnvelope));
+
+    const initialized = await initializeWorkspace({
+      fixtureSource: createDemoCoachingContextSource(),
+      repository: new BrowserWorkspaceRepository(() => storage),
+    });
+
+    expect(initialized.notice).toBe(
+      "Saved demo data could not be used, so the Training Plan was refreshed.",
+    );
+    expect(initialized.state.trainingPlan.planVersion).toBe(1);
+    expect(initialized.state.trainingPlan.plannedWorkouts[0].title).toBe(
+      "14 km long run",
+    );
+    expect(
+      JSON.parse(storage.getItem(WORKSPACE_STORAGE_KEY) ?? ""),
+    ).toMatchObject({ schemaVersion: 2 });
+  });
+
   it("refreshes a saved envelope that is missing a current required field", async () => {
     const envelope = await fixtureEnvelope(2);
     const savedFeedback = {
@@ -275,9 +300,9 @@ describe("workspace initialization", () => {
     expect(initialized.state.athleteFeedback).not.toContainEqual(savedFeedback);
   });
 
-  it("restores a valid completed undelivered fallback result from schema version 1", async () => {
+  it("restores a valid completed undelivered review result from schema version 2", async () => {
     const envelope = await approvedEnvelope();
-    envelope.undeliveredFallbackResult = {
+    envelope.undeliveredReviewResult = {
       status: "approved",
       ...envelope.state.adaptationReceipts[0],
     };
@@ -289,15 +314,15 @@ describe("workspace initialization", () => {
       repository: new BrowserWorkspaceRepository(() => storage),
     });
 
-    expect(initialized.undeliveredFallbackResult).toEqual(
-      envelope.undeliveredFallbackResult,
+    expect(initialized.undeliveredReviewResult).toEqual(
+      envelope.undeliveredReviewResult,
     );
     expect(initialized.notice).toBeNull();
   });
 
-  it("refreshes schema version 1 state whose approved fallback result has no matching receipt", async () => {
+  it("refreshes schema version 2 state whose approved review result has no matching receipt", async () => {
     const envelope = await approvedEnvelope();
-    envelope.undeliveredFallbackResult = {
+    envelope.undeliveredReviewResult = {
       status: "approved",
       ...envelope.state.adaptationReceipts[0],
       reviewId: "review:missing",
@@ -310,7 +335,7 @@ describe("workspace initialization", () => {
       repository: new BrowserWorkspaceRepository(() => storage),
     });
 
-    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.undeliveredReviewResult).toBeUndefined();
     expect(initialized.notice).toContain("could not be used");
   });
 
@@ -324,9 +349,9 @@ describe("workspace initialization", () => {
       reviewId: "review:cancelled",
       reason: "",
     },
-  ])("refreshes an invalid non-approved fallback result %#", async (result) => {
+  ])("refreshes an invalid non-approved review result %#", async (result) => {
     const envelope = await fixtureEnvelope();
-    envelope.undeliveredFallbackResult = result;
+    envelope.undeliveredReviewResult = result;
     const storage = new ControlledStorage();
     storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(envelope));
 
@@ -335,13 +360,13 @@ describe("workspace initialization", () => {
       repository: new BrowserWorkspaceRepository(() => storage),
     });
 
-    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.undeliveredReviewResult).toBeUndefined();
     expect(initialized.notice).toContain("could not be used");
   });
 
-  it("refreshes a non-approved fallback result that contradicts an applied receipt", async () => {
+  it("refreshes a non-approved review result that contradicts an applied receipt", async () => {
     const envelope = await approvedEnvelope();
-    envelope.undeliveredFallbackResult = {
+    envelope.undeliveredReviewResult = {
       status: "discuss_further",
       reviewId: "review:persisted",
     };
@@ -353,7 +378,7 @@ describe("workspace initialization", () => {
       repository: new BrowserWorkspaceRepository(() => storage),
     });
 
-    expect(initialized.undeliveredFallbackResult).toBeUndefined();
+    expect(initialized.undeliveredReviewResult).toBeUndefined();
     expect(initialized.notice).toContain("could not be used");
   });
 
@@ -879,7 +904,7 @@ describe("workspace initialization", () => {
         "Saved demo data could not be used, so the Training Plan was refreshed.",
       );
       expect(await repository.load()).toEqual({
-        schemaVersion: 1,
+        schemaVersion: 2,
         seedVersion: "demo-athlete-v1",
         savedAt: "2026-08-26T20:15:00+01:00",
         state: initialized.state,
@@ -888,7 +913,7 @@ describe("workspace initialization", () => {
   );
 
   it.each(["athlete.profile", "coachingTopics"] as const)(
-    "restores the exact fixture when schema-v1 state is missing %s",
+    "restores the exact fixture when schema-v2 state is missing %s",
     async (missingField) => {
       const envelope = await fixtureEnvelope();
       if (missingField === "athlete.profile") {

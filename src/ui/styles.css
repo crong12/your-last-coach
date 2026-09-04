@@ -1053,7 +1053,7 @@ button.previous-attempt:hover {
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--track);
-  box-shadow: 0 0 0 4px rgba(232, 120, 81, 0.14);
+  box-shadow: 0 0 0 4px rgba(232, 120, 81, 0.15);
 }
 .today-workout-card,
 .today-week,
@@ -1454,10 +1454,7 @@ h1 {
   line-height: 0.94;
 }
 .race-card,
-.evidence-card,
-.recent-training-card,
-.profile-card,
-.monitoring-card {
+.evidence-card {
   border: 1px solid rgba(23, 51, 48, 0.12);
   background: rgba(248, 250, 246, 0.82);
   box-shadow: var(--shadow);
@@ -1489,43 +1486,6 @@ h1 {
   padding-top: 107px;
 }
 
-.profile-card,
-.monitoring-card {
-  overflow: hidden;
-}
-
-.profile-list {
-  display: grid;
-  margin: 0;
-  padding: 12px 20px 18px;
-}
-
-.profile-list div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.profile-list div:last-child {
-  border-bottom: 0;
-}
-
-.profile-list dt {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.profile-list dd {
-  margin: 0;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: right;
-}
 .coaching-pane {
   display: grid;
   gap: 20px;
@@ -1908,314 +1868,8 @@ h1 {
   padding: 0;
 }
 
-.coaching-review-card {
-  position: relative;
-  overflow: hidden;
-  padding: 22px;
-  border: 1px solid #e6c9a7;
-  border-radius: 20px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 247, 227, 0.96),
-      rgba(248, 250, 246, 0.9)
-    ),
-    var(--paper);
-  box-shadow: var(--shadow);
-}
-.coaching-review-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 5px;
-  background: var(--track);
-  content: "";
-}
-.coaching-review-card__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-}
-.coaching-review-card__header .eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ember);
-}
-.attention-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--track);
-  box-shadow: 0 0 0 4px rgba(232, 120, 81, 0.15);
-}
-.coaching-review-card__header time {
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.coaching-review-card h3 {
-  max-width: 620px;
-  margin: 12px 0 7px;
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: clamp(26px, 3vw, 34px);
-  font-weight: 500;
-}
-.coaching-review-card p {
-  max-width: 760px;
-  margin: 0;
-  color: var(--ink-soft);
-  line-height: 1.5;
-}
-.coaching-review-card__provenance {
-  margin-top: 12px !important;
-  color: var(--muted) !important;
-  font-size: 10px;
-}
-.coaching-review-card .button {
-  margin-top: 18px;
-}
-.coaching-pane .profile-card {
-  overflow: hidden;
-  border: 1px solid rgba(23, 51, 48, 0.12);
-  border-radius: 22px;
-  background: rgba(248, 250, 246, 0.82);
-  box-shadow: var(--shadow);
-}
-.coaching-entry {
-  position: relative;
-  min-width: 0;
-}
-.coaching-entry::before {
-  position: absolute;
-  z-index: 1;
-  top: 18px;
-  left: -26px;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--paper);
-  border-radius: 50%;
-  background: var(--sea);
-  box-shadow: 0 0 0 1px var(--sea);
-  content: "";
-}
-.coaching-entry__card {
-  min-width: 0;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--paper);
-}
-.coaching-entry__header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.coaching-entry__header time {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.coaching-entry__icon {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--deep-sea);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 15px;
-}
-.coaching-entry__card blockquote {
-  margin: 0;
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 19px;
-  line-height: 1.45;
-}
-.coaching-entry__card h3 {
-  margin: 0 0 7px;
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 24px;
-  font-weight: 500;
-}
-.coaching-entry__summary {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-.coaching-entry__provenance {
-  margin: 13px 0 0;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
-.coaching-entry__workout-link {
-  display: inline-block;
-  margin-top: 14px;
-  color: var(--deep-sea);
-  font-size: 11px;
-  font-weight: 700;
-  text-underline-offset: 3px;
-}
-.coaching-entry__facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 15px 0 0;
-}
-.coaching-entry__facts div {
-  display: grid;
-  gap: 3px;
-}
-.coaching-entry__facts dt {
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.coaching-entry__facts dd {
-  margin: 0;
-  color: var(--ink);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-.coaching-entry__threads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  margin-top: 15px;
-}
-.coaching-entry__threads a {
-  color: var(--deep-sea);
-  font-size: 10px;
-  font-weight: 700;
-  text-decoration: none;
-}
-.coaching-entry__threads a:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.profile-name {
-  color: var(--deep-sea);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 23px;
-  font-weight: 500;
-}
-
-.monitoring-card {
-  padding-bottom: 20px;
-}
-
-.monitoring-topics {
-  display: grid;
-  gap: 12px;
-  padding: 14px 20px 0;
-}
-
-.monitoring-topic {
-  padding: 16px;
-  border: 1px solid rgba(111, 158, 152, 0.42);
-  border-radius: 16px;
-  background: #edf5f0;
-}
-
-.monitoring-status {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 999px;
-  color: var(--deep-sea);
-  background: rgba(111, 158, 152, 0.2);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.monitoring-topic h3 {
-  margin: 11px 0 7px;
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 23px;
-  font-weight: 500;
-}
-
-.monitoring-topic blockquote {
-  margin: 0;
-  color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 16px;
-  line-height: 1.45;
-}
-
-.monitoring-meta {
-  display: grid;
-  gap: 10px;
-  margin: 16px 0 0;
-}
-
-.monitoring-meta div {
-  display: grid;
-  gap: 2px;
-}
-
-.monitoring-meta dt {
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.monitoring-meta dd {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.feedback-reported {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 16px 0 0;
-}
-
-.feedback-reported div {
-  display: grid;
-  gap: 2px;
-}
-
-.feedback-reported dt {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.feedback-reported dd {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-}
-
 .race-card,
-.evidence-card,
-.recent-training-card,
-.profile-card,
-.monitoring-card {
+.evidence-card {
   border-radius: 22px;
 }
 .race-card {
@@ -2319,40 +1973,6 @@ h1 {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.recent-training-card {
-  overflow: hidden;
-}
-.recent-training-summary {
-  margin: 14px 20px 5px;
-  color: var(--deep-sea);
-  font-size: 11px;
-  font-weight: 700;
-}
-.recent-training-list {
-  margin: 0;
-  padding: 8px 20px 18px;
-  list-style: none;
-}
-.recent-training-list li {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 9px;
-}
-.recent-training-list li:last-child {
-  border-bottom: 0;
-}
-.recent-training-list time,
-.recent-training-list span {
-  color: var(--muted);
-}
-.recent-training-list strong {
-  color: var(--ink);
-  text-align: right;
-}
-
 .chart-card {
   container-type: inline-size;
   overflow: hidden;
@@ -3631,28 +3251,6 @@ h1 {
     align-items: flex-start;
     flex-direction: column;
     gap: 5px;
-  }
-  .coaching-entry::before {
-    left: -26px;
-  }
-  .coaching-entry__card {
-    padding: 16px;
-  }
-  .coaching-entry__header time {
-    width: 100%;
-    margin-left: 30px;
-  }
-  .coaching-entry__facts {
-    grid-template-columns: 1fr;
-  }
-  .coaching-pane .profile-list div {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .coaching-pane .profile-list dd {
-    max-width: 100%;
-    text-align: left;
   }
   .app-menu__list {
     width: min(200px, calc(100vw - 32px));

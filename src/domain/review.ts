@@ -741,19 +741,13 @@ export function validatePendingAdaptationProposal(
     };
   }
   if (
-    !hasOnly(value, [
-      "proposal",
-      "openedAt",
-      "expiresAt",
-      "delivery",
-      "selectedOptionId",
-    ])
+    !hasOnly(value, ["proposal", "openedAt", "expiresAt", "selectedOptionId"])
   ) {
     issue(
       issues,
       "pendingAdaptationProposal",
       "Pending adaptation proposal contains an unsupported field.",
-      "proposal, openedAt, expiresAt, delivery, and selectedOptionId",
+      "proposal, openedAt, expiresAt, and selectedOptionId",
     );
   }
   const proposal = validateReviewProposal(value.proposal, context);
@@ -787,14 +781,6 @@ export function validatePendingAdaptationProposal(
       "pendingAdaptationProposal.expiresAt",
       "expiresAt must be after openedAt.",
       "an expiry timestamp later than openedAt",
-    );
-  }
-  if (value.delivery !== "primary" && value.delivery !== "fallback") {
-    issue(
-      issues,
-      "pendingAdaptationProposal.delivery",
-      "delivery is invalid.",
-      "primary or fallback",
     );
   }
   if (value.selectedOptionId !== null && !isText(value.selectedOptionId)) {
