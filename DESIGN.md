@@ -100,7 +100,7 @@ Scale (from frontmatter): `display` for the countdown numeral, `hero` for pane h
 - **Buttons:** pill-shaped (`999px`), 40px min height, hairline border on translucent white. Variants: `--primary` (deep-sea fill, paper text), `--danger`/attention (track fill), `--quiet` (transparent). One primary action per surface.
 - **Status dots:** 8px circles with a 4px soft halo of the same hue.
 - **Focus:** 3px `#3f7e8a` outline, 3px offset — on everything interactive, non-negotiable.
-- **Charts:** per the frozen data-viz language (#47 / `docs/design-specs/dashboard-ia.md`): hairline horizontal gridlines only, inline y-labels, tap-to-inspect fixed readout, gap-broken lines, baseline dashes for missing measurements, coverage captions, phase/adaptation/race annotations. Rendered per ADR 0002 (React-owned SVG + d3 math).
+- **Charts:** hairline horizontal gridlines only, inline y-labels, tap-to-inspect fixed readout, gap-broken lines, baseline dashes for missing measurements, coverage captions, and phase/adaptation/race annotations. Rendered per ADR 0002 (React-owned SVG + d3 math).
 
 ## Motion
 

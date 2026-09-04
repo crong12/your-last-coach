@@ -3749,7 +3749,6 @@ h1 {
    governed entirely by the max-width blocks above; nothing here applies.
    At and above 761px the selected pane fills the content region, the app bar
    carries the pane tabs, and each pane lays its cards out on a grid.
-   See docs/design-specs/desktop-frame-and-trends-grid.md
    ========================================================================= */
 @media (min-width: 761px) {
   /* Three tracks so the tabs sit on the true centre of the bar rather than
