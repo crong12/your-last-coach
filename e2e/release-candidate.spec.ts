@@ -40,7 +40,7 @@ test("keeps the built candidate chartable through Trends", async ({ page }) => {
     "55 ms",
   );
   await expect(
-    chart.getByText("21 of 28 nights recorded", { exact: true }),
+    chart.getByText("26 of 28 nights recorded", { exact: true }),
   ).toBeVisible();
   const trends = page.locator(".trends-pane");
   await expect(trends).toHaveAttribute("data-trends-range", "4w");

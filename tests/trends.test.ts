@@ -273,12 +273,31 @@ describe("issue 64 fixture evidence", () => {
 
     expect(projection.status).toBe("partial");
     expect(projection.points).toHaveLength(28);
-    expect(projection.coverage).toEqual({ observed: 21, expected: 28 });
+    expect(projection.coverage).toEqual({ observed: 26, expected: 28 });
     expect(projection.latest).toEqual({ date: "2026-08-26", value: 55 });
     expect(projection.average).toBe(55);
     expect(projection.points.some((point) => point.value === null)).toBe(true);
 
     const sleep = projectReadinessSeries(state, "sleep", "4w");
+    const restingHeartRate = projectReadinessSeries(
+      state,
+      "restingHeartRate",
+      "4w",
+    );
+    expect(restingHeartRate.coverage).toEqual({ observed: 26, expected: 28 });
+    expect(sleep.coverage).toEqual({ observed: 26, expected: 28 });
+    const missingDates = (
+      points: readonly { date: string; value: number | null }[],
+    ) => points.filter(({ value }) => value === null).map(({ date }) => date);
+    expect(missingDates(projection.points)).toEqual([
+      "2026-08-24",
+      "2026-08-25",
+    ]);
+    expect(missingDates(restingHeartRate.points)).toEqual([
+      "2026-08-24",
+      "2026-08-25",
+    ]);
+    expect(missingDates(sleep.points)).toEqual(["2026-08-24", "2026-08-25"]);
     expect(sleep.points.find(({ date }) => date === "2026-08-24")).toEqual({
       date: "2026-08-24",
       value: null,
@@ -437,7 +456,9 @@ describe("issue 64 fixture evidence", () => {
     expect(validateWorkspaceState(state)).toEqual({ valid: true, errors: [] });
     const projection = projectReadinessSeries(state, "hrv", "4w");
     expect(projection.status).toBe("partial");
-    expect(projection.points[1]).toEqual({ date: "2026-07-31", value: null });
+    expect(projection.points.find(({ date }) => date === "2026-08-24")).toEqual(
+      { date: "2026-08-24", value: null },
+    );
   });
 
   it("rejects invalid readiness values before chart projection", async () => {

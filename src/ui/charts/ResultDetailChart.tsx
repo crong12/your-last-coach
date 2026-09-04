@@ -20,7 +20,7 @@ import {
 } from "../metricFormatters";
 
 const VIEWBOX = { width: 320, height: 236 } as const;
-const PLOT = { left: 48, right: 306, top: 18, bottom: 188 } as const;
+const PLOT = { left: 38, right: 296, top: 18, bottom: 188 } as const;
 // Inset the lap positions from the plot edges so the first and last
 // columns (bars, dots, hit areas) never overlap the y-axis or right edge.
 const X_INSET = 20;

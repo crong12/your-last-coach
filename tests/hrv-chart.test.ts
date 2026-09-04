@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("HRV chart render states", () => {
-  it("renders phase, adaptation, and race primitives but omits unsupported dates", () => {
+  it("omits phase markers while preserving adaptation and race annotations", () => {
     const annotations: ChartAnnotation[] = [
       { kind: "phase", date: "2026-08-25", label: "Base phase" },
       {
@@ -66,14 +66,14 @@ describe("HRV chart render states", () => {
 
     expect(
       container.querySelectorAll('[data-chart-annotation-kind="phase"]'),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(
       container.querySelectorAll('[data-chart-annotation-kind="adaptation"]'),
     ).toHaveLength(1);
     expect(
       container.querySelectorAll('[data-chart-annotation-kind="race"]'),
     ).toHaveLength(1);
-    expect(container.textContent).toContain("Base phase");
+    expect(container.textContent).not.toContain("Base phase");
     expect(container.textContent).toContain("Reduce load");
     expect(container.textContent).toContain("Target race");
     expect(container.textContent).not.toContain("Outside range");
@@ -135,30 +135,39 @@ describe("HRV chart render states", () => {
     expect(container.textContent).toContain("1 of 1 nights recorded");
   });
 
-  it("marks phase labels with the chart's small-caps treatment", () => {
+  it("does not render phase guide lines or labels", () => {
     renderChart(points, [
       { kind: "phase", date: "2026-08-25", label: "Base phase" },
     ]);
 
-    const phase = container.querySelector(
-      '[data-chart-annotation-kind="phase"]',
-    );
-    const phaseLabel = container.querySelector("[data-chart-phase-label]");
-    expect(phase).not.toBeNull();
-    expect(phase?.contains(phaseLabel)).toBe(true);
     expect(
-      phaseLabel?.classList.contains("chart-annotation__label--phase"),
-    ).toBe(true);
+      container.querySelector('[data-chart-annotation-kind="phase"]'),
+    ).toBeNull();
+    expect(container.querySelector("[data-chart-phase-label]")).toBeNull();
   });
 
-  it("uses the neutral series token for an ordinary selected point", () => {
+  it("does not ring selected points", () => {
     renderChart([{ date: "2026-08-26", value: 55 }]);
 
-    expect(
-      container
-        .querySelector("[data-chart-point-selection]")
-        ?.getAttribute("stroke"),
-    ).toBe("var(--series-1)");
+    expect(container.querySelector("[data-chart-point-selection]")).toBeNull();
+
+    act(() => {
+      root.render(
+        createElement(HrvChart, {
+          points: [
+            { date: "2026-08-25", value: 54 },
+            { date: "2026-08-26", value: 55 },
+          ],
+        }),
+      );
+    });
+    const olderPoint = container.querySelector<SVGGElement>(
+      '[aria-label="Inspect HRV for 25 August, 54 ms"]',
+    );
+    act(() =>
+      olderPoint?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(container.querySelector("[data-chart-point-selection]")).toBeNull();
   });
 
   it("uses the supplied trailing average without a direction summary", () => {
@@ -199,7 +208,7 @@ describe("HRV chart render states", () => {
     const averageText =
       container.querySelector(".chart-card__average")?.textContent ?? "";
     expect(averageText).toContain("28d baseline —");
-    expect(averageText).toContain("fewer than 7 recorded days");
+    expect(averageText).not.toContain("recorded days");
     expect(container.querySelector(".chart-card__trend")).toBeNull();
   });
 });

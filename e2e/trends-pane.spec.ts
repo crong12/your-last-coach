@@ -50,6 +50,57 @@ test("links every Trends chart and card to the four-week range on mobile @contra
   await expect(
     page.locator('[data-chart-card="volume-load"] [data-volume-week]'),
   ).toHaveCount(4);
+  await expect(
+    page.locator(
+      '[data-chart-card="volume-load"] [data-load-average-line], [data-chart-card="volume-load"] [data-load-average-label]',
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('[data-chart-card="volume-load"] [data-chart-direction-hint]'),
+  ).toHaveText("weekly km · training load");
+  const volume = page.locator('[data-chart-card="volume-load"]');
+  await expect(volume.locator(".chart-card__trend")).toHaveCount(0);
+  await expect(volume.locator('[data-chart-readout="volume-load"]')).toHaveText(
+    "24 Aug week · 13.0 km · Training Load unavailable",
+  );
+  await expect(page.locator(".chart-card__label")).toHaveText([
+    "Latest",
+    "Latest",
+    "Latest",
+    "Latest",
+    "Latest",
+  ]);
+  await expect(
+    page.getByRole("heading", { name: "Resting Heart Rate", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Weekly Volume + Training Load",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Pace vs Heart Rate", exact: true }),
+  ).toBeVisible();
+  const sleep = page.locator('[data-chart-card="sleep"]');
+  await expect(sleep.locator(".chart-card__average")).toHaveText(
+    "28d baseline 7h 14m",
+  );
+  await expect(sleep.locator(".chart-card__trend")).toHaveText(
+    "+8m vs baseline",
+  );
+  await expect(sleep.locator("[data-sleep-average-line] line")).toHaveCount(1);
+  await expect(sleep.locator("[data-sleep-average-line] text")).toHaveCount(0);
+  await expect(
+    page.locator(
+      '[data-chart-card="hrv"] [data-chart-point-selection], [data-chart-card="resting-heart-rate"] [data-chart-point-selection]',
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(
+      '[data-chart-card="pace-heart-rate"] [data-pace-point-selection], [data-chart-card="pace-heart-rate"] [data-pace-point-newest]',
+    ),
+  ).toHaveCount(0);
 
   await expect(
     page.locator(
@@ -147,8 +198,9 @@ test("keeps a valid empty Workout Result range as an honest zero series", async 
   );
   await expect(volume.locator("[data-volume-bar]")).toHaveCount(4);
   await expect(volume.locator("[data-load-bar]")).toHaveCount(4);
-  await expect(volume.locator("[data-volume-current]")).toHaveText("0.0 km");
-  await expect(volume.locator("[data-load-current]")).toHaveText("0");
+  await expect(volume.locator("[data-chart-current-value]")).toHaveText(
+    "0.0km",
+  );
   const zeroBarHeights = await volume
     .locator("[data-volume-bar], [data-load-bar]")
     .evaluateAll((bars) =>
@@ -184,10 +236,8 @@ test("keeps distance visible while an unavailable Workout Result load is marked 
 
   const volume = page.locator('[data-chart-card="volume-load"]');
   await expect(volume.locator("[data-missing-load]")).toHaveCount(2);
-  await expect(volume.locator("[data-volume-current]")).toHaveText("13.0 km");
-  await expect(volume.locator("[data-load-current]")).toHaveText("—");
-  await expect(volume).toContainText(
-    "13 of 16 Workout Results with available load",
+  await expect(volume.locator("[data-chart-current-value]")).toHaveText(
+    "13.0km",
   );
 });
 
@@ -256,7 +306,7 @@ async function seedAdaptationReceipt(page: Page) {
     .toBe(1);
 }
 
-test("keeps passive phase markers non-focusable while adaptations are interactive @contract", async ({
+test("removes phase markers while adaptations remain interactive @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -268,7 +318,7 @@ test("keeps passive phase markers non-focusable while adaptations are interactiv
   await expect(adaptation).toHaveAttribute("role", "button");
   await expect(adaptation).toHaveAttribute("tabindex", "0");
   await expect(hrv.locator('[data-chart-annotation-kind="phase"]')).toHaveCount(
-    2,
+    0,
   );
   await expect(hrv.locator('[data-chart-annotation-kind="race"]')).toHaveCount(
     0,
@@ -295,10 +345,6 @@ test("keeps passive phase markers non-focusable while adaptations are interactiv
   ).toBeFocused();
 
   await page.goto("/#trends");
-  const phase = hrv.locator('[data-chart-annotation-kind="phase"]').first();
-  await expect(phase).toHaveCount(1);
-  expect(await phase.getAttribute("tabindex")).toBeNull();
-  expect(await phase.getAttribute("role")).toBeNull();
   const latestPoint = hrv.getByRole("button", {
     name: "Inspect HRV for 26 August, 55 ms",
   });
@@ -364,10 +410,12 @@ test("keeps the desktop Trends evidence bounded and restores Workout Result focu
     await expect(description).toContainText("Direction:");
     await expect(description).toContainText("Coverage:");
   }
-  await expect(hrv.locator("desc")).toContainText("Base building");
+  await expect(hrv.locator("desc")).not.toContainText("Base building");
   await expect(
-    page.locator('[data-chart-card="volume-load"] desc'),
-  ).toContainText("Base building");
+    page.locator(
+      '[data-chart-card="volume-load"] [data-chart-annotation-kind="phase"]',
+    ),
+  ).toHaveCount(0);
 
   await expect(
     navigation.getByRole("button", { name: "Show Trends pane" }),

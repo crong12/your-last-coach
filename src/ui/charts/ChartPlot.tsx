@@ -252,6 +252,7 @@ export function ChartPlot({
   const formatXLabel = xTickDates ? formatShortAxisDate : formatAxisDate;
   const renderableAnnotations = annotations.filter((annotation) => {
     if (!isAnnotation(annotation)) return false;
+    if (annotation.kind === "phase") return false;
     const date = parseChartDate(annotation.date);
     return date !== null && isInDomain(date, xScale);
   });
@@ -299,8 +300,9 @@ export function ChartPlot({
               <g key={tick}>
                 <text
                   data-chart-y-label
-                  x={plotBounds.left + 4}
+                  x={plotBounds.left - 8}
                   y={y - 5}
+                  textAnchor="end"
                   className="chart-axis-label"
                 >
                   {yTickFormat(tick)}

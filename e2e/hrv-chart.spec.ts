@@ -24,17 +24,15 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   ).toBeVisible();
   await expect(card.locator(".chart-card__trend")).toHaveCount(0);
   await expect(
-    card.getByText("21 of 28 nights recorded", { exact: true }),
+    card.getByText("26 of 28 nights recorded", { exact: true }),
   ).toBeVisible();
   // The shared source sentence is stated once for the pane rather than on
   // every card; per-card coverage captions stay verbatim.
-  await expect(
-    card.getByText("Source: seeded synthetic COROS-shaped observations"),
-  ).toHaveCount(0);
+  await expect(card.getByText("Source: synthetic health data")).toHaveCount(0);
   await expect(
     page
       .locator(".trends-provenance")
-      .getByText("Source: seeded synthetic COROS-shaped observations", {
+      .getByText("Source: synthetic health data", {
         exact: true,
       }),
   ).toBeVisible();
@@ -49,8 +47,12 @@ test("renders the fixture-backed HRV chart grammar on mobile", async ({
   const yLabelCount = await svg.locator("[data-chart-y-label]").count();
   expect(yLabelCount).toBeGreaterThanOrEqual(2);
   expect(yLabelCount).toBeLessThanOrEqual(4);
+  await expect(svg.locator("[data-chart-y-label]").first()).toHaveAttribute(
+    "text-anchor",
+    "end",
+  );
   await expect(svg.locator('[data-series="hrv"]')).toHaveCount(1);
-  await expect(svg.locator("[data-missing-date]")).toHaveCount(7);
+  await expect(svg.locator("[data-missing-date]")).toHaveCount(2);
 
   const readout = card.locator('[data-chart-readout="hrv"]');
   await expect(readout).toHaveAttribute("aria-live", "polite");
@@ -158,29 +160,14 @@ test("contains the static chart on desktop and under reduced motion", async ({
   });
 });
 
-test("preserves passive annotation hit testing and activates adaptation @contract", async ({
+test("omits phase guides and activates adaptations @contract", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/e2e/hrv-chart-harness.html");
 
-  const phaseLabel = page.locator("[data-chart-phase-label]");
-  await expect(phaseLabel).toHaveText("Base phase");
-  await expect(phaseLabel).toHaveClass(/chart-annotation__label--phase/);
-  await expect
-    .poll(() =>
-      phaseLabel.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          fontVariantCaps: style.fontVariantCaps,
-          textTransform: style.textTransform,
-        };
-      }),
-    )
-    .toEqual({
-      fontVariantCaps: "all-small-caps",
-      textTransform: "uppercase",
-    });
+  await expect(page.locator("[data-chart-phase-label]")).toHaveCount(0);
+  await expect(page.locator("[data-chart-phase-line]")).toHaveCount(0);
 
   const layerOrder = await page.evaluate(() => {
     const passive = document.querySelector(

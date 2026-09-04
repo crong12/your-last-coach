@@ -50,7 +50,7 @@ export function ChartCard({
           </h3>
         </div>
         <div className="chart-card__current">
-          <span className="chart-card__label">Current</span>
+          <span className="chart-card__label">Latest</span>
           <strong
             className="chart-card__current-value"
             data-chart-current-value
@@ -98,10 +98,12 @@ export function ChartCard({
       )}
       {plot}
       {children}
-      <footer className="chart-card__footer">
-        <span className="chart-card__coverage">{coverage}</span>
-        {source && <span className="chart-card__source">{source}</span>}
-      </footer>
+      {(coverage || source) && (
+        <footer className="chart-card__footer">
+          {coverage && <span className="chart-card__coverage">{coverage}</span>}
+          {source && <span className="chart-card__source">{source}</span>}
+        </footer>
+      )}
     </section>
   );
 }
